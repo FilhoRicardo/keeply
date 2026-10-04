@@ -1,4 +1,4 @@
-import type { ApplianceIdentification, ApplianceRecognizer } from '@/domain/identification'
+import { NOTHING_RECOGNISED, type ApplianceRecognizer, type RecognitionResult } from '@/domain/identification'
 
 export const MAX_PHOTO_BYTES = 5_000_000
 export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -10,18 +10,19 @@ export function checkPhoto(photo: { size: number; type: string } | null): string
   return null
 }
 
-// Browser side: asks the server to read the label. Any failure means "not recognised".
+// Browser side: asks the server's AI provider to read the label (Manual unless one is configured).
+// Any failure means "not recognised"; the owner can always type the details.
 export const httpRecognizer: ApplianceRecognizer = {
   async recognise(photo) {
     try {
       const form = new FormData()
       form.append('photo', photo, 'label.jpg')
       const response = await fetch('/api/identify', { method: 'POST', body: form })
-      if (!response.ok) return null
-      const { identification } = (await response.json()) as { identification: ApplianceIdentification | null }
-      return identification
+      if (!response.ok) return NOTHING_RECOGNISED
+      const { identification, notice } = (await response.json()) as Partial<RecognitionResult>
+      return { identification: identification ?? null, notice: notice === 'not_a_dishwasher' ? notice : null }
     } catch {
-      return null
+      return NOTHING_RECOGNISED
     }
   },
 }

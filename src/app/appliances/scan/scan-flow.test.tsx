@@ -8,6 +8,12 @@ import { findRecord } from '../../lib/plan-state'
 import { renderWithPlan, testRepository } from '../../test-utils'
 import { ScanFlow } from './scan-flow'
 
+// jsdom cannot decode images, so stand in for the browser's re-encode (which drops EXIF/GPS).
+let reencode = true
+vi.mock('../../lib/photo', () => ({
+  prepareLabelPhoto: async (file: Blob) => (reencode ? new Blob([file], { type: 'image/jpeg' }) : file),
+}))
+
 const push = vi.fn()
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }), useSearchParams: () => new URLSearchParams() }))
 
@@ -15,6 +21,7 @@ let repo: PlanRepository
 beforeEach(() => {
   repo = testRepository()
   push.mockReset()
+  reencode = true
 })
 
 const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], 'label.jpg', { type: 'image/jpeg' })
@@ -30,7 +37,7 @@ describe('ScanFlow without recognition (v0.1)', () => {
     expect(screen.getByText(/photograph the label/i)).toBeInTheDocument()
     await takePhoto()
 
-    expect(screen.getByText(/cannot read labels automatically yet/)).toBeInTheDocument()
+    expect(screen.getByText(/could not read the label/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
     expect(screen.getByRole('alert')).toHaveTextContent(/manufacturer/)
 
@@ -48,19 +55,22 @@ describe('ScanFlow without recognition (v0.1)', () => {
 describe('ScanFlow with a recogniser', () => {
   const recognizer: ApplianceRecognizer = {
     recognise: async () => ({
+      notice: null,
+      identification: {
       category: 'dishwasher',
       manufacturer: 'Bosch',
       model: 'SMS6ZCI49E',
       serialNumber: '',
       confidence: 0.82,
       source: 'photo_recognition',
+      },
     }),
   }
 
   it('asks "Is this correct?" and keeps the confidence when confirmed unchanged', async () => {
     renderWithPlan(<ScanFlow recognizer={recognizer} />, repo)
     await takePhoto()
-    expect(screen.getByText('Is this correct?')).toBeInTheDocument()
+    expect(screen.getByText(/is this correct\?/)).toBeInTheDocument()
     expect(screen.getByText('SMS6ZCI49E')).toBeInTheDocument()
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm' })))
     expect(findRecord(await repo.load(), 'app-1')!.appliance.identificationConfidence).toBe(0.82)
@@ -88,5 +98,27 @@ describe('scanEnabled', () => {
     expect(scanEnabled(undefined)).toBe(false)
     expect(scanEnabled('0')).toBe(false)
     expect(scanEnabled('1')).toBe(true)
+  })
+})
+
+describe('ScanFlow when the photo is not a dishwasher label', () => {
+  it('says so and leaves the owner to rescan or type', async () => {
+    const notDishwasher: ApplianceRecognizer = { recognise: async () => ({ identification: null, notice: 'not_a_dishwasher' }) }
+    renderWithPlan(<ScanFlow recognizer={notDishwasher} />, repo)
+    await takePhoto()
+    expect(screen.getByText(/does not look like a dishwasher/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Manufacturer')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Rescan' })).toBeInTheDocument()
+  })
+})
+
+describe('ScanFlow privacy', () => {
+  it('never sends a photo it could not re-encode to the AI service', async () => {
+    reencode = false
+    const recognise = vi.fn(async () => ({ identification: null, notice: null }))
+    renderWithPlan(<ScanFlow recognizer={{ recognise }} />, repo)
+    await takePhoto()
+    expect(recognise).not.toHaveBeenCalled()
+    expect(screen.getByText(/could not read the label/)).toBeInTheDocument()
   })
 })

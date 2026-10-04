@@ -1,11 +1,35 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { validateIdentification, type ApplianceIdentification } from '@/domain/identification'
+import type { ApplianceIdentity } from '@/ai/identity'
 import { selectProvider } from '@/ai/provider'
 import { checkPhoto } from '../../lib/identify'
 import { scanEnabled } from '../../lib/features'
 
-// Reads an appliance label photo. The photo is not stored here; the owner's confirmed photo is
-// saved with the appliance. Results are proposals only.
+export type IdentifyResponse = {
+  // Proposal for the Confirm / Edit / Rescan screen; never saved without the owner confirming.
+  identification: ApplianceIdentification | null
+  // Why there is no proposal, when the provider read something that is not usable.
+  notice: 'not_a_dishwasher' | null
+}
+
+// Keeply's neutral identity → the confirm screen's proposal. Labels rarely say "dishwasher", so an
+// unknown type with a readable manufacturer is still proposed; "other" is not.
+export function toProposal(identity: ApplianceIdentity | null): IdentifyResponse {
+  if (!identity) return { identification: null, notice: null }
+  if (identity.applianceType === 'other') return { identification: null, notice: 'not_a_dishwasher' }
+  const proposal: ApplianceIdentification = {
+    category: 'dishwasher',
+    manufacturer: identity.manufacturer ?? '',
+    model: identity.model ?? '',
+    serialNumber: identity.serialNumber ?? '',
+    confidence: identity.confidence,
+    source: 'photo_recognition',
+  }
+  return { identification: wellFormed(proposal) ? proposal : null, notice: null }
+}
+
+// Reads an appliance label photo with the server's AI provider (Manual unless one is configured).
+// The photo is not stored here; the owner's confirmed photo is saved with the appliance.
 export async function POST(request: NextRequest) {
   if (!scanEnabled()) return NextResponse.json({ error: 'not_enabled' }, { status: 404 })
   const form = await request.formData().catch(() => null)
@@ -14,14 +38,18 @@ export async function POST(request: NextRequest) {
   const problem = checkPhoto(file)
   if (problem) return NextResponse.json({ error: problem }, { status: 400 })
 
-  const proposal = await selectProvider({ env: process.env }).recogniser.recognise(file!).catch(() => null)
-  // Never pass on a malformed proposal.
-  const identification = wellFormed(proposal) ? proposal : null
-  return NextResponse.json({ identification }, { headers: { 'Cache-Control': 'no-store' } })
+  const provider = selectProvider({ env: process.env })
+  const identity = await provider
+    .identifyAppliance({ bytes: new Uint8Array(await file!.arrayBuffer()), mimeType: file!.type })
+    .catch((error: unknown) => {
+      console.error(`[identify] ${provider.kind} failed:`, error instanceof Error ? error.message : error)
+      return null
+    })
+  const body: IdentifyResponse = toProposal(identity)
+  return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } })
 }
 
-// A recogniser's output is untrusted (for example parsed model JSON): check its shape before
-// validating it, so a malformed proposal is dropped rather than crashing the route.
+// Proposals come from untrusted model output: check shape and rules before passing one on.
 export function wellFormed(proposal: unknown): proposal is ApplianceIdentification {
   if (typeof proposal !== 'object' || proposal === null) return false
   const p = proposal as Record<string, unknown>

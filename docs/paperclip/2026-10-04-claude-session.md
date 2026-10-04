@@ -356,6 +356,17 @@ Steps:
 3. `src/ai` is server-only (`server-only` package): importing it from browser code fails the build (verified by a deliberate leak). Domain lint boundary now covers `src/ai`.
 4. Tests: order, first-available, fall-through, Manual whatever the env says. 224 unit/component pass.
 
+### 35. MiniMax appliance identification — adapter implemented, live verification pending (Builder 1; reviewer Builder 3)
+
+Ricardo's scope: only the identification adapter and Confirm / Edit / Rescan; provider-neutral; manual always available; no maintenance-plan AI, no Keeply-funded AI, no plugin. Account: MiniMax Token Plan, model MiniMax-M3.
+
+1. `src/ai/identity.ts`: Keeply's neutral schema (`applianceType, manufacturer, model, serialNumber, confidence`), shared prompt, robust JSON extraction and normalisation.
+2. `src/ai/minimax.ts`: the only MiniMax-specific code (OpenAI-compatible chat completions, `image_url` data URI, thinking off, `<think>` stripped, in-body errors). Refuses models without image input (M2.x). Server-only.
+3. `src/ai/provider.ts`: order ChatGPT-authorized (later) → MiniMax → OpenAI API (optional) → Anthropic API (optional) → Keeply-hosted (future, not built) → Manual; failures fall through to Manual.
+4. `/api/identify` maps the neutral identity to a proposal; "other" appliance → "not a dishwasher" notice. Scan screen: proposal shown as "Read from your photo… is this correct?", Edit drops confidence, Rescan; only browser re-encoded photos (EXIF/GPS dropped) are sent to AI (review finding).
+5. Tests: 241 unit/component with mocked MiniMax; real-browser run against a local stand-in that speaks MiniMax's documented format (key stays server-side, not in bundles; edit drops confidence). **Not tested against MiniMax** (network blocked, no key in the session).
+6. `docs/ai/minimax.md`: confirmed-vs-unverified table, open questions (Token Plan entitlement for image input on M3 chat completions; terms for serving app users; quota windows; region), and the minimal verification steps; `scripts/verify-identify.sh`.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

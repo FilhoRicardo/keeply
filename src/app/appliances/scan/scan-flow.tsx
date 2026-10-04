@@ -8,6 +8,7 @@ import {
   validateIdentification,
   type ApplianceIdentification,
   type ApplianceRecognizer,
+  type RecognitionResult,
 } from '@/domain/identification'
 import { httpRecognizer } from '../../lib/identify'
 import { usePlan } from '../../lib/plan-context'
@@ -16,9 +17,17 @@ import { prepareLabelPhoto } from '../../lib/photo'
 type Step =
   | { kind: 'capture' }
   | { kind: 'reading'; photo: Blob; preview: string | null }
-  | { kind: 'confirm'; photo: Blob; preview: string | null; identification: ApplianceIdentification; recognised: boolean; editing: boolean }
+  | {
+      kind: 'confirm'
+      photo: Blob
+      preview: string | null
+      identification: ApplianceIdentification
+      recognised: boolean
+      editing: boolean
+      notice: RecognitionResult['notice']
+    }
 
-// Defaults to the server's recogniser (/api/identify), which proposes nothing in v0.1.
+// Defaults to the server's recogniser (/api/identify): the configured AI provider, or Manual.
 export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: ApplianceRecognizer }) {
   const id = useId()
   const router = useRouter()
@@ -36,13 +45,19 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
     const prepared = await prepareLabelPhoto(file)
     const preview = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(prepared) : null
     setStep({ kind: 'reading', photo: prepared, preview })
-    const proposal = await recognizer.recognise(prepared).catch(() => null)
+    // Only a photo re-encoded in the browser (EXIF/GPS dropped) may go to an AI service; if the
+    // browser could not decode it, the owner types the details instead.
+    const reencoded = prepared !== file
+    const { identification: proposal, notice } = reencoded
+      ? await recognizer.recognise(prepared).catch((): RecognitionResult => ({ identification: null, notice: null }))
+      : { identification: null, notice: null }
     setStep({
       kind: 'confirm',
       photo: prepared,
       preview,
       identification: proposal ?? emptyIdentification(),
       recognised: proposal !== null,
+      notice,
       editing: proposal === null,
     })
   }
@@ -52,7 +67,8 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
       <section className="aster-glass form-panel" aria-label="Photograph the label">
         <p className="form-intro">
           Open the dishwasher door and photograph the label on the edge of the door or inside the tub. It shows the
-          manufacturer and model number.
+          manufacturer and model number. Keeply may send the photo to an AI service to suggest the details; you
+          always confirm them.
         </p>
         <label className="aster-btn aster-btn--primary full-width file-button">
           Take or choose a photo
@@ -76,7 +92,7 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
     )
   }
 
-  const { identification, recognised, editing } = step
+  const { identification, recognised, editing, notice } = step
   const set = (change: Partial<Pick<ApplianceIdentification, 'manufacturer' | 'model' | 'serialNumber'>>) =>
     setStep({ ...step, identification: editIdentification(identification, change) })
 
@@ -122,14 +138,15 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
               <dd>{identification.model || 'Not read'}</dd>
             </div>
           </dl>
-          <p className="form-intro">Is this correct?</p>
+          <p className="form-intro">Read from your photo. Check it against the label: is this correct?</p>
         </>
       ) : (
         <>
           {!recognised && (
             <p className="form-intro">
-              Keeply cannot read labels automatically yet. Type what the label says; the photo is kept with your
-              dishwasher.
+              {notice === 'not_a_dishwasher'
+                ? 'This label does not look like a dishwasher’s. Rescan the dishwasher label, or type what it says.'
+                : 'Keeply could not read the label. Type what it says; the photo is kept with your dishwasher.'}
             </p>
           )}
           <label className="field">

@@ -8,7 +8,11 @@ function post(photo?: Blob) {
   return POST(new NextRequest('http://keeply.local/api/identify', { method: 'POST', body: form }))
 }
 
-afterEach(() => vi.unstubAllEnvs())
+afterEach(() => {
+  vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 describe('POST /api/identify', () => {
   it('is off unless scanning is enabled', async () => {
@@ -23,11 +27,37 @@ describe('POST /api/identify', () => {
     expect((await post(new Blob([new Uint8Array(5_000_001)], { type: 'image/jpeg' }))).status).toBe(400)
   })
 
-  it('recognises nothing in v0.1', async () => {
+  it('proposes nothing in Manual mode', async () => {
     vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
+    vi.stubEnv('MINIMAX_API_KEY', '')
     const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ identification: null })
+    expect(await response.json()).toEqual({ identification: null, notice: null })
+  })
+
+  it('turns a MiniMax reading into a proposal for the confirm screen', async () => {
+    vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
+    vi.stubEnv('MINIMAX_API_KEY', 'server-key')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({ choices: [{ message: { content: '{"applianceType":"unknown","manufacturer":"Bosch","model":"SMS6ZCI49E","serialNumber":null,"confidence":0.8}' } }] }),
+      ),
+    )
+    const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
+    expect(await response.json()).toEqual({
+      identification: { category: 'dishwasher', manufacturer: 'Bosch', model: 'SMS6ZCI49E', serialNumber: '', confidence: 0.8, source: 'photo_recognition' },
+      notice: null,
+    })
+  })
+
+  it('falls back to Manual when MiniMax fails', async () => {
+    vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
+    vi.stubEnv('MINIMAX_API_KEY', 'server-key')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(await (await post(new Blob(['x'], { type: 'image/jpeg' }))).json()).toEqual({ identification: null, notice: null })
+    expect(errors).toHaveBeenCalled()
   })
 })
 
@@ -40,5 +70,20 @@ describe('wellFormed', () => {
     expect(wellFormed({ ...good, confidence: '0.7' })).toBe(false)
     expect(wellFormed({ ...good, source: 'manual' })).toBe(false)
     expect(wellFormed(null)).toBe(false)
+  })
+})
+
+describe('toProposal', () => {
+  it('says when the label is not a dishwasher', async () => {
+    const { toProposal } = await import('./route')
+    expect(toProposal({ applianceType: 'other', manufacturer: 'Bosch', model: 'WAX32', serialNumber: null, confidence: 0.9 })).toEqual({
+      identification: null,
+      notice: 'not_a_dishwasher',
+    })
+  })
+
+  it('drops a reading without a manufacturer', async () => {
+    const { toProposal } = await import('./route')
+    expect(toProposal({ applianceType: 'dishwasher', manufacturer: null, model: 'X', serialNumber: null, confidence: 0.2 }).identification).toBeNull()
   })
 })

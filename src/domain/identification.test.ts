@@ -3,7 +3,7 @@ import { editIdentification, emptyIdentification, fitWithin, noRecognizer, valid
 
 describe('identification', () => {
   it('recognises nothing in v0.1', async () => {
-    expect(await noRecognizer.recognise(new Blob(['x']))).toBeNull()
+    expect(await noRecognizer.recognise(new Blob(['x']))).toEqual({ identification: null, notice: null })
   })
 
   it('makes any owner edit a manual identification', () => {

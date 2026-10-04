@@ -13,14 +13,23 @@ export type ApplianceIdentification = {
   source: IdentificationSource
 }
 
-export interface ApplianceRecognizer {
-  // Resolves to null when nothing could be read. Never throws for "not recognised".
-  recognise(photo: Blob): Promise<ApplianceIdentification | null>
+export type RecognitionResult = {
+  // A proposal for the owner to confirm, edit or rescan; null when nothing usable was read.
+  identification: ApplianceIdentification | null
+  // Why there is no proposal, when the photo was read but is not usable.
+  notice: 'not_a_dishwasher' | null
 }
 
-// v0.1 has no AI: nothing is recognised and the owner types what is on the label.
+export interface ApplianceRecognizer {
+  // Never throws for "not recognised"; returns an empty result instead.
+  recognise(photo: Blob): Promise<RecognitionResult>
+}
+
+export const NOTHING_RECOGNISED: RecognitionResult = { identification: null, notice: null }
+
+// Manual mode: nothing is recognised and the owner types what is on the label.
 export const noRecognizer: ApplianceRecognizer = {
-  recognise: async () => null,
+  recognise: async () => NOTHING_RECOGNISED,
 }
 
 export function emptyIdentification(): ApplianceIdentification {
