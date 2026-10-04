@@ -224,6 +224,12 @@ Steps:
 
 Owner action when enabling: none beyond `supabase db push` (the migration creates the bucket).
 
+### 22. Fix: deleting a dishwasher also removes its label photo (Builder 2; reviewer Builder 4)
+
+`src/db/plan-queries.ts`, `src/db/plan-queries.test.ts`.
+
+Found in self-review of slice 21: database rows cascade on delete, but Supabase Storage does not, so a deleted dishwasher's private photo would stay in the bucket. `deleteAppliance` now removes the photo after the row and reports if it could not. 4 tests with a fake client (163 total pass; integration 5/5).
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

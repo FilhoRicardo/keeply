@@ -147,11 +147,17 @@ export async function signPhotoUrls(db: SupabaseClient, paths: string[]): Promis
   return urls
 }
 
-// Cascades to sources, recommendations, decisions, tasks and completions.
+// Cascades to sources, recommendations, decisions, tasks and completions. Storage does not
+// cascade, so the label photo is removed explicitly once the row is gone.
 export async function deleteAppliance(db: SupabaseClient, applianceId: string) {
-  const { data, error } = await db.from('appliances').delete().eq('id', applianceId).select('id')
+  const { data, error } = await db.from('appliances').delete().eq('id', applianceId).select('id, image_url')
   if (error) throw new Error(`Supabase: ${error.message}`)
   if (!data || data.length === 0) throw new Error(`Unknown appliance ${applianceId}`)
+  const photo = (data[0] as { image_url: string | null }).image_url
+  if (photo) {
+    const removed = await db.storage.from(PHOTO_BUCKET).remove([photo])
+    if (removed.error) throw new Error(`Appliance deleted, but its photo could not be removed: ${removed.error.message}`)
+  }
 }
 
 export async function insertCompletion(db: SupabaseClient, taskId: string, completedOn: string) {
