@@ -295,6 +295,10 @@ Steps:
 4. Review pass found a double-submit (slow save + second tap recorded the completion twice); Save is now disabled while saving.
 5. Tests: domain, component (future refused, back-dated with trimmed note), pgTAP 2, integration dates moved into the past, e2e records a note. 203 unit/component, 7 integration, 3 e2e, 43 pgTAP.
 
+### 29. PR description for the CTO (Builder 1)
+
+`docs/pr/KEE-1-phase1.md`: what the branch does, how each non-negotiable is enforced, modules, migrations, verification, owner actions and open decisions, ready for the CTO to paste when opening the PR from `claude/dazzling-mayer-ytyahw`.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
