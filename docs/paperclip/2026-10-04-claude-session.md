@@ -336,6 +336,16 @@ Steps:
 4. Review pass found and fixed: sign-out left the app with no session (repository cached the first session forever); the "already has Keeply" conflict arrives in the redirect URL, so it never showed (now read from the callback and the URL tidied); a thrown sign-in left the button disabled.
 5. Tests: account service (link vs plain sign-in, conflict, callback errors), account panel (offer, conflict + switch, signed-in + sign out, hidden in device mode), pgTAP. 220 unit/component, 9 integration, 3 e2e, 44 pgTAP. GoTrue itself is not run locally; the Google provider + Manual linking must be enabled in Supabase (README).
 
+### 33. ChatGPT integration: requirements documented, research done, no code (CTO / CEO)
+
+Ricardo's instruction (2026-10-04): spell out the architecture and research OpenAI's current docs before any ChatGPT code.
+
+1. `docs/HANDOFF.md` §22: intent (ChatGPT-authorized plan usage), what it is not (API keys, key paste, social login, assumed API credits), the eight things to verify, and the A–D provider architecture (ChatGPT-authorized / BYO key / Keeply-hosted / manual) separate from Supabase auth.
+2. `AGENTS.md` rules 7–8: provider layer separate from account auth, Manual always works; research and plan with doc links before coding ChatGPT; never client-side credentials.
+3. `docs/ai/chatgpt-integration-plan.md`: findings with links to OpenAI's docs. Key facts: plan usage is real but Plus/Pro only; open-source/local apps can use it now; a paid or remotely hosted app (keeply on Vercel) must join OpenAI's waitlist and get an `oaiapp_` client ID first; PKCE + OIDC, `chatgpt.tokens.use.direct` scope, Responses API; users set per-app limits. Full pages were blocked from the cloud session, so items marked *(confirm)* need a read with normal network access.
+
+Owner action: submit OpenAI's Sign in with ChatGPT interest form for the hosted app.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

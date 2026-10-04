@@ -796,6 +796,9 @@ truth. This feature is new: an agent's pretrained knowledge may not
 contain it, so do not conclude "ChatGPT subscriptions cannot be used
 through third-party apps" from older knowledge either.
 
+Research findings and plan (2026-10-04, research only):
+`docs/ai/chatgpt-integration-plan.md`.
+
 **Instruction to any coding agent:** before writing any code for the
 ChatGPT integration, research the current official OpenAI documentation
 and return an implementation plan with links to the relevant OpenAI
