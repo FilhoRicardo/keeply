@@ -284,6 +284,17 @@ Steps:
 3. Tests: route (off by default, photo validation, returns null). Real-browser check with the flag on: no errors.
 4. Review pass found: a malformed proposal (e.g. AI JSON missing `manufacturer`) would crash the route with a 500 instead of being dropped. Added a `wellFormed` shape check before validation, with a test. 200 unit/component pass.
 
+### 28. Record when a task was actually done, with a note (Builder 2; reviewer Builder 4)
+
+`validateCompletion` in `src/domain/schedule.ts`, `src/app/components/completion-form.tsx`, repositories, `supabase/migrations/20261004220000_completion_rules.sql`.
+
+Steps:
+1. "Mark done" opens a small form: date (defaults to today, no future dates) and an optional note (≤280 characters). Back-dating matters for completion-based tasks, whose next due date counts from the real completion.
+2. Database: completions cannot be in the future (one day of slack for time zones) and notes stay short.
+3. History shows dates with notes.
+4. Review pass found a double-submit (slow save + second tap recorded the completion twice); Save is now disabled while saving.
+5. Tests: domain, component (future refused, back-dated with trimmed note), pgTAP 2, integration dates moved into the past, e2e records a note. 203 unit/component, 7 integration, 3 e2e, 43 pgTAP.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

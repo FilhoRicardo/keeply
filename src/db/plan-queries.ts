@@ -215,6 +215,6 @@ export async function deleteAppliance(db: SupabaseClient, applianceId: string) {
   }
 }
 
-export async function insertCompletion(db: SupabaseClient, taskId: string, completedOn: string) {
-  check(await db.from('maintenance_completions').insert({ maintenance_task_id: taskId, completed_on: completedOn }))
+export async function insertCompletion(db: SupabaseClient, taskId: string, completedOn: string, notes: string | null = null) {
+  check(await db.from('maintenance_completions').insert({ maintenance_task_id: taskId, completed_on: completedOn, notes }))
 }

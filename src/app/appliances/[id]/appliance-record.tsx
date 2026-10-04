@@ -7,6 +7,7 @@ import { applianceName } from '@/domain/calendar-event'
 import { formatInterval } from '@/domain/format-interval'
 import { isOverdue, nextDue } from '@/domain/schedule'
 import { CalendarReturnNotice } from '../../components/calendar-return-notice'
+import { CompletionForm } from '../../components/completion-form'
 import { CustomiseForm } from '../../components/customise-form'
 import { DeleteAppliance } from '../../components/delete-appliance'
 import { EvidenceBadge } from '../../components/evidence-badge'
@@ -44,6 +45,7 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
+  const [completing, setCompleting] = useState<string | null>(null)
 
   useEffect(() => {
     fetchCalendarStatus().then(setCalendar)
@@ -165,13 +167,14 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
     )
   }
 
-  async function markDone(taskId: string) {
+  async function markDone(taskId: string, completedOn: string, notes: string | null) {
     let state
     try {
-      state = await addCompletion(applianceId, taskId, now)
+      state = await addCompletion(applianceId, taskId, completedOn, notes)
     } catch {
       return
     }
+    setCompleting(null)
     const next = findRecord(state, applianceId)!
     const task = next.tasks.find((t) => t.id === taskId)!
     if (!needsReschedule(task)) return
@@ -266,10 +269,17 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
               <EvidenceBadge level={rec.evidenceLevel} />
               {history.length > 0 && (
                 <p className="history">
-                  <span className="aster-eyebrow">Done</span> {history.map((c) => formatDate(c.completedOn)).join(', ')}
+                  <span className="aster-eyebrow">Done</span>{' '}
+                  {history.map((c) => formatDate(c.completedOn) + (c.notes ? ` (${c.notes})` : '')).join(', ')}
                 </p>
               )}
-              {editing === task.id ? (
+              {completing === task.id ? (
+                <CompletionForm
+                  today={now}
+                  onCancel={() => setCompleting(null)}
+                  onSave={(completedOn, notes) => markDone(task.id, completedOn, notes)}
+                />
+              ) : editing === task.id ? (
                 <CustomiseForm
                   initial={{ interval: task.userInterval, startDate: task.startDate, schedulingMode: task.schedulingMode }}
                   onCancel={() => setEditing(null)}
@@ -285,8 +295,8 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
                     <button type="button" className="aster-btn aster-btn--ghost" onClick={() => setEditing(task.id)}>
                       Change schedule
                     </button>
-                    <button type="button" className="aster-btn aster-btn--ghost" onClick={() => markDone(task.id)}>
-                      Mark done today
+                    <button type="button" className="aster-btn aster-btn--ghost" onClick={() => setCompleting(task.id)}>
+                      Mark done
                     </button>
                   </div>
                   <button type="button" className="link-button" onClick={() => pause(task.id)}>

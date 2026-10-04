@@ -1,4 +1,4 @@
-import { addInterval, compareDates, type LocalDate } from './dates'
+import { addInterval, compareDates, isLocalDate, type LocalDate } from './dates'
 import type { Interval } from './format-interval'
 import type { Completion, Task } from './model'
 
@@ -32,4 +32,14 @@ export function nextDue(task: Pick<Task, 'id' | 'startDate' | 'userInterval' | '
 
 export function isOverdue(due: LocalDate, today: LocalDate): boolean {
   return compareDates(due, today) < 0
+}
+
+export const MAX_COMPLETION_NOTE = 280
+
+// A completion is a date the owner actually did the task: valid, not in the future.
+export function validateCompletion(completedOn: string, today: LocalDate, notes: string | null): string | null {
+  if (!isLocalDate(completedOn)) return 'Choose the date you did it.'
+  if (compareDates(completedOn, today) > 0) return 'The date cannot be in the future.'
+  if (notes && notes.length > MAX_COMPLETION_NOTE) return `Keep the note under ${MAX_COMPLETION_NOTE} characters.`
+  return null
 }

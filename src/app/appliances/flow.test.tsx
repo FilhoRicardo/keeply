@@ -165,7 +165,8 @@ describe('manual dishwasher → approved plan', () => {
     expect(within(sources).getByText('Keeply general dishwasher maintenance guidance')).toBeInTheDocument()
     expect(within(sources).getByText(/could not find model-specific guidance/)).toBeInTheDocument()
 
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Mark done today' })))
+    fireEvent.click(screen.getByRole('button', { name: 'Mark done' }))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })))
     expect((await record()).completions).toHaveLength(1)
   })
 
@@ -187,7 +188,8 @@ describe('manual dishwasher → approved plan', () => {
     renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
     await screen.findByRole('heading', { name: 'Clean the filter' })
     await waitFor(() => expect(calls.map((c) => c.url)).toContain('/api/calendar/status'))
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Mark done today' })))
+    fireEvent.click(screen.getByRole('button', { name: 'Mark done' }))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })))
 
     const write = await waitFor(() => {
       const call = calls.find((c) => c.url === '/api/calendar/events')
@@ -472,5 +474,27 @@ describe('a paused task whose reminder could not be removed', () => {
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Remove from Google Calendar' })))
     expect(await screen.findByText('Paused reminders removed from Google Calendar.')).toBeInTheDocument()
     expect((await record()).tasks[0]).toMatchObject({ status: 'paused', calendarEventId: null })
+  })
+})
+
+describe('recording a completion', () => {
+  it('records the date it was actually done with a note, and refuses future dates', async () => {
+    mockFetch({ configured: false, connected: false }, [])
+    await addDishwasher()
+    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
+    await approveWith('2026-01-05')
+
+    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark done' }))
+    fireEvent.change(screen.getByLabelText('Done on'), { target: { value: '2999-01-01' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByRole('alert')).toHaveTextContent(/future/)
+
+    fireEvent.change(screen.getByLabelText('Done on'), { target: { value: '2026-02-01' } })
+    fireEvent.change(screen.getByLabelText(/Note/), { target: { value: '  Very greasy  ' } })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })))
+
+    expect((await record()).completions).toEqual([{ taskId: 'task-1', completedOn: '2026-02-01', notes: 'Very greasy' }])
+    expect(screen.getByText(/1 Feb 2026 \(Very greasy\)/)).toBeInTheDocument()
   })
 })

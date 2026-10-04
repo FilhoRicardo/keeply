@@ -28,7 +28,7 @@ export interface PlanRepository {
   // The Approval action. The only way Tasks come into existence.
   approve(applianceId: string, defaultStartDate: LocalDate): Promise<PlanState>
   recordCalendarResults(applianceId: string, results: readonly WriteResult[]): Promise<PlanState>
-  addCompletion(applianceId: string, taskId: string, completedOn: LocalDate): Promise<PlanState>
+  addCompletion(applianceId: string, taskId: string, completedOn: LocalDate, notes?: string | null): Promise<PlanState>
   // Changes the owner's schedule on an approved Task (the Recommendation never changes).
   updateTaskSchedule(applianceId: string, taskId: string, schedule: Customisation): Promise<PlanState>
   // Pause (event comes off the calendar) or resume a Task.
@@ -120,7 +120,8 @@ export function createDevicePlanRepository({
       mutate((s) => setDecision(s, applianceId, recommendationId, decision)),
     approve: (applianceId, defaultStartDate) => mutate((s) => approve(s, applianceId, defaultStartDate, newId, now())),
     recordCalendarResults: (applianceId, results) => mutate((s) => recordCalendarResults(s, applianceId, results)),
-    addCompletion: (applianceId, taskId, completedOn) => mutate((s) => addCompletion(s, applianceId, taskId, completedOn)),
+    addCompletion: (applianceId, taskId, completedOn, notes) =>
+      mutate((s) => addCompletion(s, applianceId, taskId, completedOn, notes ?? null)),
     deleteAppliance: (applianceId) => mutate((s) => removeAppliance(s, applianceId)),
     setTaskPaused: (applianceId, taskId, paused) => mutate((s) => setTaskPaused(s, applianceId, taskId, paused)),
     clearCalendarEvents: (applianceId, taskIds) => mutate((s) => clearCalendarEvents(s, applianceId, taskIds)),

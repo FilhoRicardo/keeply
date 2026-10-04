@@ -111,10 +111,17 @@ export function recordCalendarResults(state: PlanState, applianceId: string, res
   }))
 }
 
-export function addCompletion(state: PlanState, applianceId: string, taskId: string, completedOn: LocalDate): PlanState {
+export function addCompletion(
+  state: PlanState,
+  applianceId: string,
+  taskId: string,
+  completedOn: LocalDate,
+  notes: string | null = null,
+): PlanState {
   return updateRecord(state, applianceId, (r) => {
     if (!r.tasks.some((t) => t.id === taskId && t.status === 'approved')) throw new Error('Only approved tasks can be completed.')
-    return { ...r, completions: [...r.completions, { taskId, completedOn, notes: null }] }
+    const note = notes?.trim() || null
+    return { ...r, completions: [...r.completions, { taskId, completedOn, notes: note }] }
   })
 }
 

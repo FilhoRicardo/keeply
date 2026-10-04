@@ -111,9 +111,9 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase plan repository', () => {
     expect(moved.recommendations[0].recommendedInterval).toEqual({ count: 1, unit: 'month' })
     await expect(repo.updateTaskSchedule(applianceId, skipped.id, { interval: { count: 1, unit: 'month' }, startDate: '2026-11-01', schedulingMode: 'fixed_calendar' })).rejects.toThrow(/approved/)
 
-    const done = await repo.addCompletion(applianceId, second.id, '2026-10-12')
-    expect(findRecord(done, applianceId)!.completions).toEqual([{ taskId: second.id, completedOn: '2026-10-12', notes: null }])
-    await expect(repo.addCompletion(applianceId, skipped.id, '2026-10-12')).rejects.toThrow(/approved/)
+    const done = await repo.addCompletion(applianceId, second.id, '2026-10-02')
+    expect(findRecord(done, applianceId)!.completions).toEqual([{ taskId: second.id, completedOn: '2026-10-02', notes: null }])
+    await expect(repo.addCompletion(applianceId, skipped.id, '2026-10-02')).rejects.toThrow(/approved/)
   })
 
   it('keeps one owner’s plans invisible to another', async () => {
@@ -131,7 +131,7 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase plan repository', () => {
     const { applianceId, state } = await repo.addAppliance({ manufacturer: 'AEG', model: '', serialNumber: '' })
     for (const rec of findRecord(state, applianceId)!.recommendations) await repo.setDecision(applianceId, rec.id, { kind: 'include' })
     const approved = findRecord(await repo.approve(applianceId, '2026-10-05'), applianceId)!
-    await repo.addCompletion(applianceId, approved.tasks[0].id, '2026-10-06')
+    await repo.addCompletion(applianceId, approved.tasks[0].id, '2026-10-01')
     expect(findRecord(await repo.deleteAppliance(applianceId), applianceId)).toBeUndefined()
     const left = execFileSync('psql', [KEEPLY_INTEGRATION_DB!, '-tAc',
       `select (select count(*) from maintenance_recommendations where appliance_id = '${applianceId}') + (select count(*) from maintenance_tasks where appliance_id = '${applianceId}')`]).toString().trim()

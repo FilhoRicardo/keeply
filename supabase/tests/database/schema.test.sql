@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(13);
+select plan(15);
 
 -- Two owners. The auth trigger gives each a profile and a home.
 insert into auth.users (id, email) values
@@ -81,6 +81,18 @@ select lives_ok(
   $$ insert into public.maintenance_completions (maintenance_task_id, completed_on)
      values ('40000000-0000-0000-0000-000000000001', '2026-06-06') $$,
   'completions are recorded per task'
+);
+
+select throws_ok(
+  $$ insert into public.maintenance_completions (maintenance_task_id, completed_on)
+     values ('40000000-0000-0000-0000-000000000001', current_date + 7) $$,
+  '23514', null, 'a completion cannot be in the future'
+);
+
+select throws_ok(
+  $$ insert into public.maintenance_completions (maintenance_task_id, completed_on, notes)
+     values ('40000000-0000-0000-0000-000000000001', '2026-06-06', repeat('x', 281)) $$,
+  '23514', null, 'completion notes stay short'
 );
 
 -- Row-level security.

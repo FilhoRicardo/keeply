@@ -147,12 +147,12 @@ export function createSupabasePlanRepository({
       await deleteAppliance(db, applianceId)
       return load()
     },
-    async addCompletion(applianceId, taskId, completedOn) {
+    async addCompletion(applianceId, taskId, completedOn, notes) {
       const current = await record(applianceId)
       if (!current.tasks.some((t) => t.id === taskId && t.status === 'approved')) {
         throw new Error('Only approved tasks can be completed.')
       }
-      await insertCompletion(db, taskId, completedOn)
+      await insertCompletion(db, taskId, completedOn, notes?.trim() || null)
       return load()
     },
   }

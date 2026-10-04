@@ -22,7 +22,7 @@ type PlanContextValue = {
   setDecision(applianceId: string, recommendationId: string, decision: Decision | null): Promise<PlanState>
   approve(applianceId: string, defaultStartDate: LocalDate): Promise<PlanState>
   recordCalendarResults(applianceId: string, results: readonly WriteResult[]): Promise<PlanState>
-  addCompletion(applianceId: string, taskId: string, completedOn: LocalDate): Promise<PlanState>
+  addCompletion(applianceId: string, taskId: string, completedOn: LocalDate, notes?: string | null): Promise<PlanState>
   deleteAppliance(applianceId: string): Promise<PlanState>
   updateTaskSchedule(applianceId: string, taskId: string, schedule: Customisation): Promise<PlanState>
   setTaskPaused(applianceId: string, taskId: string, paused: boolean): Promise<PlanState>
@@ -138,8 +138,8 @@ export function PlanProvider({
       setTaskPaused: (applianceId, taskId, paused) => apply(() => repo.setTaskPaused(applianceId, taskId, paused)),
       clearCalendarEvents: (applianceId, taskIds) => apply(() => repo.clearCalendarEvents(applianceId, taskIds)),
       updateTaskSchedule: (applianceId, taskId, schedule) => apply(() => repo.updateTaskSchedule(applianceId, taskId, schedule)),
-      async addCompletion(applianceId, taskId, date) {
-        const next = await apply(() => repo.addCompletion(applianceId, taskId, date))
+      async addCompletion(applianceId, taskId, date, notes) {
+        const next = await apply(() => repo.addCompletion(applianceId, taskId, date, notes))
         safeTrack(track, { name: 'task_completed', applianceId })
         return next
       },
