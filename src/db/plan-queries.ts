@@ -109,6 +109,21 @@ export async function setCalendarEventId(db: SupabaseClient, taskId: string, eve
   check(await db.from('maintenance_tasks').update({ calendar_event_id: eventId }).eq('id', taskId).eq('status', 'approved'))
 }
 
+export async function updateTaskSchedule(db: SupabaseClient, task: Task) {
+  check(
+    await db
+      .from('maintenance_tasks')
+      .update({
+        user_interval_count: task.userInterval.count,
+        user_interval_unit: task.userInterval.unit,
+        start_date: task.startDate,
+        scheduling_mode: task.schedulingMode,
+      })
+      .eq('id', task.id)
+      .eq('status', 'approved'),
+  )
+}
+
 // Cascades to sources, recommendations, decisions, tasks and completions.
 export async function deleteAppliance(db: SupabaseClient, applianceId: string) {
   const { data, error } = await db.from('appliances').delete().eq('id', applianceId).select('id')

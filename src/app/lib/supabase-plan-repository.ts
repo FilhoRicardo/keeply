@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   addApplianceWithRecommendations,
   deleteAppliance,
+  updateTaskSchedule,
   insertApprovedTasks,
   insertCompletion,
   loadApplianceTrees,
@@ -12,7 +13,7 @@ import {
 } from '@/db/plan-queries'
 import { toAppliance, toCompletion, toRecommendation, toTask } from '@/db/rows'
 import { GENERAL_DISHWASHER_GUIDANCE, mockRecommendations } from '@/domain/mock-recommendations'
-import { approvePlan, type Decisions } from '@/domain/plan'
+import { approvePlan, rescheduleTask, type Decisions } from '@/domain/plan'
 import type { PlanRepository } from './plan-repository'
 import { findRecord, validateNewAppliance, type ApplianceRecord, type PlanState } from './plan-state'
 
@@ -101,6 +102,12 @@ export function createSupabasePlanRepository({
     async recordCalendarResults(applianceId, results) {
       await ready()
       for (const result of results) if (result.ok) await setCalendarEventId(db, result.taskId, result.eventId)
+      return load()
+    },
+    async updateTaskSchedule(applianceId, taskId, schedule) {
+      const task = (await record(applianceId)).tasks.find((t) => t.id === taskId)
+      if (!task) throw new Error(`Unknown task ${taskId}`)
+      await updateTaskSchedule(db, rescheduleTask(task, schedule))
       return load()
     },
     async deleteAppliance(applianceId) {

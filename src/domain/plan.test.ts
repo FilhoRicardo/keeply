@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { approvalBlockers, approvePlan, calendarBound, canApprove, validateCustomisation, type Decisions } from './plan'
+import { approvalBlockers, approvePlan, calendarBound, canApprove, rescheduleTask, validateCustomisation, type Decisions } from './plan'
 import { frozen, recommendation, sequentialIds } from './test-fixtures'
 
 const filter = recommendation()
@@ -95,5 +95,26 @@ describe('approvePlan', () => {
     })
     expect(tasks.map((t) => t.status)).toEqual(['approved', 'skipped'])
     expect(calendarBound(tasks).map((t) => t.recommendationId)).toEqual(['rec-filter'])
+  })
+})
+
+describe('rescheduleTask', () => {
+  const [approved, skipped] = approvePlan({
+    recommendations: recs,
+    decisions: { [filter.id]: { kind: 'include' }, [rinse.id]: { kind: 'skip' } },
+    defaultStartDate: '2026-10-05',
+    newId: sequentialIds(),
+  })
+  const change = { interval: { count: 6, unit: 'week' as const }, startDate: '2026-11-01', schedulingMode: 'completion_based' as const }
+
+  it('changes only the owner’s schedule, keeping identity and calendar link', () => {
+    const linked = { ...approved, calendarEventId: 'evt-1' }
+    expect(rescheduleTask(linked, change)).toEqual({ ...linked, userInterval: { count: 6, unit: 'week' }, startDate: '2026-11-01', schedulingMode: 'completion_based' })
+    expect(filter.recommendedInterval).toEqual({ count: 14, unit: 'day' })
+  })
+
+  it('refuses skipped tasks and invalid schedules', () => {
+    expect(() => rescheduleTask(skipped, change)).toThrow(/approved/)
+    expect(() => rescheduleTask(approved, { ...change, interval: { count: 0, unit: 'day' } })).toThrow()
   })
 })

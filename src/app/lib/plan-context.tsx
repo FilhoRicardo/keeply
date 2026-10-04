@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
-import type { Decision } from '@/domain/plan'
+import type { Customisation, Decision } from '@/domain/plan'
 import type { PlanRepository } from './plan-repository'
 import { createPlanBackend } from './repository'
 import { findRecord, type NewApplianceInput, type PlanState } from './plan-state'
@@ -24,6 +24,7 @@ type PlanContextValue = {
   recordCalendarResults(applianceId: string, results: readonly WriteResult[]): Promise<PlanState>
   addCompletion(applianceId: string, taskId: string, completedOn: LocalDate): Promise<PlanState>
   deleteAppliance(applianceId: string): Promise<PlanState>
+  updateTaskSchedule(applianceId: string, taskId: string, schedule: Customisation): Promise<PlanState>
 }
 
 const PlanContext = createContext<PlanContextValue | null>(null)
@@ -125,6 +126,7 @@ export function PlanProvider({
         return next
       },
       deleteAppliance: (applianceId) => apply(repo.deleteAppliance(applianceId)),
+      updateTaskSchedule: (applianceId, taskId, schedule) => apply(repo.updateTaskSchedule(applianceId, taskId, schedule)),
       async addCompletion(applianceId, taskId, date) {
         const next = await apply(repo.addCompletion(applianceId, taskId, date))
         safeTrack(track, { name: 'task_completed', applianceId })

@@ -298,3 +298,29 @@ describe('deleting a dishwasher', () => {
     expect((await repo.load()).records).toEqual([])
   })
 })
+
+describe('changing a schedule after approval', () => {
+  it('updates the task, keeps the recommendation and moves the calendar event', async () => {
+    const calls: Calls = []
+    mockFetch({ configured: true, connected: true }, calls)
+    await addDishwasher()
+    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
+    await approveWith('2026-10-05')
+    expect((await record()).tasks[0].calendarEventId).toBe('evt-task-1')
+
+    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
+    await waitFor(() => expect(calls.filter((c) => c.url === '/api/calendar/status').length).toBeGreaterThan(1))
+    fireEvent.click(await screen.findByRole('button', { name: 'Change schedule' }))
+    fireEvent.change(screen.getByLabelText('Number'), { target: { value: '6' } })
+    fireEvent.change(screen.getByLabelText('Unit'), { target: { value: 'week' } })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })))
+
+    expect(await screen.findByText('Schedule updated in Keeply and Google Calendar.')).toBeInTheDocument()
+    const updated = await record()
+    expect(updated.tasks[0].userInterval).toEqual({ count: 6, unit: 'week' })
+    expect(updated.recommendations[0].recommendedInterval).toEqual({ count: 1, unit: 'month' })
+    const writes = calls.filter((c) => c.url === '/api/calendar/events')
+    const last = writes[writes.length - 1].body as { drafts: { taskId: string; recurrence: string[] }[] }
+    expect(last.drafts).toEqual([expect.objectContaining({ taskId: 'task-1', recurrence: ['RRULE:FREQ=WEEKLY;INTERVAL=6'] })])
+  })
+})

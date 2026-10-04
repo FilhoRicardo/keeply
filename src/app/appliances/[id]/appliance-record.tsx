@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { applianceName } from '@/domain/calendar-event'
 import { formatInterval } from '@/domain/format-interval'
 import { isOverdue, nextDue } from '@/domain/schedule'
+import { CustomiseForm } from '../../components/customise-form'
 import { DeleteAppliance } from '../../components/delete-appliance'
 import { EvidenceBadge } from '../../components/evidence-badge'
 import { LoadingPanel, NotFoundPanel } from '../../components/screen'
@@ -32,11 +33,12 @@ const OUTCOME_COPY: Record<string, string> = {
 }
 
 export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
-  const { state, addCompletion, recordCalendarResults, accessToken } = usePlan()
+  const { state, addCompletion, recordCalendarResults, accessToken, updateTaskSchedule } = usePlan()
   const outcome = useSearchParams().get('approved')
   const [calendar, setCalendar] = useState<CalendarStatus | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState<string | null>(null)
 
   useEffect(() => {
     fetchCalendarStatus().then(setCalendar)
@@ -74,6 +76,26 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
       if (result.kind === 'not_connected') setCalendar((c) => (c ? { ...c, connected: false } : c))
     }
     setBusy(false)
+  }
+
+  async function changeSchedule(taskId: string, schedule: Parameters<typeof updateTaskSchedule>[2]) {
+    let state
+    try {
+      state = await updateTaskSchedule(applianceId, taskId, schedule)
+    } catch {
+      return
+    }
+    setEditing(null)
+    const next = findRecord(state, applianceId)!
+    const task = next.tasks.find((t) => t.id === taskId)!
+    if (!task.calendarEventId) return setMessage('Schedule updated.')
+    if (!calendar?.connected) return setMessage('Schedule updated. Connect Google Calendar to update the reminder.')
+    const result = await writeTasks(next, [task], await accessToken())
+    setMessage(
+      result.kind === 'written' && result.results.every((r) => r.ok)
+        ? 'Schedule updated in Keeply and Google Calendar.'
+        : 'Schedule updated, but the calendar reminder could not be changed.',
+    )
   }
 
   async function markDone(taskId: string) {
@@ -171,13 +193,22 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
                   <span className="aster-eyebrow">Done</span> {history.map((c) => formatDate(c.completedOn)).join(', ')}
                 </p>
               )}
-              <button
-                type="button"
-                className="aster-btn aster-btn--ghost full-width"
-                onClick={() => markDone(task.id)}
-              >
-                Mark done today
-              </button>
+              {editing === task.id ? (
+                <CustomiseForm
+                  initial={{ interval: task.userInterval, startDate: task.startDate, schedulingMode: task.schedulingMode }}
+                  onCancel={() => setEditing(null)}
+                  onSave={(schedule) => changeSchedule(task.id, schedule)}
+                />
+              ) : (
+                <div className="button-row">
+                  <button type="button" className="aster-btn aster-btn--ghost" onClick={() => setEditing(task.id)}>
+                    Change schedule
+                  </button>
+                  <button type="button" className="aster-btn aster-btn--ghost" onClick={() => markDone(task.id)}>
+                    Mark done today
+                  </button>
+                </div>
+              )}
             </li>
           )
         })}

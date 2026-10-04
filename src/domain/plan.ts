@@ -95,3 +95,16 @@ export function approvePlan({ recommendations, decisions, defaultStartDate, newI
 export function calendarBound(tasks: readonly Task[]): Task[] {
   return tasks.filter((t) => t.status === 'approved')
 }
+
+// Changes the owner's schedule on an approved Task. The Recommendation is untouched.
+export function rescheduleTask(task: Task, customisation: Customisation): Task {
+  if (task.status !== 'approved') throw new Error('Only approved tasks can be rescheduled.')
+  const problem = validateCustomisation(customisation)
+  if (problem) throw new Error(problem)
+  return {
+    ...task,
+    userInterval: { ...customisation.interval },
+    startDate: customisation.startDate,
+    schedulingMode: customisation.schedulingMode,
+  }
+}

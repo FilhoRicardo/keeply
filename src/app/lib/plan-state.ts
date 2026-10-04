@@ -2,7 +2,7 @@ import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
 import type { Appliance, Completion, Recommendation, Task } from '@/domain/model'
 import { mockRecommendations } from '@/domain/mock-recommendations'
-import { approvePlan, type Decision, type Decisions } from '@/domain/plan'
+import { approvePlan, rescheduleTask, type Customisation, type Decision, type Decisions } from '@/domain/plan'
 
 // Everything Keeply knows about one appliance. Pure transitions only: persistence lives in plan-store.ts.
 export type ApplianceRecord = {
@@ -99,6 +99,13 @@ export function addCompletion(state: PlanState, applianceId: string, taskId: str
   return updateRecord(state, applianceId, (r) => {
     if (!r.tasks.some((t) => t.id === taskId && t.status === 'approved')) throw new Error('Only approved tasks can be completed.')
     return { ...r, completions: [...r.completions, { taskId, completedOn, notes: null }] }
+  })
+}
+
+export function updateTaskSchedule(state: PlanState, applianceId: string, taskId: string, schedule: Customisation): PlanState {
+  return updateRecord(state, applianceId, (r) => {
+    if (!r.tasks.some((t) => t.id === taskId)) throw new Error(`Unknown task ${taskId}`)
+    return { ...r, tasks: r.tasks.map((t) => (t.id === taskId ? rescheduleTask(t, schedule) : t)) }
   })
 }
 

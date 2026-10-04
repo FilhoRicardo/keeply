@@ -170,6 +170,15 @@ Steps:
 1. Measured small text against the darkest background it sits on (`#e1e7e3`): `--aster-ink-3` `#8a928d` was 2.55:1 and `--aster-green-soft` `#5f9d79` 2.54:1 (AA needs 4.5:1).
 2. Darkened to `#5f6661` (4.7:1) and `#2f6e49` (4.86:1). These deviate from the Aster tokens; the brand owner should confirm or pick other AA-passing values.
 
+### 16. Change a task's schedule after approval (Builder 1; reviewer Builder 3)
+
+`rescheduleTask` in `src/domain/plan.ts`; `updateTaskSchedule` in plan-state, both repositories and `src/db/plan-queries.ts`; record screen.
+
+Steps:
+1. "Change schedule" on each approved task opens the same Customise form (frequency, start date, timing). Only the Task changes; the Recommendation stays as it was and is still shown.
+2. If the task is already in Google Calendar, the event is updated in place (same event id, new date/recurrence); otherwise the owner is told to connect.
+3. Tests: domain, component flow (event rewritten with `RRULE:FREQ=WEEKLY;INTERVAL=6`), integration under RLS (skipped task refused). 143 unit/component, 5 integration, 2 e2e pass.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

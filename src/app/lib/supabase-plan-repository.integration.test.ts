@@ -101,6 +101,16 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase plan repository', () => {
     ])
     expect(findRecord(written, applianceId)!.tasks.map((t) => t.calendarEventId)).toEqual(['evt-1', null, null])
 
+    const rescheduled = await repo.updateTaskSchedule(applianceId, first.id, {
+      interval: { count: 6, unit: 'week' },
+      startDate: '2026-11-01',
+      schedulingMode: 'fixed_calendar',
+    })
+    const moved = findRecord(rescheduled, applianceId)!
+    expect(moved.tasks[0]).toMatchObject({ userInterval: { count: 6, unit: 'week' }, startDate: '2026-11-01', calendarEventId: 'evt-1' })
+    expect(moved.recommendations[0].recommendedInterval).toEqual({ count: 1, unit: 'month' })
+    await expect(repo.updateTaskSchedule(applianceId, skipped.id, { interval: { count: 1, unit: 'month' }, startDate: '2026-11-01', schedulingMode: 'fixed_calendar' })).rejects.toThrow(/approved/)
+
     const done = await repo.addCompletion(applianceId, second.id, '2026-10-12')
     expect(findRecord(done, applianceId)!.completions).toEqual([{ taskId: second.id, completedOn: '2026-10-12', notes: null }])
     await expect(repo.addCompletion(applianceId, skipped.id, '2026-10-12')).rejects.toThrow(/approved/)

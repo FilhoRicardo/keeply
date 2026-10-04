@@ -1,11 +1,12 @@
 import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
-import type { Decision } from '@/domain/plan'
+import type { Customisation, Decision } from '@/domain/plan'
 import {
   addAppliance,
   addCompletion,
   approve,
   removeAppliance,
+  updateTaskSchedule,
   parseState,
   recordCalendarResults,
   setDecision,
@@ -25,6 +26,8 @@ export interface PlanRepository {
   approve(applianceId: string, defaultStartDate: LocalDate): Promise<PlanState>
   recordCalendarResults(applianceId: string, results: readonly WriteResult[]): Promise<PlanState>
   addCompletion(applianceId: string, taskId: string, completedOn: LocalDate): Promise<PlanState>
+  // Changes the owner's schedule on an approved Task (the Recommendation never changes).
+  updateTaskSchedule(applianceId: string, taskId: string, schedule: Customisation): Promise<PlanState>
   // Removes the appliance and everything under it from Keeply (not from the calendar).
   deleteAppliance(applianceId: string): Promise<PlanState>
   // Bearer token for server routes that act on this user's plan (Supabase only).
@@ -93,6 +96,7 @@ export function createDevicePlanRepository({
     recordCalendarResults: (applianceId, results) => mutate((s) => recordCalendarResults(s, applianceId, results)),
     addCompletion: (applianceId, taskId, completedOn) => mutate((s) => addCompletion(s, applianceId, taskId, completedOn)),
     deleteAppliance: (applianceId) => mutate((s) => removeAppliance(s, applianceId)),
+    updateTaskSchedule: (applianceId, taskId, schedule) => mutate((s) => updateTaskSchedule(s, applianceId, taskId, schedule)),
     subscribe(listener) {
       if (typeof window === 'undefined') return () => {}
       const onStorage = (e: StorageEvent) => e.key === DEVICE_STORAGE_KEY && listener()
