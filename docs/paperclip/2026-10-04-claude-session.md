@@ -71,6 +71,20 @@ Steps:
 
 Verification: `pnpm verify` green (124 tests), real-browser pass at 360 px.
 
+### 6. Supabase PlanRepository with anonymous sign-in (Builder 2; reviewer Builder 4)
+
+Commit `38e8be9`. `supabase/migrations/20261004160000_plan_decisions.sql`, `src/db/plan-queries.ts`, `src/app/lib/supabase-plan-repository.ts`, `src/app/lib/repository.ts`, `scripts/db-integration.sh`.
+
+Steps:
+1. Migration: `plan_decisions` table (draft Include/Customise/Skip; customise must carry a full schedule; frozen by trigger once any Task exists; appliance deletion still cascades), `position` on recommendations, and RPC `add_appliance_with_recommendations` (appliance + source + recommendations in one transaction, runs as the caller under RLS).
+2. pgTAP `supabase/tests/database/plan_decisions.test.sql`: 6 tests (19 total, all pass on Postgres 16).
+3. `src/db/plan-queries.ts`: every plan read/write; approval inserts all Tasks in one statement.
+4. `createSupabasePlanRepository` implements the same `PlanRepository` as device storage; `createPlanRepository` picks Supabase when `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set and signs visitors in anonymously.
+5. Integration test through real supabase-js → PostgREST 12 → Postgres with RLS: full lifecycle, frozen decisions, cross-user isolation (2/2 pass). Run with `scripts/db-integration.sh`; excluded from `pnpm test`.
+6. Storage failures show a banner with "Try again"; forms and approval reset instead of hanging.
+
+Owner actions this needs: `supabase db push`, enable Anonymous sign-ins, set the two `NEXT_PUBLIC_SUPABASE_*` vars in Vercel (all already in KEE-23's wizard scope).
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
