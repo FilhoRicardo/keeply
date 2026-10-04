@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { GENERAL_DISHWASHER_TASKS } from '@/domain/general-guidance'
+import { createDevicePlanRepository, DEVICE_STORAGE_KEY, memoryStorage } from './plan-repository'
 import { findRecord } from './plan-state'
-import { blobToDataUrl, createDevicePlanRepository, dataUrlToBlob, DEVICE_STORAGE_KEY, memoryStorage } from './plan-repository'
 
 function ids() {
   let n = 0
@@ -8,42 +9,51 @@ function ids() {
 }
 
 const input = { manufacturer: 'Bosch', model: '', serialNumber: '' }
+const proposals = GENERAL_DISHWASHER_TASKS
 
 describe('device plan repository', () => {
   it('persists to storage and reloads in a new repository', async () => {
     const storage = memoryStorage()
     const repo = createDevicePlanRepository({ storage, newId: ids(), now: () => 'now' })
-    const { applianceId } = await repo.addAppliance(input)
+    const { applianceId } = await repo.addAppliance(input, proposals)
 
     const reopened = createDevicePlanRepository({ storage })
     expect(findRecord(await reopened.load(), applianceId)?.appliance.manufacturer).toBe('Bosch')
   })
 
-  it('runs the full plan lifecycle through the interface', async () => {
+  it('runs the plan lifecycle through the interface', async () => {
     const repo = createDevicePlanRepository({ storage: memoryStorage(), newId: ids(), now: () => 'now' })
-    const { applianceId, state } = await repo.addAppliance(input)
-    const recs = findRecord(state, applianceId)!.recommendations
-    for (const rec of recs) await repo.setDecision(applianceId, rec.id, { kind: 'include' })
+    const { applianceId, state } = await repo.addAppliance(input, proposals)
+    const [first, ...rest] = findRecord(state, applianceId)!.tasks
+    await repo.decide(applianceId, first.id, 'accepted')
+    for (const t of rest) await repo.decide(applianceId, t.id, 'rejected')
 
-    const approved = await repo.approve(applianceId, '2026-10-05')
-    const task = findRecord(approved, applianceId)!.tasks[0]
-    await repo.recordCalendarResults(applianceId, [{ taskId: task.id, ok: true, eventId: 'evt' }])
-    const done = await repo.addCompletion(applianceId, task.id, '2026-10-06')
+    await repo.approve(applianceId, '2026-10-05')
+    const done = await repo.recordCalendarResults(applianceId, [{ taskId: first.id, ok: true, eventId: 'evt' }])
 
     const record = findRecord(done, applianceId)!
-    expect(record.tasks[0].calendarEventId).toBe('evt')
-    expect(record.completions).toHaveLength(1)
+    expect(record).toMatchObject({ approvedAt: 'now', startDate: '2026-10-05' })
+    expect(record.tasks.map((t) => [t.status, t.calendarEventId])).toEqual([
+      ['accepted', 'evt'],
+      ['rejected', null],
+      ['rejected', null],
+    ])
   })
 
   it('keeps an unsaved change when storage reads work but writes fail (quota)', async () => {
     const backing = memoryStorage()
-    const full = { getItem: backing.getItem, setItem: () => { throw new Error('QuotaExceededError') } }
+    const full = {
+      getItem: backing.getItem,
+      setItem: () => {
+        throw new Error('QuotaExceededError')
+      },
+    }
     const repo = createDevicePlanRepository({ storage: full, newId: ids(), now: () => 'now' })
-    const { applianceId, state } = await repo.addAppliance(input)
-    const rec = findRecord(state, applianceId)!.recommendations[0]
+    const { applianceId, state } = await repo.addAppliance(input, proposals)
+    const task = findRecord(state, applianceId)!.tasks[0]
 
-    const next = await repo.setDecision(applianceId, rec.id, { kind: 'include' })
-    expect(findRecord(next, applianceId)?.decisions[rec.id]).toEqual({ kind: 'include' })
+    const next = await repo.decide(applianceId, task.id, 'accepted')
+    expect(findRecord(next, applianceId)?.tasks[0].status).toBe('accepted')
   })
 
   it('keeps working in memory when storage throws', async () => {
@@ -56,13 +66,13 @@ describe('device plan repository', () => {
       },
     }
     const repo = createDevicePlanRepository({ storage: broken, newId: ids() })
-    const { applianceId } = await repo.addAppliance(input)
+    const { applianceId } = await repo.addAppliance(input, proposals)
     expect(findRecord(await repo.load(), applianceId)).toBeDefined()
   })
 
   it('works with no storage at all', async () => {
     const repo = createDevicePlanRepository({ storage: null, newId: ids() })
-    await repo.addAppliance(input)
+    await repo.addAppliance(input, proposals)
     expect((await repo.load()).records).toHaveLength(1)
   })
 
@@ -75,31 +85,10 @@ describe('device plan repository', () => {
 describe('deleteAppliance', () => {
   it('removes only that appliance', async () => {
     const repo = createDevicePlanRepository({ storage: memoryStorage(), newId: ids() })
-    const { applianceId: a } = await repo.addAppliance(input)
-    const { applianceId: b } = await repo.addAppliance(input)
+    const { applianceId: a } = await repo.addAppliance(input, proposals)
+    const { applianceId: b } = await repo.addAppliance(input, proposals)
     const state = await repo.deleteAppliance(a)
     expect(state.records.map((r) => r.appliance.id)).toEqual([b])
     await expect(repo.deleteAppliance(a)).rejects.toThrow(/Unknown appliance/)
-  })
-})
-
-describe('device photos', () => {
-  it('keeps small photos and skips ones that would fill device storage', async () => {
-    const { DEVICE_PHOTO_LIMIT } = await import('./plan-repository')
-    const repo = createDevicePlanRepository({ storage: memoryStorage(), newId: ids() })
-    const small = await repo.addAppliance({ ...input, photo: new Blob([new Uint8Array(10)], { type: 'image/jpeg' }) })
-    const big = await repo.addAppliance({ ...input, photo: new Blob([new Uint8Array(DEVICE_PHOTO_LIMIT + 1)], { type: 'image/jpeg' }) })
-    const state = await repo.load()
-    expect(state.records.find((r) => r.appliance.id === small.applianceId)!.appliance.imageUrl).toMatch(/^data:image\/jpeg;base64,/)
-    expect(state.records.find((r) => r.appliance.id === big.applianceId)!.appliance.imageUrl).toBeNull()
-  })
-})
-
-describe('dataUrlToBlob', () => {
-  it('round-trips a device photo without fetch', async () => {
-    const bytes = new Uint8Array([0xff, 0xd8, 0x00, 0x7f, 0xff, 0xd9])
-    const blob = dataUrlToBlob(await blobToDataUrl(new Blob([bytes], { type: 'image/jpeg' })))
-    expect(blob.type).toBe('image/jpeg')
-    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes)
   })
 })

@@ -1,30 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { CatalogEntry } from '@/domain/guidance'
+import { record, task } from '@/domain/test-fixtures'
 import { writeApprovedTasks } from './calendar-client'
-import { addAppliance, approve, EMPTY_STATE, findRecord, setDecision } from './plan-state'
 
 afterEach(() => vi.unstubAllGlobals())
 
-// Fixture catalog with 25 tasks for one model, to exceed the 20-events-per-request limit.
-const catalog: CatalogEntry[] = Array.from({ length: 25 }, (_, i) => ({
-  manufacturer: 'Fixturebrand',
-  modelScope: 'FB-1',
-  sourceType: 'manufacturer_manual',
-  title: 'Fixture manual',
-  reference: 'https://example.com/m.pdf',
-  sourceLocation: null,
-  taskName: `Task ${i + 1}`,
-  description: 'Fixture.',
-  interval: { count: 1, unit: 'month' },
-}))
-
 describe('writeApprovedTasks', () => {
   it('splits large plans into requests of at most 20 events and merges the results', async () => {
-    let state = addAppliance(EMPTY_STATE, { manufacturer: 'Fixturebrand', model: 'FB-1', serialNumber: '' }, 'a', 'now', null, catalog)
-    for (const rec of findRecord(state, 'a')!.recommendations) state = setDecision(state, 'a', rec.id, { kind: 'include' })
-    let n = 0
-    state = approve(state, 'a', '2026-10-05', () => `t${++n}`, 'now')
-
+    const tasks = Array.from({ length: 25 }, (_, i) => task({ id: `t${i + 1}`, status: 'accepted' }))
+    const approved = record({ tasks, approvedAt: 'now', startDate: '2026-10-05' })
     const sizes: number[] = []
     vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
       const { drafts } = JSON.parse(init.body as string) as { drafts: { taskId: string }[] }
@@ -32,8 +15,23 @@ describe('writeApprovedTasks', () => {
       return Response.json({ results: drafts.map((d) => ({ taskId: d.taskId, ok: true, eventId: `e-${d.taskId}` })) })
     })
 
-    const outcome = await writeApprovedTasks(findRecord(state, 'a')!)
+    const outcome = await writeApprovedTasks(approved)
     expect(sizes).toEqual([20, 5])
     expect(outcome.kind === 'written' && outcome.results.length).toBe(25)
+  })
+
+  it('sends only ids with a Supabase session, and only tasks still missing from the calendar', async () => {
+    const approved = record({
+      tasks: [task({ id: 'a', status: 'accepted', calendarEventId: 'evt' }), task({ id: 'b', status: 'accepted' }), task({ id: 'c', status: 'rejected' })],
+      approvedAt: 'now',
+      startDate: '2026-10-05',
+    })
+    const bodies: unknown[] = []
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(init.body as string))
+      return Response.json({ results: [] })
+    })
+    await writeApprovedTasks(approved, 'token')
+    expect(bodies).toEqual([{ applianceId: 'app-1', taskIds: ['b'] }])
   })
 })

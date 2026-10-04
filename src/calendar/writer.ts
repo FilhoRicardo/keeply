@@ -1,12 +1,10 @@
 import type { CalendarEventDraft } from '@/domain/calendar-event'
 
 // The one thing Keeply asks of a calendar provider. Called only after Approval.
-// Create the Task's event, or update it in place if it already exists (same Task, same event),
-// so retries never duplicate and a completion-based Task can move to its next due date.
+// Create the task's event, or update it in place if it already exists (same task, same event),
+// so retries never duplicate.
 export interface CalendarWriter {
   upsertEvent(draft: CalendarEventDraft): Promise<{ eventId: string }>
-  // Removes the Task's event (e.g. when the owner pauses it). Already gone counts as removed.
-  deleteEvent(taskId: string): Promise<void>
 }
 
 export type WriteResult =
@@ -34,11 +32,4 @@ export async function writeEvents(writer: CalendarWriter, drafts: readonly Calen
     (i) => writer.upsertEvent(drafts[i]),
   )
   return results.map((r) => (r.ok ? { taskId: r.taskId, ok: true, eventId: r.value.eventId } : r))
-}
-
-export type RemoveResult = { taskId: string; ok: true } | { taskId: string; ok: false; error: string }
-
-export async function removeEvents(writer: CalendarWriter, taskIds: readonly string[]): Promise<RemoveResult[]> {
-  const results = await perTask(taskIds, (i) => writer.deleteEvent(taskIds[i]))
-  return results.map((r) => (r.ok ? { taskId: r.taskId, ok: true } : r))
 }

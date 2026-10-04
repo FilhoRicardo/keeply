@@ -1,122 +1,47 @@
 import { isLocalDate, type LocalDate } from './dates'
-import type { Interval } from './format-interval'
-import type { Recommendation, SchedulingMode, Task } from './model'
+import type { ApplianceRecord, MaintenanceTask } from './model'
 
-export type Customisation = {
-  interval: Interval
-  startDate: LocalDate
-  schedulingMode: SchedulingMode
-}
+// The owner's answer for one proposed task. null takes the answer back.
+export type Decision = 'accepted' | 'rejected'
 
-export type Decision =
-  | { kind: 'include' }
-  | ({ kind: 'customise' } & Customisation)
-  | { kind: 'skip' }
+export type ApprovalBlocker = 'undecided' | 'nothing_accepted'
 
-// The owner's choices, keyed by Recommendation id. Missing means undecided.
-export type Decisions = Readonly<Record<string, Decision>>
-
-// Included-as-recommended tasks recur on a fixed calendar; Customise can switch to completion-based.
-export const DEFAULT_SCHEDULING_MODE: SchedulingMode = 'fixed_calendar'
-
-export type ApprovalBlocker = 'undecided' | 'nothing_included' | 'invalid_customisation'
-
-export function validateCustomisation({ interval, startDate }: Customisation): string | null {
-  if (!Number.isInteger(interval.count) || interval.count < 1 || interval.count > 999) {
-    return 'Frequency must be a whole number of at least 1.'
-  }
-  if (!isLocalDate(startDate)) return 'Choose a valid start date.'
-  return null
-}
-
-export function approvalBlockers(recommendations: readonly Recommendation[], decisions: Decisions): ApprovalBlocker[] {
+export function approvalBlockers(tasks: readonly Pick<MaintenanceTask, 'status'>[]): ApprovalBlocker[] {
   const blockers: ApprovalBlocker[] = []
-  const chosen = recommendations.map((r) => decisions[r.id])
-  if (chosen.some((d) => d === undefined)) blockers.push('undecided')
-  if (!chosen.some((d) => d && d.kind !== 'skip')) blockers.push('nothing_included')
-  if (chosen.some((d) => d?.kind === 'customise' && validateCustomisation(d) !== null)) {
-    blockers.push('invalid_customisation')
-  }
+  if (tasks.some((t) => t.status === 'proposed')) blockers.push('undecided')
+  if (!tasks.some((t) => t.status === 'accepted')) blockers.push('nothing_accepted')
   return blockers
 }
 
-export function canApprove(recommendations: readonly Recommendation[], decisions: Decisions): boolean {
-  return approvalBlockers(recommendations, decisions).length === 0
+export function canApprove(tasks: readonly Pick<MaintenanceTask, 'status'>[]): boolean {
+  return approvalBlockers(tasks).length === 0
 }
 
-export type ApprovalInput = {
-  recommendations: readonly Recommendation[]
-  decisions: Decisions
-  // Start date for tasks included as recommended.
-  defaultStartDate: LocalDate
-  newId: () => string
-}
-
-// Turn decisions into Tasks. Only call this from the explicit Approval action.
-// Recommendations are read, never changed: the user's interval lives on the Task.
-export function approvePlan({ recommendations, decisions, defaultStartDate, newId }: ApprovalInput): Task[] {
-  const blockers = approvalBlockers(recommendations, decisions)
-  if (blockers.length > 0) throw new Error(`Plan cannot be approved: ${blockers.join(', ')}`)
-  if (!isLocalDate(defaultStartDate)) throw new Error(`Not a LocalDate: ${defaultStartDate}`)
-
-  return recommendations.map((rec) => {
-    const decision = decisions[rec.id]
-    const base = { id: newId(), applianceId: rec.applianceId, recommendationId: rec.id, calendarEventId: null }
-    switch (decision.kind) {
-      case 'include':
-        return {
-          ...base,
-          status: 'approved',
-          userInterval: { ...rec.recommendedInterval },
-          startDate: defaultStartDate,
-          schedulingMode: DEFAULT_SCHEDULING_MODE,
-        }
-      case 'customise':
-        return {
-          ...base,
-          status: 'approved',
-          userInterval: { ...decision.interval },
-          startDate: decision.startDate,
-          schedulingMode: decision.schedulingMode,
-        }
-      case 'skip':
-        return {
-          ...base,
-          status: 'skipped',
-          userInterval: { ...rec.recommendedInterval },
-          startDate: defaultStartDate,
-          schedulingMode: DEFAULT_SCHEDULING_MODE,
-        }
-    }
-  })
-}
-
-// The only Tasks that may ever reach a calendar.
-export function calendarBound(tasks: readonly Task[]): Task[] {
-  return tasks.filter((t) => t.status === 'approved')
-}
-
-// Changes the owner's schedule on an approved Task. The Recommendation is untouched.
-export function rescheduleTask(task: Task, customisation: Customisation): Task {
-  if (task.status !== 'approved') throw new Error('Only approved tasks can be rescheduled.')
-  const problem = validateCustomisation(customisation)
-  if (problem) throw new Error(problem)
+// Accept or reject one task before Approval. The proposal itself never changes.
+export function decideTask(record: ApplianceRecord, taskId: string, decision: Decision | null): ApplianceRecord {
+  if (record.approvedAt) throw new Error('This plan is already approved.')
+  if (!record.tasks.some((t) => t.id === taskId)) throw new Error(`Unknown task ${taskId}`)
   return {
-    ...task,
-    userInterval: { ...customisation.interval },
-    startDate: customisation.startDate,
-    schedulingMode: customisation.schedulingMode,
+    ...record,
+    tasks: record.tasks.map((t) => (t.id === taskId ? { ...t, status: decision ?? 'proposed' } : t)),
   }
 }
 
-// Pausing stops a Task reaching the calendar (its event is removed); resuming brings it back.
-// The Task, its schedule and its history are kept.
-export function pauseTask(task: Task): Task {
-  if (task.status !== 'approved') throw new Error('Only active tasks can be paused.')
-  return { ...task, status: 'paused' }
+// The Approval action: the only way anything becomes eligible for a calendar.
+export function approvePlan(record: ApplianceRecord, startDate: LocalDate, now: string): ApplianceRecord {
+  if (record.approvedAt) throw new Error('This plan is already approved.')
+  const blockers = approvalBlockers(record.tasks)
+  if (blockers.length > 0) throw new Error(`Plan cannot be approved: ${blockers.join(', ')}`)
+  if (!isLocalDate(startDate)) throw new Error(`Not a LocalDate: ${startDate}`)
+  return { ...record, approvedAt: now, startDate }
 }
 
-export function resumeTask(task: Task): Task {
-  if (task.status !== 'paused') throw new Error('Only paused tasks can be resumed.')
-  return { ...task, status: 'approved' }
+// The only tasks that may ever reach a calendar: accepted, in an approved plan.
+export function calendarBound(record: ApplianceRecord): MaintenanceTask[] {
+  return record.approvedAt ? record.tasks.filter((t) => t.status === 'accepted') : []
+}
+
+// Accepted tasks not yet in the calendar (first write, or a retry after a failure).
+export function pendingCalendarTasks(record: ApplianceRecord): MaintenanceTask[] {
+  return calendarBound(record).filter((t) => t.calendarEventId === null)
 }

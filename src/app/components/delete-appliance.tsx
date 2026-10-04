@@ -32,7 +32,7 @@ export function DeleteAppliance({ applianceId, name, hasCalendarEvents }: { appl
   return (
     <section className="calendar-panel aster-inner" aria-label="Delete dishwasher">
       <p>
-        Delete <strong>{name}</strong>? Its plan and history are removed from Keeply.
+        Delete <strong>{name}</strong>? Its plan is removed from Keeply.
         {hasCalendarEvents && ' Events already in Google Calendar stay there; remove them in Calendar if you want.'}
       </p>
       <div className="button-row">

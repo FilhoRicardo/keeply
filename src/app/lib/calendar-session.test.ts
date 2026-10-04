@@ -12,7 +12,7 @@ const draft = {
 
 describe('safeReturnTo', () => {
   it.each([
-    ['/appliances/1/approve', '/appliances/1/approve'],
+    ['/appliances/1/plan', '/appliances/1/plan'],
     ['https://evil.example', '/'],
     ['//evil.example', '/'],
     ['/\\evil.example', '/'],
@@ -24,7 +24,7 @@ describe('safeReturnTo', () => {
 
 describe('withQuery', () => {
   it('adds a parameter to a path', () => {
-    expect(withQuery('/appliances/1/approve', 'calendar', 'connected')).toBe('/appliances/1/approve?calendar=connected')
+    expect(withQuery('/appliances/1/plan', 'calendar', 'connected')).toBe('/appliances/1/plan?calendar=connected')
   })
 })
 

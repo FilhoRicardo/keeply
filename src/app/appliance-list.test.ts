@@ -1,21 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { soonestTask } from './appliance-list'
-import { addAppliance, approve, EMPTY_STATE, findRecord, setDecision } from './lib/plan-state'
+import { record, task } from '@/domain/test-fixtures'
+import { summary } from './appliance-list'
 
-describe('soonestTask', () => {
-  it('picks the approved task due first, ignoring skipped ones', () => {
-    let state = addAppliance(EMPTY_STATE, { manufacturer: 'Bosch', model: '', serialNumber: '' }, 'a', 'now')
-    const [filter, cycle, arms] = findRecord(state, 'a')!.recommendations
-    state = setDecision(state, 'a', filter.id, {
-      kind: 'customise',
-      interval: { count: 1, unit: 'month' },
-      startDate: '2026-11-20',
-      schedulingMode: 'fixed_calendar',
+describe('appliance summary', () => {
+  it('asks for a review before Approval', () => {
+    expect(summary(record())).toBe('Plan waiting for your review')
+  })
+
+  it('counts accepted tasks and those still missing from the calendar', () => {
+    const approved = record({
+      approvedAt: 'now',
+      startDate: '2026-10-05',
+      tasks: [task({ status: 'accepted', calendarEventId: 'evt' }), task({ id: 't2', status: 'accepted' }), task({ id: 't3', status: 'rejected' })],
     })
-    state = setDecision(state, 'a', cycle.id, { kind: 'include' })
-    state = setDecision(state, 'a', arms.id, { kind: 'skip' })
-    let n = 0
-    state = approve(state, 'a', '2026-11-01', () => `t${++n}`, 'now')
-    expect(soonestTask(findRecord(state, 'a')!)).toEqual({ name: 'Run a cleaning cycle', due: '2026-11-01' })
+    expect(summary(approved)).toBe('2 tasks approved · 1 not in Google Calendar yet')
+    expect(summary({ ...approved, tasks: [task({ status: 'accepted', calendarEventId: 'evt' })] })).toBe('1 task in Google Calendar')
   })
 })

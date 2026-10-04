@@ -58,8 +58,8 @@ try {
   if (await manufacturer.isVisible()) await manufacturer.fill('Owner-typed brand')
   await panel.getByRole('button', { name: 'Confirm' }).click()
   await page.waitForURL(/\/appliances\/[^/]+\/plan$/, { timeout: 30_000 })
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('keeply.plan.v1') ?? '{}'))
-  const appliances = (saved.records ?? []).map(({ appliance: { imageUrl, ...rest } }) => ({ ...rest, photoKept: Boolean(imageUrl) }))
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('keeply.plan.v2') ?? '{}'))
+  const appliances = (saved.records ?? []).map(({ appliance }) => appliance)
   result.steps.push({ screen: 'confirmed', url: new URL(page.url()).pathname, appliances })
   await shot(page, '4-saved')
 } finally {

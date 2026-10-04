@@ -375,6 +375,16 @@ Correction from Ricardo (official cloud-environments docs): on Pro/Max, cloud AP
 2. The app gate is unchanged (`minimaxConfig` still needs `MINIMAX_API_KEY`), so the cloud-session app stays Manual. Verification-only `pnpm verify:minimax` (`src/ai/minimax.live.test.ts`, excluded from `pnpm test`/CI) calls the adapter directly and strips its placeholder Authorization header so the proxy injects the real one; it logs only the parsed identity.
 3. Ran it here without a credential: proxy 403, as expected. After Ricardo saved the `api.minimax.io` API credential, ran again in this (older) session: still proxy 403 "Host not in allowlist"; the request never reached MiniMax. Needs a new session. Live verification still pending.
 
+### 37. Owner decisions; PR opened; build cut to the MVP (CEO decisions; Builder 1)
+
+Ricardo, 2026-10-04 evening: finish line is the full magic minute; Brave Search + MiniMax for manuals; Manufacturer verified only with a code-checked quote; invited testers get funded AI behind an invite code (5/tester/day, 100/day); free Vercel address; repo log only, no Paperclip handover (`docs/HANDOFF.md` §23). Then, on review, he cut the scope to the MVP (§24): photo → identify → plan → Accept / Reject → Google Calendar, managed there; Supabase holds only users, appliances and tasks.
+
+1. PR https://github.com/FilhoRicardo/keeply/pull/4 opened from this branch; superseded PR #2 closed with a note. CI green on 8c5cad5 (verify, database, e2e).
+2. Supabase: Ricardo applied the pre-MVP migrations via the SQL Editor. `supabase/reset-pre-mvp.sql` removes them (incl. the photo bucket and any `db push` history); proven on a database built from the old migrations.
+3. Cut: Customise, completions, pause/resume, schedule changes, completion-based scheduling, homes, profiles table, guidance catalog, photo storage, device-to-account import, the separate approval screen. One migration (`20261005090000_mvp_schema.sql`): `appliances`, `maintenance_tasks` (proposal + source + decision + calendar event id), `funnel_events`; triggers keep proposals immutable, freeze decisions at Approval and allow calendar ids only on accepted tasks of approved plans; a check enforces the evidence rule.
+4. Seam for Phase 3: `PlanProposer` (`src/app/lib/propose.ts`), general guidance today.
+5. Checks: `pnpm verify` 194 tests; pgTAP 22; integration 7 (PostgREST + RLS + calendar route); e2e 3 on a phone viewport with axe. Code review (medium): 3 findings (migration history, orphaned photo bucket, approval date in UTC), all fixed.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

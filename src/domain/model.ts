@@ -2,17 +2,12 @@ import type { LocalDate } from './dates'
 import type { EvidenceLevel } from './evidence'
 import type { Interval } from './format-interval'
 
-// v0.1 supports dishwashers only.
-export type ApplianceCategory = 'dishwasher'
-
+// Keeply's MVP: dishwashers only.
 export type Appliance = {
   readonly id: string
-  readonly category: ApplianceCategory
   readonly manufacturer: string
   readonly model: string | null
   readonly serialNumber: string | null
-  // Photo of the appliance or its label, as a displayable URL (data: on device, signed URL from storage).
-  readonly imageUrl: string | null
   // 0..1 when a recogniser proposed the identity and the owner kept it unchanged; null when typed.
   readonly identificationConfidence: number | null
   readonly createdAt: string
@@ -20,45 +15,43 @@ export type Appliance = {
 
 export type SourceType = 'manufacturer_manual' | 'manufacturer_website' | 'similar_model_manual' | 'general_guidance'
 
-export type SourceDocument = {
-  readonly id: string
-  readonly sourceType: SourceType
+// Where a proposed task comes from. Provenance is first-class: shown to the owner and written
+// into the calendar event.
+export type Source = {
+  readonly type: SourceType
   readonly title: string
-  readonly reference: string | null
-  readonly manufacturer: string | null
-  readonly modelScope: string | null
+  // Public https link to the document, when there is one.
+  readonly url: string | null
+  // Page or section in the document.
+  readonly location: string | null
+  // The document's own words, required for Manufacturer verified.
+  readonly quote: string | null
 }
 
-// What a source says to do. Never edited by the user: their choices live on the Task.
-export type Recommendation = {
-  readonly id: string
-  readonly applianceId: string
-  readonly taskName: string
-  readonly description: string
-  readonly recommendedInterval: Readonly<Interval>
+// What Keeply proposes, from a source. Never rewritten afterwards: the owner only accepts or rejects it.
+export type TaskProposal = {
+  readonly name: string
+  readonly instructions: string
+  readonly interval: Interval
   readonly evidenceLevel: EvidenceLevel
-  readonly source: SourceDocument
-  readonly sourceLocation: string | null
+  readonly source: Source
 }
 
-export type SchedulingMode = 'fixed_calendar' | 'completion_based'
+export type TaskStatus = 'proposed' | 'accepted' | 'rejected'
 
-export type TaskStatus = 'proposed' | 'approved' | 'skipped' | 'paused'
-
-// What the owner approved from a Recommendation.
-export type Task = {
+export type MaintenanceTask = TaskProposal & {
   readonly id: string
   readonly applianceId: string
-  readonly recommendationId: string
   readonly status: TaskStatus
-  readonly userInterval: Interval
-  readonly startDate: LocalDate
-  readonly schedulingMode: SchedulingMode
+  // Set once the accepted task is in the owner's calendar.
   readonly calendarEventId: string | null
 }
 
-export type Completion = {
-  readonly taskId: string
-  readonly completedOn: LocalDate
-  readonly notes: string | null
+// One dishwasher and its plan. After Approval the owner manages the tasks in their calendar.
+export type ApplianceRecord = {
+  readonly appliance: Appliance
+  readonly tasks: readonly MaintenanceTask[]
+  readonly approvedAt: string | null
+  // First calendar date for every accepted task, chosen at Approval.
+  readonly startDate: LocalDate | null
 }

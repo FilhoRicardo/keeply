@@ -30,7 +30,7 @@ type Step =
 export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: ApplianceRecognizer }) {
   const id = useId()
   const router = useRouter()
-  const { addAppliance } = usePlan()
+  const { addAppliance, track } = usePlan()
   const [step, setStep] = useState<Step>({ kind: 'capture' })
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -41,6 +41,7 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
   async function onPhoto(file: File | undefined) {
     if (!file) return
     setError(null)
+    track({ name: 'scan_started' })
     const prepared = await prepareLabelPhoto(file)
     const preview = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(prepared) : null
     setStep({ kind: 'reading', photo: prepared, preview })
@@ -51,6 +52,7 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
     const { identification: proposal } = reencoded
       ? await recognizer.recognise(prepared).catch((): RecognitionResult => ({ identification: null, notice: null }))
       : { identification: null }
+    track({ name: 'label_read', recognised: proposal !== null })
     setStep({
       kind: 'confirm',
       photo: prepared,
@@ -66,7 +68,7 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
       <section className="aster-glass form-panel" aria-label="Photograph the label">
         <p className="form-intro">
           Open the dishwasher door and photograph the label on the edge of the door or inside the tub. It shows the
-          manufacturer and model number. Keeply may send the photo to an AI service to suggest the details; you
+          manufacturer and model number. Keeply may send the photo to an AI service to suggest the details, and does not keep it; you
           always confirm them.
         </p>
         <label className="aster-btn aster-btn--primary full-width file-button">
@@ -103,13 +105,15 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
     if (problem) return setError(problem)
     setBusy(true)
     try {
-      const applianceId = await addAppliance({
-        manufacturer: identification.manufacturer,
-        model: identification.model,
-        serialNumber: identification.serialNumber,
-        photo: step.kind === 'confirm' ? step.photo : null,
-        confidence: identification.confidence,
-      })
+      const applianceId = await addAppliance(
+        {
+          manufacturer: identification.manufacturer,
+          model: identification.model,
+          serialNumber: identification.serialNumber,
+          confidence: identification.confidence,
+        },
+        true,
+      )
       router.push(`/appliances/${applianceId}/plan`)
     } catch {
       setBusy(false)

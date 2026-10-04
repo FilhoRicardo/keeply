@@ -37,26 +37,29 @@ describe('Evidence levels', () => {
 })
 
 describe('unsupportedEvidence', () => {
-  const manual = { sourceType: 'manufacturer_manual', modelScope: 'SMS6ZCI49E' }
+  const manual = { type: 'manufacturer_manual', url: 'https://www.bosch-home.com/manual.pdf', quote: 'Clean the filters regularly.' }
 
-  it('accepts manufacturer verified only for an exact-model manufacturer source', () => {
-    expect(unsupportedEvidence('manufacturer_verified', manual, 'sms6zci-49e')).toBeNull()
-    expect(unsupportedEvidence('manufacturer_verified', manual, 'SMS4HVI33E')).toMatch(/exact model/)
-    expect(unsupportedEvidence('manufacturer_verified', manual, null)).toMatch(/known model/)
-    expect(unsupportedEvidence('manufacturer_verified', { sourceType: 'general_guidance', modelScope: 'SMS6ZCI49E' }, 'SMS6ZCI49E')).toMatch(/manufacturer manual/)
+  it('accepts manufacturer verified only with a linked, quoted manufacturer document', () => {
+    expect(unsupportedEvidence('manufacturer_verified', manual)).toBeNull()
+    expect(unsupportedEvidence('manufacturer_verified', { ...manual, quote: '  ' })).toMatch(/quote/)
+    expect(unsupportedEvidence('manufacturer_verified', { ...manual, quote: null })).toMatch(/quote/)
+    expect(unsupportedEvidence('manufacturer_verified', { ...manual, url: 'http://example.com/manual.pdf' })).toMatch(/https link/)
+    expect(unsupportedEvidence('manufacturer_verified', { ...manual, url: null })).toMatch(/https link/)
+    expect(unsupportedEvidence('manufacturer_verified', { ...manual, type: 'similar_model_manual' })).toMatch(/manufacturer manual/)
+    expect(unsupportedEvidence('manufacturer_verified', { ...manual, type: 'general_guidance' })).toMatch(/manufacturer manual/)
   })
 
   it('needs a manufacturer or similar-model source for similar-model guidance', () => {
-    expect(unsupportedEvidence('similar_model', { sourceType: 'similar_model_manual', modelScope: 'SMS6*' }, null)).toBeNull()
-    expect(unsupportedEvidence('similar_model', { sourceType: 'general_guidance', modelScope: null }, null)).toMatch(/similar-model source/)
+    expect(unsupportedEvidence('similar_model', { type: 'similar_model_manual', url: null, quote: null })).toBeNull()
+    expect(unsupportedEvidence('similar_model', { type: 'general_guidance', url: null, quote: null })).toMatch(/similar-model source/)
   })
 
   it('accepts general guidance from any source', () => {
-    expect(unsupportedEvidence('general_guidance', { sourceType: 'general_guidance', modelScope: null }, null)).toBeNull()
+    expect(unsupportedEvidence('general_guidance', { type: 'general_guidance', url: null, quote: null })).toBeNull()
   })
 
-  it('keeps every mock recommendation supported', async () => {
-    const { mockRecommendations } = await import('./mock-recommendations')
-    for (const r of mockRecommendations({ id: 'a' })) expect(unsupportedEvidence(r.evidenceLevel, r.source, null)).toBeNull()
+  it('keeps every general dishwasher task supported', async () => {
+    const { GENERAL_DISHWASHER_TASKS } = await import('./general-guidance')
+    for (const t of GENERAL_DISHWASHER_TASKS) expect(unsupportedEvidence(t.evidenceLevel, t.source)).toBeNull()
   })
 })

@@ -876,3 +876,37 @@ conflict.
 -   **Branding:** still open; deploy under a free Vercel address.
 -   **Paperclip:** keep the step log in `docs/paperclip/`; no handover
     to other sessions and no Paperclip issue changes by Claude.
+
+------------------------------------------------------------------------
+
+## 24. MVP scope (owner decision, 2026-10-04)
+
+Decided by Ricardo on 2026-10-04 after reviewing what had been built.
+This is the MVP and replaces earlier wording where they conflict.
+
+> User sends a picture → AI reads the model → Keeply finds the
+> maintenance plan → each task is shown as a proposed calendar task →
+> the user accepts or rejects each one → accepted tasks go to Google
+> Calendar → from then on the user manages them in their calendar.
+
+-   **Cut:** Customise (changing a task's interval), the in-app
+    "mark done" / completion history, pause / resume, in-app schedule
+    changes, completion-based scheduling, multiple homes, the
+    hand-checked guidance catalog, storing label photos, and moving
+    device-only plans into an account.
+-   **Kept:** label scanning (AI proposes, owner confirms, edits or
+    rescans), the three evidence levels with source shown, explicit
+    Approval before any calendar write, Sign in with Google, a minimal
+    usage-tracking table (counts only).
+-   **Supabase holds the minimum:** users (Supabase Auth), their
+    `appliances`, and each appliance's `maintenance_tasks` (the
+    proposal and its source, accepted / rejected, the calendar event
+    id), plus `funnel_events`.
+-   **Rules changed:** "store the manufacturer recommendation separately
+    from the user's chosen schedule" becomes "never rewrite a proposed
+    task; the owner only accepts or rejects it". "Model completion-based
+    scheduling from day one" is dropped: the calendar is where tasks are
+    managed.
+-   §23 still applies (Phase 3 manual search with Brave Search +
+    MiniMax, "verified only with a code-checked quote", tester invite
+    code and caps).

@@ -1,142 +1,72 @@
 import { describe, expect, it } from 'vitest'
-import { approvalBlockers, approvePlan, calendarBound, canApprove, pauseTask, rescheduleTask, resumeTask, validateCustomisation, type Decisions } from './plan'
-import { frozen, recommendation, sequentialIds } from './test-fixtures'
+import { approvalBlockers, approvePlan, calendarBound, canApprove, decideTask, pendingCalendarTasks } from './plan'
+import { frozen, record, task } from './test-fixtures'
 
-const filter = recommendation()
-const rinse = recommendation({ id: 'rec-rinse', taskName: 'Top up rinse aid', recommendedInterval: { count: 1, unit: 'month' } })
-const recs = [filter, rinse]
+const decided = (filter: 'accepted' | 'rejected', rinse: 'accepted' | 'rejected') =>
+  record({ tasks: [task({ status: filter }), task({ id: 'task-rinse', status: rinse })] })
 
 describe('approval rules', () => {
-  it('blocks approval until every Recommendation has a decision', () => {
-    expect(approvalBlockers(recs, { [filter.id]: { kind: 'include' } })).toEqual(['undecided'])
+  it('blocks approval until every task is accepted or rejected', () => {
+    expect(approvalBlockers([{ status: 'accepted' }, { status: 'proposed' }])).toEqual(['undecided'])
   })
 
-  it('blocks approval when everything is skipped', () => {
-    const decisions: Decisions = { [filter.id]: { kind: 'skip' }, [rinse.id]: { kind: 'skip' } }
-    expect(approvalBlockers(recs, decisions)).toEqual(['nothing_included'])
+  it('blocks approval when every task is rejected', () => {
+    expect(approvalBlockers([{ status: 'rejected' }, { status: 'rejected' }])).toEqual(['nothing_accepted'])
   })
 
-  it('blocks approval on an invalid customisation', () => {
-    const decisions: Decisions = {
-      [filter.id]: { kind: 'customise', interval: { count: 0, unit: 'day' }, startDate: '2026-10-05', schedulingMode: 'fixed_calendar' },
-      [rinse.id]: { kind: 'skip' },
-    }
-    expect(approvalBlockers(recs, decisions)).toEqual(['invalid_customisation'])
-  })
-
-  it('allows approval when all are decided and one is kept', () => {
-    expect(canApprove(recs, { [filter.id]: { kind: 'include' }, [rinse.id]: { kind: 'skip' } })).toBe(true)
-  })
-
-  it('refuses to approve a blocked plan', () => {
-    expect(() =>
-      approvePlan({ recommendations: recs, decisions: {}, defaultStartDate: '2026-10-05', newId: sequentialIds() }),
-    ).toThrow(/undecided/)
+  it('allows approval when all are decided and one is accepted', () => {
+    expect(canApprove(decided('accepted', 'rejected').tasks)).toBe(true)
   })
 })
 
-describe('validateCustomisation', () => {
-  it.each([
-    [{ count: 1.5, unit: 'month' as const }, '2026-10-05'],
-    [{ count: 1000, unit: 'day' as const }, '2026-10-05'],
-    [{ count: 1, unit: 'month' as const }, 'tomorrow'],
-  ])('rejects %o starting %s', (interval, startDate) => {
-    expect(validateCustomisation({ interval, startDate, schedulingMode: 'fixed_calendar' })).not.toBeNull()
+describe('decideTask', () => {
+  it('records the answer without touching the proposal', () => {
+    const plan = frozen(record())
+    const next = decideTask(plan, 'task-filter', 'accepted')
+    expect(next.tasks[0]).toEqual({ ...plan.tasks[0], status: 'accepted' })
+    expect(next.tasks[1]).toBe(plan.tasks[1])
+  })
+
+  it('takes an answer back with null', () => {
+    expect(decideTask(decided('accepted', 'rejected'), 'task-filter', null).tasks[0].status).toBe('proposed')
+  })
+
+  it('refuses after Approval and for unknown tasks', () => {
+    const approved = approvePlan(decided('accepted', 'rejected'), '2026-10-05', 'now')
+    expect(() => decideTask(approved, 'task-filter', 'rejected')).toThrow(/already approved/)
+    expect(() => decideTask(record(), 'nope', 'accepted')).toThrow(/Unknown task/)
   })
 })
 
 describe('approvePlan', () => {
-  it('keeps the manufacturer recommendation and stores the user schedule on the Task', () => {
-    const original = frozen(recommendation())
-    const [task] = approvePlan({
-      recommendations: [original],
-      decisions: {
-        [original.id]: {
-          kind: 'customise',
-          interval: { count: 30, unit: 'day' },
-          startDate: '2026-10-10',
-          schedulingMode: 'completion_based',
-        },
-      },
-      defaultStartDate: '2026-10-05',
-      newId: sequentialIds(),
-    })
-
-    expect(original.recommendedInterval).toEqual({ count: 14, unit: 'day' })
-    expect(task).toEqual({
-      id: 'task-1',
-      applianceId: 'app-1',
-      recommendationId: 'rec-filter',
-      status: 'approved',
-      userInterval: { count: 30, unit: 'day' },
-      startDate: '2026-10-10',
-      schedulingMode: 'completion_based',
-      calendarEventId: null,
+  it('stamps the approval and start date', () => {
+    expect(approvePlan(decided('accepted', 'rejected'), '2026-10-05', '2026-10-04T10:00:00Z')).toMatchObject({
+      approvedAt: '2026-10-04T10:00:00Z',
+      startDate: '2026-10-05',
     })
   })
 
-  it('includes as recommended on a fixed calendar from the default start date', () => {
-    const [task] = approvePlan({
-      recommendations: [filter],
-      decisions: { [filter.id]: { kind: 'include' } },
-      defaultStartDate: '2026-10-05',
-      newId: sequentialIds(),
-    })
-    expect(task).toMatchObject({ status: 'approved', userInterval: { count: 14, unit: 'day' }, startDate: '2026-10-05', schedulingMode: 'fixed_calendar' })
-    expect(task.userInterval).not.toBe(filter.recommendedInterval)
-  })
-
-  it('records skipped Recommendations as skipped Tasks that never reach a calendar', () => {
-    const tasks = approvePlan({
-      recommendations: recs,
-      decisions: { [filter.id]: { kind: 'include' }, [rinse.id]: { kind: 'skip' } },
-      defaultStartDate: '2026-10-05',
-      newId: sequentialIds(),
-    })
-    expect(tasks.map((t) => t.status)).toEqual(['approved', 'skipped'])
-    expect(calendarBound(tasks).map((t) => t.recommendationId)).toEqual(['rec-filter'])
+  it('refuses an undecided plan, a bad date or a second approval', () => {
+    expect(() => approvePlan(record(), '2026-10-05', 'now')).toThrow(/undecided/)
+    expect(() => approvePlan(decided('accepted', 'rejected'), '2026-02-30', 'now')).toThrow(/LocalDate/)
+    const approved = approvePlan(decided('accepted', 'rejected'), '2026-10-05', 'now')
+    expect(() => approvePlan(approved, '2026-10-05', 'now')).toThrow(/already approved/)
   })
 })
 
-describe('rescheduleTask', () => {
-  const [approved, skipped] = approvePlan({
-    recommendations: recs,
-    decisions: { [filter.id]: { kind: 'include' }, [rinse.id]: { kind: 'skip' } },
-    defaultStartDate: '2026-10-05',
-    newId: sequentialIds(),
-  })
-  const change = { interval: { count: 6, unit: 'week' as const }, startDate: '2026-11-01', schedulingMode: 'completion_based' as const }
-
-  it('changes only the owner’s schedule, keeping identity and calendar link', () => {
-    const linked = { ...approved, calendarEventId: 'evt-1' }
-    expect(rescheduleTask(linked, change)).toEqual({ ...linked, userInterval: { count: 6, unit: 'week' }, startDate: '2026-11-01', schedulingMode: 'completion_based' })
-    expect(filter.recommendedInterval).toEqual({ count: 14, unit: 'day' })
+describe('calendarBound', () => {
+  it('is empty before Approval, even for accepted tasks', () => {
+    expect(calendarBound(decided('accepted', 'accepted'))).toEqual([])
   })
 
-  it('refuses skipped tasks and invalid schedules', () => {
-    expect(() => rescheduleTask(skipped, change)).toThrow(/approved/)
-    expect(() => rescheduleTask(approved, { ...change, interval: { count: 0, unit: 'day' } })).toThrow()
-  })
-})
-
-describe('pause and resume', () => {
-  const [active, skipped] = approvePlan({
-    recommendations: recs,
-    decisions: { [filter.id]: { kind: 'include' }, [rinse.id]: { kind: 'skip' } },
-    defaultStartDate: '2026-10-05',
-    newId: sequentialIds(),
+  it('keeps only accepted tasks after Approval', () => {
+    const approved = approvePlan(decided('accepted', 'rejected'), '2026-10-05', 'now')
+    expect(calendarBound(approved).map((t) => t.id)).toEqual(['task-filter'])
   })
 
-  it('pauses an active task out of the calendar and resumes it', () => {
-    const paused = pauseTask(active)
-    expect(paused.status).toBe('paused')
-    expect(calendarBound([paused])).toEqual([])
-    expect(resumeTask(paused)).toEqual(active)
-  })
-
-  it('refuses to pause skipped or already paused tasks', () => {
-    expect(() => pauseTask(skipped)).toThrow()
-    expect(() => pauseTask(pauseTask(active))).toThrow()
-    expect(() => resumeTask(active)).toThrow()
+  it('lists accepted tasks still missing a calendar event', () => {
+    const approved = approvePlan(decided('accepted', 'accepted'), '2026-10-05', 'now')
+    const oneWritten = { ...approved, tasks: [{ ...approved.tasks[0], calendarEventId: 'evt' }, approved.tasks[1]] }
+    expect(pendingCalendarTasks(oneWritten).map((t) => t.id)).toEqual(['task-rinse'])
   })
 })

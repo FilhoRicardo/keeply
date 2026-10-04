@@ -2,11 +2,12 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Home from '../page'
+import type { Account, SignInResult } from '../lib/account'
 import type { PlanRepository } from '../lib/plan-repository'
 import { findRecord } from '../lib/plan-state'
+import type { FunnelEvent } from '../lib/track'
 import { renderWithPlan, testRepository } from '../test-utils'
 import { ApplianceRecordView } from './[id]/appliance-record'
-import { ApprovalSummary } from './[id]/approve/approval-summary'
 import { PlanReview } from './[id]/plan/plan-review'
 import { NewApplianceForm } from './new/new-appliance-form'
 
@@ -19,20 +20,16 @@ vi.mock('next/navigation', () => ({
 
 type Calls = { url: string; body?: unknown }[]
 
-function mockFetch(status: { configured: boolean; connected: boolean }, calls: Calls, opts: { failDeletes?: number } = {}) {
-  let failDeletes = opts.failDeletes ?? 0
+function mockFetch(status: { configured: boolean; connected: boolean }, calls: Calls, opts: { failWrites?: number } = {}) {
+  let failWrites = opts.failWrites ?? 0
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, body: init?.body ? JSON.parse(init.body as string) : undefined })
       if (url === '/api/calendar/status') return Response.json(status)
       if (url === '/api/calendar/disconnect') return Response.json({ connected: false })
-      if (url === '/api/calendar/events' && init?.method === 'DELETE') {
-        if (failDeletes-- > 0) return new Response(null, { status: 502 })
-        const { taskIds } = JSON.parse(init.body as string) as { taskIds: string[] }
-        return Response.json({ results: taskIds.map((taskId) => ({ taskId, ok: true })) })
-      }
       if (url === '/api/calendar/events') {
+        if (failWrites-- > 0) return new Response(null, { status: 502 })
         const { drafts } = JSON.parse(init!.body as string) as { drafts: { taskId: string }[] }
         return Response.json({ results: drafts.map((d) => ({ taskId: d.taskId, ok: true, eventId: `evt-${d.taskId}` })) })
       }
@@ -50,33 +47,36 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 const record = async () => findRecord(await repo.load(), 'app-1')!
+// Lets the provider's async effects (plan load, account lookup) commit inside act().
+const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
 
-async function addDishwasher() {
-  renderWithPlan(<NewApplianceForm />, repo)
+async function addDishwasher(sink?: (e: FunnelEvent) => void) {
+  renderWithPlan(<NewApplianceForm />, repo, sink)
   fireEvent.change(screen.getByLabelText('Manufacturer'), { target: { value: 'Bosch' } })
   fireEvent.change(screen.getByLabelText(/Model number/), { target: { value: 'SMS6ZCI49E' } })
   await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue to maintenance plan' })))
   cleanup()
 }
 
-async function decide(name: string, choice: 'Include' | 'Skip') {
+async function decide(name: string, choice: 'Accept' | 'Reject') {
   const card = await screen.findByRole('article', { name })
   await act(async () => fireEvent.click(within(card).getByRole('button', { name: choice })))
 }
 
-async function decideAll(choices: Record<string, 'Include' | 'Skip'>) {
-  renderWithPlan(<PlanReview applianceId="app-1" />, repo)
+const approveButton = () => screen.getByRole('button', { name: /^Approve/ })
+
+// Decides every task on the plan screen, then approves from the same screen.
+async function decideAndApprove(choices: Record<string, 'Accept' | 'Reject'>, startDate = '2026-10-05', sink?: (e: FunnelEvent) => void) {
+  renderWithPlan(<PlanReview applianceId="app-1" />, repo, sink)
   for (const [name, choice] of Object.entries(choices)) await decide(name, choice)
+  await waitFor(() => expect(approveButton()).toBeEnabled())
+  fireEvent.change(screen.getByLabelText('First reminder on'), { target: { value: startDate } })
+  await act(async () => fireEvent.click(approveButton()))
+  await waitFor(() => expect(push).toHaveBeenCalled())
   cleanup()
 }
 
-async function approveWith(startDate = '2026-10-05') {
-  renderWithPlan(<ApprovalSummary applianceId="app-1" />, repo)
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Approve maintenance plan' })).toBeEnabled())
-  fireEvent.change(screen.getByLabelText('Start included tasks on'), { target: { value: startDate } })
-  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Approve maintenance plan' })))
-  cleanup()
-}
+const ONE_ACCEPTED = { 'Clean the filter': 'Accept', 'Run a cleaning cycle': 'Reject', 'Check the spray arms': 'Reject' } as const
 
 describe('manual dishwasher → approved plan', () => {
   it('requires a manufacturer', () => {
@@ -87,6 +87,7 @@ describe('manual dishwasher → approved plan', () => {
   })
 
   it('adds a dishwasher and proposes three general-guidance tasks', async () => {
+    mockFetch({ configured: false, connected: false }, [])
     await addDishwasher()
     expect(push).toHaveBeenCalledWith('/appliances/app-1/plan')
     renderWithPlan(<PlanReview applianceId="app-1" />, repo)
@@ -96,34 +97,49 @@ describe('manual dishwasher → approved plan', () => {
     expect(screen.queryByText(/manufacturer verified/i)).not.toBeInTheDocument()
   })
 
-  it('blocks review until every task is decided and one is kept', async () => {
+  it('blocks approval until every task is decided and one is accepted', async () => {
+    mockFetch({ configured: false, connected: false }, [])
     await addDishwasher()
     renderWithPlan(<PlanReview applianceId="app-1" />, repo)
-    expect(await screen.findByRole('button', { name: 'Review plan' })).toBeDisabled()
+    await screen.findByText('Google Calendar is not set up on this server yet. Your approved plan will be saved on this device.')
+    expect(approveButton()).toBeDisabled()
+    expect(screen.getByText('Accept or reject every task.')).toBeInTheDocument()
 
-    await decide('Clean the filter', 'Skip')
-    await decide('Run a cleaning cycle', 'Skip')
-    await decide('Check the spray arms', 'Skip')
-    expect(screen.getByText('Include or customise at least one task.')).toBeInTheDocument()
+    await decide('Clean the filter', 'Reject')
+    await decide('Run a cleaning cycle', 'Reject')
+    await decide('Check the spray arms', 'Reject')
+    expect(screen.getByText('Accept at least one task.')).toBeInTheDocument()
+    expect(approveButton()).toBeDisabled()
 
-    await decide('Clean the filter', 'Include')
-    expect(screen.getByRole('link', { name: 'Review plan' })).toHaveAttribute('href', '/appliances/app-1/approve')
+    await decide('Clean the filter', 'Accept')
+    expect(approveButton()).toBeEnabled()
   })
 
-  it('writes nothing to the calendar before approval, then only approved tasks', async () => {
+  it('takes an answer back when the pressed button is pressed again', async () => {
+    mockFetch({ configured: false, connected: false }, [])
+    await addDishwasher()
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo)
+    await decide('Clean the filter', 'Accept')
+    await decide('Clean the filter', 'Accept')
+    expect((await record()).tasks[0].status).toBe('proposed')
+  })
+
+  it('writes nothing to the calendar before Approval, then only accepted tasks', async () => {
     const calls: Calls = []
     mockFetch({ configured: true, connected: true }, calls)
     await addDishwasher()
-    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Include', 'Check the spray arms': 'Skip' })
 
-    renderWithPlan(<ApprovalSummary applianceId="app-1" />, repo)
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo)
+    await decide('Clean the filter', 'Accept')
+    await decide('Run a cleaning cycle', 'Accept')
+    await decide('Check the spray arms', 'Reject')
     await screen.findByText('Google Calendar connected.')
-    expect(screen.getByText(/2 tasks will be added to your calendar, 1 skipped/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve and add 2 tasks to Google Calendar' })).toBeEnabled()
     expect(calls.map((c) => c.url)).toEqual(['/api/calendar/status'])
-    expect((await record()).tasks).toEqual([])
-    cleanup()
+    expect((await record()).approvedAt).toBeNull()
 
-    await approveWith('2026-10-05')
+    fireEvent.change(screen.getByLabelText('First reminder on'), { target: { value: '2026-10-05' } })
+    await act(async () => fireEvent.click(approveButton()))
 
     await waitFor(() => expect(push).toHaveBeenCalledWith('/appliances/app-1?approved=calendar'))
     const write = calls.find((c) => c.url === '/api/calendar/events')!.body as {
@@ -134,9 +150,9 @@ describe('manual dishwasher → approved plan', () => {
       ['task-2', '2026-10-05', ['RRULE:FREQ=MONTHLY']],
     ])
     expect((await record()).tasks.map((t) => [t.status, t.calendarEventId])).toEqual([
-      ['approved', 'evt-task-1'],
-      ['approved', 'evt-task-2'],
-      ['skipped', null],
+      ['accepted', 'evt-task-1'],
+      ['accepted', 'evt-task-2'],
+      ['rejected', null],
     ])
   })
 
@@ -144,119 +160,103 @@ describe('manual dishwasher → approved plan', () => {
     const calls: Calls = []
     mockFetch({ configured: false, connected: false }, calls)
     await addDishwasher()
-    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
-    await approveWith()
+    await decideAndApprove(ONE_ACCEPTED)
 
     expect(push).toHaveBeenCalledWith('/appliances/app-1?approved=saved')
     expect(calls.some((c) => c.url === '/api/calendar/events')).toBe(false)
   })
 
-  it('shows the record with the next due date and records completions', async () => {
-    mockFetch({ configured: false, connected: false }, [])
+  it('shows the approved dishwasher read-only and points to Google Calendar', async () => {
+    mockFetch({ configured: true, connected: true }, [])
     await addDishwasher()
-    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
-    await approveWith('2026-10-05')
+    await decideAndApprove(ONE_ACCEPTED)
+    search = new URLSearchParams('approved=calendar')
 
     renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
-    expect(await screen.findByRole('heading', { name: 'Clean the filter' })).toBeInTheDocument()
-    expect(screen.getByText('5 Oct 2026')).toBeInTheDocument()
-    expect(screen.getByText('Not added yet')).toBeInTheDocument()
-    const sources = screen.getByRole('list', { name: 'Sources' })
-    expect(within(sources).getByText('Keeply general dishwasher maintenance guidance')).toBeInTheDocument()
-    expect(within(sources).getByText(/could not find model-specific guidance/)).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Mark done' }))
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })))
-    expect((await record()).completions).toHaveLength(1)
-  })
-
-  it('moves the calendar event of a completion-based task when it is done', async () => {
-    const calls: Calls = []
-    mockFetch({ configured: true, connected: true }, calls)
-    await addDishwasher()
-    const rec = (await record()).recommendations[0]
-    await repo.setDecision('app-1', rec.id, {
-      kind: 'customise',
-      interval: { count: 30, unit: 'day' },
-      startDate: '2026-06-01',
-      schedulingMode: 'completion_based',
-    })
-    for (const other of (await record()).recommendations.slice(1)) await repo.setDecision('app-1', other.id, { kind: 'skip' })
-    await repo.approve('app-1', '2026-06-01')
-    await repo.recordCalendarResults('app-1', [{ taskId: 'task-1', ok: true, eventId: 'evt-task-1' }])
-
-    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
-    await screen.findByRole('heading', { name: 'Clean the filter' })
-    await waitFor(() => expect(calls.map((c) => c.url)).toContain('/api/calendar/status'))
-    fireEvent.click(screen.getByRole('button', { name: 'Mark done' }))
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })))
-
-    const write = await waitFor(() => {
-      const call = calls.find((c) => c.url === '/api/calendar/events')
-      expect(call).toBeDefined()
-      return call!.body as { drafts: { taskId: string; date: string; recurrence: string[] }[] }
-    })
-    const done = (await record()).completions[0].completedOn
-    expect(write.drafts).toHaveLength(1)
-    expect(write.drafts[0]).toMatchObject({ taskId: 'task-1', recurrence: [] })
-    expect(write.drafts[0].date > done).toBe(true)
-    expect(await screen.findByText(/Reminder moved to/)).toBeInTheDocument()
+    expect(await screen.findByText('Plan approved. Your tasks are in Google Calendar.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Clean the filter' })).toBeInTheDocument()
+    expect(screen.getByText('Added')).toBeInTheDocument()
+    expect(screen.getByText(/Run a cleaning cycle, Check the spray arms/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open Google Calendar' })).toHaveAttribute('href', 'https://calendar.google.com')
+    expect(screen.queryByRole('button', { name: /Accept|Reject/ })).not.toBeInTheDocument()
   })
 
   it('lists the dishwasher on Home', async () => {
+    mockFetch({ configured: true, connected: true }, [])
     await addDishwasher()
+    await decideAndApprove(ONE_ACCEPTED)
     renderWithPlan(<Home />, repo)
-    expect(await screen.findByRole('link', { name: /Bosch SMS6ZCI49E dishwasher/ })).toHaveAttribute(
-      'href',
-      '/appliances/app-1/plan',
-    )
-    expect(screen.queryByText('No appliances yet.')).not.toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /Bosch SMS6ZCI49E dishwasher/ })).toHaveTextContent('1 task in Google Calendar')
   })
 })
 
-describe('validation funnel', () => {
-  it('tracks the Phase 1 funnel with ids and counts only', async () => {
+describe('when the calendar write fails', () => {
+  it('keeps the plan approved and offers to add the missing tasks later', async () => {
     const calls: Calls = []
-    mockFetch({ configured: true, connected: true }, calls)
-    const events: { name: string }[] = []
-    const sink = (e: { name: string }) => void events.push(e)
+    mockFetch({ configured: true, connected: true }, calls, { failWrites: 1 })
+    await addDishwasher()
+    await decideAndApprove(ONE_ACCEPTED)
+    expect(push).toHaveBeenCalledWith('/appliances/app-1?approved=failed')
+    expect((await record()).approvedAt).not.toBeNull()
 
-    renderWithPlan(<NewApplianceForm />, repo, sink)
-    fireEvent.change(screen.getByLabelText('Manufacturer'), { target: { value: 'Bosch' } })
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue to maintenance plan' })))
+    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
+    const add = await screen.findByRole('button', { name: 'Add 1 task to Google Calendar' })
+    await act(async () => fireEvent.click(add))
+    expect(await screen.findByText('Added to Google Calendar.')).toBeInTheDocument()
+    expect((await record()).tasks[0].calendarEventId).toBe('evt-task-1')
+  })
+})
+
+describe('calendar permission denied', () => {
+  it('explains that nothing was added and still allows approval', async () => {
+    const calls: Calls = []
+    mockFetch({ configured: true, connected: false }, calls)
+    await addDishwasher()
+    search = new URLSearchParams('calendar=denied')
+
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo)
+    expect(await screen.findByText(/Google Calendar was not connected, so nothing was added/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Connect Google Calendar' })).toHaveAttribute(
+      'href',
+      '/auth/google/start?returnTo=%2Fappliances%2Fapp-1%2Fplan',
+    )
     cleanup()
+    await decideAndApprove(ONE_ACCEPTED)
+    expect(push).toHaveBeenCalledWith('/appliances/app-1?approved=saved')
+    expect(calls.some((c) => c.url === '/api/calendar/events')).toBe(false)
+  })
+})
 
-    renderWithPlan(<PlanReview applianceId="app-1" />, repo, sink)
-    await decide('Clean the filter', 'Include')
-    await decide('Run a cleaning cycle', 'Skip')
-    await decide('Check the spray arms', 'Skip')
-    cleanup()
+describe('usage tracking', () => {
+  it('counts the flow without names, models or dates', async () => {
+    mockFetch({ configured: true, connected: true }, [])
+    const events: FunnelEvent[] = []
+    const sink = (e: FunnelEvent) => void events.push(e)
+    await addDishwasher(sink)
+    await decideAndApprove(ONE_ACCEPTED, '2026-10-05', sink)
 
-    renderWithPlan(<ApprovalSummary applianceId="app-1" />, repo, sink)
-    await screen.findByText('Google Calendar connected.')
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Approve maintenance plan' })))
-    await waitFor(() => expect(push).toHaveBeenCalled())
-
-    expect(events.map((e) => e.name)).toEqual([
-      'appliance_added',
-      'recommendations_generated',
-      'recommendation_decided',
-      'recommendation_decided',
-      'recommendation_decided',
-      'plan_approved',
-      'calendar_tasks_created',
+    expect(events).toEqual([
+      { name: 'appliance_added', scanned: false },
+      { name: 'plan_proposed', tasks: 3, verified: 0 },
+      { name: 'plan_approved', accepted: 1, rejected: 2 },
+      { name: 'calendar_tasks_created', count: 1 },
     ])
-    expect(JSON.stringify(events)).not.toMatch(/Bosch/)
-    expect(events.find((e) => e.name === 'plan_approved')).toMatchObject({ approved: 1, skipped: 2 })
+    expect(JSON.stringify(events)).not.toMatch(/Bosch|SMS6|2026/)
+  })
+
+  it('tracks calendar_connected once when Google returns and tidies the URL', async () => {
+    window.history.replaceState(null, '', '/appliances/app-1/plan?calendar=connected')
+    const events: FunnelEvent[] = []
+    renderWithPlan(<Home />, repo, (e) => void events.push(e))
+    await screen.findByText('No appliances yet.')
+    expect(events).toEqual([{ name: 'calendar_connected' }])
+    expect(window.location.search).toBe('')
   })
 })
 
 describe('storage failures', () => {
   it('shows a banner and keeps the user on the form when saving fails', async () => {
-    const failing: PlanRepository = {
-      ...testRepository(),
-      addAppliance: () => Promise.reject(new Error('network down')),
-    }
+    const failing: PlanRepository = { ...testRepository(), addAppliance: () => Promise.reject(new Error('network down')) }
     renderWithPlan(<NewApplianceForm />, failing)
     fireEvent.change(screen.getByLabelText('Manufacturer'), { target: { value: 'Bosch' } })
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue to maintenance plan' })))
@@ -270,7 +270,7 @@ describe('storage failures', () => {
     let calls = 0
     const flaky: PlanRepository = {
       ...testRepository(),
-      load: () => (++calls === 1 ? Promise.reject(new Error('timeout')) : Promise.resolve({ version: 1, records: [] })),
+      load: () => (++calls === 1 ? Promise.reject(new Error('timeout')) : Promise.resolve({ version: 2, records: [] })),
     }
     renderWithPlan(<Home />, flaky)
     fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
@@ -279,23 +279,40 @@ describe('storage failures', () => {
   })
 })
 
-describe('calendar_connected', () => {
-  it('is tracked once when Google returns and the query is removed', async () => {
-    window.history.replaceState(null, '', '/appliances/app-1/approve?calendar=connected')
-    const events: { name: string }[] = []
-    renderWithPlan(<Home />, repo, (e) => void events.push(e))
-    await screen.findByText('No appliances yet.')
-    expect(events.map((e) => e.name)).toEqual(['calendar_connected'])
-    expect(window.location.search).toBe('')
+describe('overlapping saves', () => {
+  it('applies decisions in order even when an earlier save is slower', async () => {
+    mockFetch({ configured: false, connected: false }, [])
+    await addDishwasher()
+    const base = repo
+    let first = true
+    const slow: PlanRepository = {
+      ...base,
+      // Like a network store: the write lands at once, the snapshot comes back late.
+      async decide(a, t, d) {
+        const snapshot = await base.decide(a, t, d)
+        if (first) {
+          first = false
+          await new Promise((resolve) => setTimeout(resolve, 30))
+        }
+        return snapshot
+      },
+    }
+    renderWithPlan(<PlanReview applianceId="app-1" />, slow)
+    const filter = await screen.findByRole('article', { name: 'Clean the filter' })
+    const arms = screen.getByRole('article', { name: 'Check the spray arms' })
+    fireEvent.click(within(filter).getByRole('button', { name: 'Accept' }))
+    fireEvent.click(within(arms).getByRole('button', { name: 'Reject' }))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 80)))
+    expect(within(arms).getByRole('button', { name: 'Reject' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(filter).getByRole('button', { name: 'Accept' })).toHaveAttribute('aria-pressed', 'true')
   })
 })
 
 describe('deleting a dishwasher', () => {
-  it('asks first, mentions calendar events, then removes it and goes home', async () => {
+  it('asks first, says calendar events stay, then removes it and goes home', async () => {
     mockFetch({ configured: true, connected: true }, [])
     await addDishwasher()
-    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
-    await approveWith()
+    await decideAndApprove(ONE_ACCEPTED)
 
     renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
     fireEvent.click(await screen.findByRole('button', { name: 'Delete this dishwasher' }))
@@ -310,247 +327,56 @@ describe('deleting a dishwasher', () => {
   })
 })
 
-describe('changing a schedule after approval', () => {
-  it('updates the task, keeps the recommendation and moves the calendar event', async () => {
-    const calls: Calls = []
-    mockFetch({ configured: true, connected: true }, calls)
-    await addDishwasher()
-    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
-    await approveWith('2026-10-05')
-    expect((await record()).tasks[0].calendarEventId).toBe('evt-task-1')
-
-    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
-    await waitFor(() => expect(calls.filter((c) => c.url === '/api/calendar/status').length).toBeGreaterThan(1))
-    fireEvent.click(await screen.findByRole('button', { name: 'Change schedule' }))
-    fireEvent.change(screen.getByLabelText('Number'), { target: { value: '6' } })
-    fireEvent.change(screen.getByLabelText('Unit'), { target: { value: 'week' } })
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })))
-
-    expect(await screen.findByText('Schedule updated in Keeply and Google Calendar.')).toBeInTheDocument()
-    const updated = await record()
-    expect(updated.tasks[0].userInterval).toEqual({ count: 6, unit: 'week' })
-    expect(updated.recommendations[0].recommendedInterval).toEqual({ count: 1, unit: 'month' })
-    const writes = calls.filter((c) => c.url === '/api/calendar/events')
-    const last = writes[writes.length - 1].body as { drafts: { taskId: string; recurrence: string[] }[] }
-    expect(last.drafts).toEqual([expect.objectContaining({ taskId: 'task-1', recurrence: ['RRULE:FREQ=WEEKLY;INTERVAL=6'] })])
-  })
-})
-
-describe('overlapping saves', () => {
-  it('applies decisions in order even when an earlier save is slower', async () => {
-    await addDishwasher()
-    const base = repo
-    let first = true
-    const slow: PlanRepository = {
-      ...base,
-      // Like a network store: the write lands at once, the snapshot comes back late.
-      async setDecision(a, r, d) {
-        const snapshot = await base.setDecision(a, r, d)
-        if (first) {
-          first = false
-          await new Promise((resolve) => setTimeout(resolve, 30))
-        }
-        return snapshot
-      },
-    }
-    renderWithPlan(<PlanReview applianceId="app-1" />, slow)
-    const filter = await screen.findByRole('article', { name: 'Clean the filter' })
-    const arms = screen.getByRole('article', { name: 'Check the spray arms' })
-    fireEvent.click(within(filter).getByRole('button', { name: 'Include' }))
-    fireEvent.click(within(arms).getByRole('button', { name: 'Skip' }))
-    await act(() => new Promise((resolve) => setTimeout(resolve, 80)))
-    expect(within(arms).getByRole('button', { name: 'Skip' })).toHaveAttribute('aria-pressed', 'true')
-    expect(within(filter).getByRole('button', { name: 'Include' })).toHaveAttribute('aria-pressed', 'true')
-  })
-})
-
 describe('disconnecting Google Calendar', () => {
-  it('revokes access from the record screen and says events stay', async () => {
+  it('revokes access from the dishwasher page and says events stay', async () => {
     const calls: Calls = []
     mockFetch({ configured: true, connected: true }, calls)
     await addDishwasher()
-    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
-    await approveWith()
+    await decideAndApprove(ONE_ACCEPTED)
 
     renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
-    await screen.findByRole('heading', { name: 'Clean the filter' })
-    await act(async () => fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' })))
+    const disconnect = await screen.findByRole('button', { name: 'Disconnect Google Calendar from Keeply' })
+    await act(async () => fireEvent.click(disconnect))
     expect(calls.some((c) => c.url === '/api/calendar/disconnect')).toBe(true)
     expect(await screen.findByText(/Events already added stay in your calendar/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument()
   })
 })
 
-describe('calendar permission denied', () => {
-  it('explains that nothing was added and still allows approval', async () => {
-    const calls: Calls = []
-    mockFetch({ configured: true, connected: false }, calls)
-    await addDishwasher()
-    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
-    search = new URLSearchParams('calendar=denied')
-
-    renderWithPlan(<ApprovalSummary applianceId="app-1" />, repo)
-    expect(await screen.findByText(/Google Calendar was not connected, so nothing was added/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Connect Google Calendar' })).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve maintenance plan' })).toBeEnabled())
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Approve maintenance plan' })))
-    expect(push).toHaveBeenCalledWith('/appliances/app-1?approved=saved')
-    expect(calls.some((c) => c.url === '/api/calendar/events')).toBe(false)
-  })
-})
-
-describe('curated guidance on the plan screen', () => {
-  it('shows Manufacturer verified with its source when the catalog has the exact model', async () => {
-    const { createDevicePlanRepository, memoryStorage } = await import('../lib/plan-repository')
-    const catalogRepo = createDevicePlanRepository({
-      storage: memoryStorage(),
-      newId: () => 'app-1',
-      // Fixture entry, not real manufacturer guidance.
-      catalog: [
+describe('manufacturer guidance on the plan screen', () => {
+  it('shows Manufacturer verified with its quote and link', async () => {
+    mockFetch({ configured: false, connected: false }, [])
+    renderWithPlan(<NewApplianceForm />, repo, undefined, {
+      proposer: async () => [
         {
-          manufacturer: 'Bosch',
-          modelScope: 'SMS6ZCI49E',
-          sourceType: 'manufacturer_manual',
-          title: 'Fixture manual',
-          reference: 'https://example.com/manual.pdf',
-          sourceLocation: 'p. 40',
-          taskName: 'Clean the filters',
-          description: 'Fixture.',
-          interval: { count: 1, unit: 'month' },
+          name: 'Clean the filters',
+          instructions: 'Check and clean the filters.',
+          interval: { count: 1, unit: 'week' },
+          evidenceLevel: 'manufacturer_verified',
+          source: {
+            type: 'manufacturer_manual',
+            title: 'Bosch SMS6ZCI49E user manual',
+            url: 'https://www.bosch-home.com/manual.pdf',
+            location: 'page 32',
+            quote: 'Check the filters for residues after each wash.',
+          },
         },
       ],
     })
-    await catalogRepo.addAppliance({ manufacturer: 'Bosch', model: 'SMS6ZCI49E', serialNumber: '' })
-    renderWithPlan(<PlanReview applianceId="app-1" />, catalogRepo)
+    fireEvent.change(screen.getByLabelText('Manufacturer'), { target: { value: 'Bosch' } })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue to maintenance plan' })))
+    cleanup()
 
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo)
     const card = await screen.findByRole('article', { name: 'Clean the filters' })
     expect(within(card).getByText('Manufacturer verified')).toBeInTheDocument()
-    expect(screen.getByText(/shows where its guidance comes from/)).toBeInTheDocument()
     fireEvent.click(within(card).getByRole('button', { name: 'Why? / View source' }))
-    expect(within(card).getByText(/Fixture manual, p\. 40/)).toBeInTheDocument()
+    expect(within(card).getByText('“Check the filters for residues after each wash.”')).toBeInTheDocument()
+    expect(within(card).getByRole('link', { name: 'Open' })).toHaveAttribute('href', 'https://www.bosch-home.com/manual.pdf')
   })
 })
-
-describe('pausing and resuming a task', () => {
-  it('removes the reminder from the calendar on pause and adds it back on resume', async () => {
-    const calls: Calls = []
-    mockFetch({ configured: true, connected: true }, calls)
-    await addDishwasher()
-    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
-    await approveWith()
-    expect((await record()).tasks[0].calendarEventId).toBe('evt-task-1')
-
-    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
-    await screen.findByRole('heading', { name: 'Clean the filter' })
-    await waitFor(() => expect(calls.filter((c) => c.url === '/api/calendar/status').length).toBeGreaterThan(1))
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Pause reminders' })))
-
-    expect(await screen.findByText('Paused. Its reminder was removed from Google Calendar.')).toBeInTheDocument()
-    expect(screen.getByText('Paused')).toBeInTheDocument()
-    expect(calls.some((c) => c.url === '/api/calendar/events' && (c.body as { taskIds?: string[] }).taskIds?.[0] === 'task-1')).toBe(true)
-    expect((await record()).tasks[0]).toMatchObject({ status: 'paused', calendarEventId: null })
-
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resume' })))
-    expect(await screen.findByText('Resumed and back in Google Calendar.')).toBeInTheDocument()
-    expect((await record()).tasks[0]).toMatchObject({ status: 'approved', calendarEventId: 'evt-task-1' })
-  })
-})
-
-describe('a paused task whose reminder could not be removed', () => {
-  it('offers to remove it again later', async () => {
-    const calls: Calls = []
-    mockFetch({ configured: true, connected: true }, calls, { failDeletes: 1 })
-    await addDishwasher()
-    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
-    await approveWith()
-
-    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
-    await screen.findByRole('heading', { name: 'Clean the filter' })
-    await waitFor(() => expect(calls.filter((c) => c.url === '/api/calendar/status').length).toBeGreaterThan(1))
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Pause reminders' })))
-    expect(await screen.findByText('Paused, but its Google Calendar reminder could not be removed.')).toBeInTheDocument()
-    expect(screen.getByText('1 paused task still has a reminder in Google Calendar.')).toBeInTheDocument()
-
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Remove from Google Calendar' })))
-    expect(await screen.findByText('Paused reminders removed from Google Calendar.')).toBeInTheDocument()
-    expect((await record()).tasks[0]).toMatchObject({ status: 'paused', calendarEventId: null })
-  })
-})
-
-describe('recording a completion', () => {
-  it('records the date it was actually done with a note, and refuses future dates', async () => {
-    mockFetch({ configured: false, connected: false }, [])
-    await addDishwasher()
-    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
-    await approveWith('2026-01-05')
-
-    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
-    fireEvent.click(await screen.findByRole('button', { name: 'Mark done' }))
-    fireEvent.change(screen.getByLabelText('Done on'), { target: { value: '2999-01-01' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(screen.getByRole('alert')).toHaveTextContent(/future/)
-
-    fireEvent.change(screen.getByLabelText('Done on'), { target: { value: '2026-02-01' } })
-    fireEvent.change(screen.getByLabelText(/Note/), { target: { value: '  Very greasy  ' } })
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })))
-
-    expect((await record()).completions).toEqual([{ taskId: 'task-1', completedOn: '2026-02-01', notes: 'Very greasy' }])
-    expect(screen.getByText(/1 Feb 2026 \(Very greasy\)/)).toBeInTheDocument()
-  })
-})
-
-describe('moving device plans into the account', () => {
-  it('offers the move, imports each dishwasher and clears it from the device', async () => {
-    const { createDevicePlanRepository, memoryStorage } = await import('../lib/plan-repository')
-    const device = createDevicePlanRepository({ storage: memoryStorage(), newId: () => crypto.randomUUID() })
-    await device.addAppliance({ manufacturer: 'Bosch', model: 'OLD-1', serialNumber: '' })
-    await device.addAppliance({ manufacturer: 'Miele', model: '', serialNumber: '' })
-
-    // The "account": a separate store with an importRecord that copies identity.
-    const imported: string[] = []
-    const account: PlanRepository = {
-      ...repo,
-      async importRecord(record) {
-        imported.push(record.appliance.manufacturer)
-        await repo.addAppliance({ manufacturer: record.appliance.manufacturer, model: record.appliance.model ?? '', serialNumber: '' })
-      },
-    }
-
-    renderWithPlan(<Home />, account, undefined, device)
-    expect(await screen.findByText(/2 dishwashers are saved only on this device/)).toBeInTheDocument()
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Move to my account' })))
-
-    expect(imported).toEqual(['Bosch', 'Miele'])
-    expect((await device.load()).records).toEqual([])
-    expect(screen.queryByText(/saved only on this device/)).not.toBeInTheDocument()
-    expect(await screen.findByRole('link', { name: /Bosch OLD-1 dishwasher/ })).toBeInTheDocument()
-  })
-
-  it('keeps what did not move when an import fails', async () => {
-    const { createDevicePlanRepository, memoryStorage } = await import('../lib/plan-repository')
-    const device = createDevicePlanRepository({ storage: memoryStorage(), newId: () => crypto.randomUUID() })
-    await device.addAppliance({ manufacturer: 'Bosch', model: '', serialNumber: '' })
-    await device.addAppliance({ manufacturer: 'Miele', model: '', serialNumber: '' })
-    let calls = 0
-    const account: PlanRepository = {
-      ...repo,
-      async importRecord() {
-        if (++calls === 2) throw new Error('network down')
-      },
-    }
-    renderWithPlan(<Home />, account, undefined, device)
-    await screen.findByText('No appliances yet.')
-    await act(async () => fireEvent.click(await screen.findByRole('button', { name: 'Move to my account' })))
-    expect((await device.load()).records.map((r) => r.appliance.manufacturer)).toEqual(['Miele'])
-    expect(await screen.findByRole('alert')).toHaveTextContent(/network down/)
-  })
-})
-
-// Lets the provider's async effects (plan load, account lookup) commit inside act().
-const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
 
 describe('account panel', () => {
-  const service = (account: import('../lib/account').Account, result = { ok: true } as import('../lib/account').SignInResult) => ({
+  const service = (account: Account, result = { ok: true } as SignInResult) => ({
     current: vi.fn(async () => account),
     onChange: () => () => {},
     signInWithGoogle: vi.fn(async () => result),
@@ -560,7 +386,7 @@ describe('account panel', () => {
 
   it('offers Google sign-in to an anonymous visitor', async () => {
     const accounts = service({ kind: 'anonymous' })
-    renderWithPlan(<Home />, repo, undefined, undefined, accounts)
+    renderWithPlan(<Home />, repo, undefined, { account: accounts })
     await settle()
     await act(async () => fireEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' })))
     expect(accounts.signInWithGoogle).toHaveBeenCalled()
@@ -568,7 +394,7 @@ describe('account panel', () => {
 
   it('offers to switch when that Google login already has Keeply', async () => {
     const accounts = service({ kind: 'anonymous' }, { ok: false, reason: 'already_registered', message: 'That Google account already has Keeply plans.' })
-    renderWithPlan(<Home />, repo, undefined, undefined, accounts)
+    renderWithPlan(<Home />, repo, undefined, { account: accounts })
     await settle()
     await act(async () => fireEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' })))
     expect(screen.getByRole('alert')).toHaveTextContent(/already has Keeply/)
@@ -578,7 +404,7 @@ describe('account panel', () => {
 
   it('shows who is signed in and signs out', async () => {
     const accounts = service({ kind: 'google', email: 'r@example.com', name: 'R' })
-    renderWithPlan(<Home />, repo, undefined, undefined, accounts)
+    renderWithPlan(<Home />, repo, undefined, { account: accounts })
     expect(await screen.findByText(/Signed in as r@example.com/)).toBeInTheDocument()
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Sign out' })))
     expect(accounts.signOut).toHaveBeenCalled()

@@ -32,7 +32,7 @@ async function takePhoto() {
 }
 
 describe('ScanFlow without recognition (v0.1)', () => {
-  it('guides the photo, says nothing was read, and keeps the photo with the typed identity', async () => {
+  it('guides the photo, says nothing was read, and saves the typed identity', async () => {
     renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo)
     expect(screen.getByText(/photograph the label/i)).toBeInTheDocument()
     await takePhoto()
@@ -49,7 +49,6 @@ describe('ScanFlow without recognition (v0.1)', () => {
     expect(push).toHaveBeenCalledWith('/appliances/app-1/plan')
     const appliance = findRecord(await repo.load(), 'app-1')!.appliance
     expect(appliance).toMatchObject({ manufacturer: 'Bosch', model: 'SMS6ZCI49E', identificationConfidence: null })
-    expect(appliance.imageUrl).toBe('data:image/jpeg;base64,/9j/2Q==')
   })
 })
 

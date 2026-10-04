@@ -1,43 +1,46 @@
-import type { Appliance, Recommendation } from './model'
+import type { Appliance, ApplianceRecord, MaintenanceTask } from './model'
 
 export const appliance: Appliance = {
   id: 'app-1',
-  category: 'dishwasher',
   manufacturer: 'Bosch',
   model: 'SMS6ZCI49E',
   serialNumber: null,
-  imageUrl: null,
   identificationConfidence: null,
   createdAt: '2026-10-04T10:00:00Z',
 }
 
-export function recommendation(overrides: Partial<Recommendation> = {}): Recommendation {
+export function task(overrides: Partial<MaintenanceTask> = {}): MaintenanceTask {
   return {
-    id: 'rec-filter',
+    id: 'task-filter',
     applianceId: appliance.id,
-    taskName: 'Clean the filter',
-    description: 'Rinse the filter.',
-    recommendedInterval: { count: 14, unit: 'day' },
+    name: 'Clean the filter',
+    instructions: 'Rinse the filter.',
+    interval: { count: 14, unit: 'day' },
     evidenceLevel: 'manufacturer_verified',
     source: {
-      id: 'src-1',
-      sourceType: 'manufacturer_manual',
+      type: 'manufacturer_manual',
       title: 'Bosch SMS6ZCI49E user manual',
-      reference: 'https://example.com/manual.pdf',
-      manufacturer: 'Bosch',
-      modelScope: 'SMS6ZCI49E',
+      url: 'https://example.com/manual.pdf',
+      location: 'page 32',
+      quote: 'Check and clean the filters regularly.',
     },
-    sourceLocation: 'page 32',
+    status: 'proposed',
+    calendarEventId: null,
     ...overrides,
   }
 }
 
-export function sequentialIds(prefix = 'task') {
-  let n = 0
-  return () => `${prefix}-${++n}`
+export function record(overrides: Partial<ApplianceRecord> = {}): ApplianceRecord {
+  return {
+    appliance,
+    tasks: [task(), task({ id: 'task-rinse', name: 'Top up rinse aid', interval: { count: 1, unit: 'month' } })],
+    approvedAt: null,
+    startDate: null,
+    ...overrides,
+  }
 }
 
-// Deep-freeze so any attempt to rewrite a Recommendation throws in strict mode.
+// Deep-freeze so any attempt to rewrite a proposal throws in strict mode.
 export function frozen<T>(value: T): T {
   if (value && typeof value === 'object') {
     Object.values(value).forEach(frozen)

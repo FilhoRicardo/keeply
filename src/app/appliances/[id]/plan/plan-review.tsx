@@ -1,23 +1,39 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { applianceName } from '@/domain/calendar-event'
+import { isLocalDate } from '@/domain/dates'
 import { approvalBlockers } from '@/domain/plan'
+import { CalendarPanel } from '../../../components/calendar-panel'
+import { CalendarReturnNotice } from '../../../components/calendar-return-notice'
 import { DeleteAppliance } from '../../../components/delete-appliance'
-import { RecommendationCard } from '../../../components/recommendation-card'
 import { LoadingPanel, NotFoundPanel } from '../../../components/screen'
+import { TaskCard } from '../../../components/task-card'
+import { fetchCalendarStatus, writeApprovedTasks, type CalendarStatus } from '../../../lib/calendar-client'
 import { usePlan } from '../../../lib/plan-context'
 import { findRecord } from '../../../lib/plan-state'
 import { today } from '../../../lib/today'
 
 const BLOCKER_COPY = {
-  undecided: 'Choose Include, Customise or Skip for every task.',
-  nothing_included: 'Include or customise at least one task.',
-  invalid_customisation: 'Fix the customised task before continuing.',
+  undecided: 'Accept or reject every task.',
+  nothing_accepted: 'Accept at least one task.',
 }
 
+// The proposed plan: Accept or Reject each task, pick a start date, approve. Only then are the
+// accepted tasks written to Google Calendar.
 export function PlanReview({ applianceId }: { applianceId: string }) {
-  const { state, setDecision } = usePlan()
+  const router = useRouter()
+  const { state, decide, approve, recordCalendarResults, accessToken, storageKind } = usePlan()
+  const [calendar, setCalendar] = useState<CalendarStatus | null>(null)
+  const [startDate, setStartDate] = useState(today)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    fetchCalendarStatus().then(setCalendar)
+  }, [])
+
   if (!state) return <LoadingPanel />
   const record = findRecord(state, applianceId)
   if (!record) return <NotFoundPanel />
@@ -35,8 +51,39 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
     )
   }
 
-  const blockers = approvalBlockers(record.recommendations, record.decisions)
-  const decided = record.recommendations.filter((r) => record.decisions[r.id]).length
+  const blockers = approvalBlockers(record.tasks)
+  const accepted = record.tasks.filter((t) => t.status === 'accepted').length
+  const decided = record.tasks.filter((t) => t.status !== 'proposed').length
+  const ready = blockers.length === 0 && isLocalDate(startDate) && calendar !== null && !busy
+  const allGeneral = record.tasks.every((t) => t.evidenceLevel === 'general_guidance')
+
+  async function onApprove() {
+    setBusy(true)
+    let approved
+    try {
+      approved = await approve(applianceId, startDate)
+    } catch {
+      // Nothing was approved and nothing was written; the provider's banner shows why.
+      setBusy(false)
+      return
+    }
+    let outcome = 'saved'
+    if (calendar?.connected) {
+      try {
+        const result = await writeApprovedTasks(findRecord(approved, applianceId)!, await accessToken())
+        if (result.kind === 'written') {
+          await recordCalendarResults(applianceId, result.results)
+          outcome = result.results.every((r) => r.ok) ? 'calendar' : 'partial'
+        } else {
+          outcome = result.kind
+        }
+      } catch {
+        // The plan is approved either way; writes are idempotent, so the dishwasher page can retry.
+        outcome = 'failed'
+      }
+    }
+    router.push(`/appliances/${applianceId}?approved=${outcome}`)
+  }
 
   return (
     <>
@@ -44,41 +91,35 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
         <p className="aster-eyebrow">Proposed for</p>
         <h2>{applianceName(record.appliance)}</h2>
         <p>
-          Keeply proposes; you decide. Nothing reaches your calendar until you approve the plan.{' '}
-          {record.recommendations.every((r) => r.evidenceLevel === 'general_guidance')
-            ? 'These are general dishwasher tasks: we have no checked guidance for your exact model yet.'
+          Keeply proposes; you decide. Nothing reaches your calendar until you approve.{' '}
+          {allGeneral
+            ? 'These are general dishwasher tasks: Keeply found no guidance for your exact model.'
             : 'Each task shows where its guidance comes from and how closely it matches your model.'}
         </p>
       </section>
 
       <div className="plan-list">
-        {record.recommendations.map((rec) => (
-          <RecommendationCard
-            key={rec.id}
-            recommendation={rec}
-            decision={record.decisions[rec.id]}
-            today={today()}
-            onDecide={(decision) => void setDecision(applianceId, rec.id, decision).catch(() => {})}
-          />
+        {record.tasks.map((task) => (
+          <TaskCard key={task.id} task={task} onDecide={(d) => void decide(applianceId, task.id, d).catch(() => {})} />
         ))}
       </div>
 
+      <label className="field aster-inner start-field">
+        <span>First reminder on</span>
+        <input className="input" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+      </label>
+
+      <CalendarReturnNotice />
+      <CalendarPanel calendar={calendar} returnTo={`/appliances/${applianceId}/plan`} storageKind={storageKind} />
+
       <div className="plan-actions">
         <p className="progress aster-mono" aria-live="polite">
-          {decided} of {record.recommendations.length} decided
+          {decided} of {record.tasks.length} decided
         </p>
-        {blockers.length > 0 ? (
-          <>
-            <p className="hint">{BLOCKER_COPY[blockers[0]]}</p>
-            <button type="button" className="aster-btn aster-btn--primary full-width" disabled>
-              Review plan
-            </button>
-          </>
-        ) : (
-          <Link className="aster-btn aster-btn--primary full-width" href={`/appliances/${applianceId}/approve`}>
-            Review plan
-          </Link>
-        )}
+        {blockers.length > 0 && <p className="hint">{BLOCKER_COPY[blockers[0]]}</p>}
+        <button type="button" className="aster-btn aster-btn--primary full-width" disabled={!ready} onClick={onApprove}>
+          {busy ? 'Approving…' : calendar?.connected ? `Approve and add ${accepted} ${accepted === 1 ? 'task' : 'tasks'} to Google Calendar` : 'Approve plan'}
+        </button>
       </div>
       <DeleteAppliance applianceId={applianceId} name={applianceName(record.appliance)} hasCalendarEvents={false} />
     </>

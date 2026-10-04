@@ -89,24 +89,8 @@ describe('googleCalendarWriter', () => {
   })
 })
 
-describe('deleteEvent', () => {
-  it('deletes the Task’s own event id only', async () => {
-    const fetchMock = respond(200)
-    await googleCalendarWriter({ accessToken: 't', fetch: fetchMock }).deleteEvent(draft.taskId)
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(init?.method).toBe('DELETE')
-    expect(url).toBe(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${googleEventId(draft.taskId)}`)
-  })
-
-  it.each([404, 410])('treats %i as already removed', async (status) => {
-    await expect(googleCalendarWriter({ accessToken: 't', fetch: respond(status) }).deleteEvent('t1')).resolves.toBeUndefined()
-  })
-
-  it('surfaces other failures', async () => {
-    await expect(googleCalendarWriter({ accessToken: 't', fetch: respond(403) }).deleteEvent('t1')).rejects.toMatchObject({ status: 403 })
-  })
-
-  it('marks written events confirmed so a resumed task revives its event', async () => {
+describe('upsertEvent status', () => {
+  it('marks written events confirmed so a rewrite revives a deleted event', async () => {
     const fetchMock = respond(200, { id: 'x' })
     await googleCalendarWriter({ accessToken: 't', fetch: fetchMock }).upsertEvent(draft)
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string).status).toBe('confirmed')
@@ -116,7 +100,6 @@ describe('deleteEvent', () => {
 describe('writeEvents', () => {
   it('keeps going after one failure and reports each task', async () => {
     const writer: CalendarWriter = {
-      deleteEvent: vi.fn(),
       upsertEvent: vi
         .fn()
         .mockRejectedValueOnce(new Error('boom'))

@@ -43,7 +43,7 @@ export function googleEventBody(draft: CalendarEventDraft) {
     start: { date: draft.date },
     end: { date: draft.endDate },
     ...(draft.recurrence.length > 0 ? { recurrence: draft.recurrence } : {}),
-    // Explicit so a write after a delete (pause → resume) revives the cancelled event.
+    // Explicit so a rewrite revives an event the owner deleted in their calendar.
     status: 'confirmed',
     transparency: 'transparent',
     reminders: { useDefault: true },
@@ -80,14 +80,6 @@ export function googleCalendarWriter({
       if (!response.ok) fail(response.status)
       const saved = (await response.json()) as { id?: string }
       return { eventId: saved.id ?? body.id }
-    },
-    async deleteEvent(taskId) {
-      const response = await fetchImpl(`${eventsUrl}/${googleEventId(taskId)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      // 404 / 410: never written or already deleted.
-      if (!response.ok && response.status !== 404 && response.status !== 410) fail(response.status)
     },
   }
 }

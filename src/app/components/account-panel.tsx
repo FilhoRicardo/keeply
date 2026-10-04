@@ -43,7 +43,7 @@ export function AccountPanel() {
   }
 
   return (
-    <section className="calendar-panel aster-inner import-banner" aria-label="Your account">
+    <section className="calendar-panel aster-inner account-banner" aria-label="Your account">
       <p>Your plans are kept in this browser only. Sign in with Google to keep them safe and use them on other devices.</p>
       {problem && (
         <p className="form-error" role="alert">

@@ -1,21 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Decision } from '@/domain/plan'
 
-// Validation funnel from docs/HANDOFF.md §15. Ids and counts only: no names, models or dates.
-// Scan and identification events arrive with Phase 2.
+// Beta usage counts (docs/HANDOFF.md §15). Event names and small counts only: no names, models,
+// photos or dates.
 export type FunnelEvent =
-  | { name: 'appliance_added'; applianceId: string }
-  | { name: 'recommendations_generated'; applianceId: string; count: number }
-  | { name: 'recommendation_decided'; applianceId: string; decision: Decision['kind'] }
-  | { name: 'plan_approved'; applianceId: string; approved: number; skipped: number }
+  | { name: 'scan_started' }
+  | { name: 'label_read'; recognised: boolean }
+  | { name: 'appliance_added'; scanned: boolean }
+  | { name: 'plan_proposed'; tasks: number; verified: number }
+  | { name: 'plan_approved'; accepted: number; rejected: number }
   | { name: 'calendar_connected' }
-  | { name: 'calendar_tasks_created'; applianceId: string; count: number }
-  | { name: 'task_completed'; applianceId: string }
+  | { name: 'calendar_tasks_created'; count: number }
 
-export type TrackedEvent = FunnelEvent & { at: string }
-
-// Where events go. A Supabase sink (an events table) can replace the default later.
-export type EventSink = (event: TrackedEvent) => void
+export type EventSink = (event: FunnelEvent) => void
 
 export const noopSink: EventSink = () => {}
 
@@ -23,11 +19,9 @@ export const devConsoleSink: EventSink = (event) => console.debug('[keeply:event
 
 // Appends to public.funnel_events (insert-only for visitors). `ready` waits for the session.
 export function supabaseSink(db: SupabaseClient, ready: () => Promise<unknown>): EventSink {
-  return (event) => {
-    const { name, at, ...rest } = event
-    const { applianceId, ...props } = rest as { applianceId?: string } & Record<string, unknown>
+  return ({ name, ...props }) => {
     void ready()
-      .then(() => db.from('funnel_events').insert({ name, appliance_id: applianceId ?? null, props, occurred_at: at }))
+      .then(() => db.from('funnel_events').insert({ name, props }))
       .catch(() => {})
   }
 }
@@ -37,9 +31,9 @@ export function defaultSink(): EventSink {
 }
 
 // Tracking must never break the product flow.
-export function safeTrack(sink: EventSink, event: FunnelEvent, now = () => new Date().toISOString()) {
+export function safeTrack(sink: EventSink, event: FunnelEvent) {
   try {
-    sink({ ...event, at: now() })
+    sink(event)
   } catch {
     // ignored
   }

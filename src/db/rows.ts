@@ -1,134 +1,93 @@
-import type { Appliance, Completion, Recommendation, SourceDocument, Task } from '@/domain/model'
+import type { Appliance, ApplianceRecord, MaintenanceTask, TaskProposal } from '@/domain/model'
 
-// Row shapes as stored in supabase/migrations/20261004120000_initial_schema.sql.
+// Row shapes as stored in supabase/migrations/20261005090000_mvp_schema.sql.
 
 export type ApplianceRow = {
   id: string
-  home_id: string
-  category: 'dishwasher'
+  user_id: string
   manufacturer: string
   model: string | null
   serial_number: string | null
-  image_url: string | null
   identification_confidence: number | null
-  created_at: string
-}
-
-export type SourceDocumentRow = {
-  id: string
-  appliance_id: string
-  source_type: SourceDocument['sourceType']
-  title: string
-  reference: string | null
-  manufacturer: string | null
-  model_scope: string | null
-  retrieved_at: string
-}
-
-export type RecommendationRow = {
-  id: string
-  appliance_id: string
-  task_name: string
-  description: string
-  recommended_interval_count: number
-  recommended_interval_unit: Recommendation['recommendedInterval']['unit']
-  evidence_level: Recommendation['evidenceLevel']
-  source_document_id: string
-  source_location: string | null
-  confidence: number | null
+  approved_at: string | null
+  start_date: string | null
   created_at: string
 }
 
 export type TaskRow = {
   id: string
   appliance_id: string
-  recommendation_id: string
-  status: Task['status']
-  user_interval_count: number
-  user_interval_unit: Task['userInterval']['unit']
-  start_date: string
-  scheduling_mode: Task['schedulingMode']
+  position: number
+  name: string
+  instructions: string
+  interval_count: number
+  interval_unit: MaintenanceTask['interval']['unit']
+  evidence_level: MaintenanceTask['evidenceLevel']
+  source_type: MaintenanceTask['source']['type']
+  source_title: string
+  source_url: string | null
+  source_location: string | null
+  source_quote: string | null
+  status: MaintenanceTask['status']
   calendar_event_id: string | null
-  approved_at: string | null
   created_at: string
 }
 
-export type CompletionRow = {
-  id: string
-  maintenance_task_id: string
-  completed_on: string
-  notes: string | null
-  created_at: string
+export type ApplianceTree = ApplianceRow & { maintenance_tasks: TaskRow[] }
+
+export function toTask(row: TaskRow): MaintenanceTask {
+  return {
+    id: row.id,
+    applianceId: row.appliance_id,
+    name: row.name,
+    instructions: row.instructions,
+    interval: { count: row.interval_count, unit: row.interval_unit },
+    evidenceLevel: row.evidence_level,
+    source: {
+      type: row.source_type,
+      title: row.source_title,
+      url: row.source_url,
+      location: row.source_location,
+      quote: row.source_quote,
+    },
+    status: row.status,
+    calendarEventId: row.calendar_event_id,
+  }
 }
 
 export function toAppliance(row: ApplianceRow): Appliance {
   return {
     id: row.id,
-    category: row.category,
     manufacturer: row.manufacturer,
     model: row.model,
     serialNumber: row.serial_number,
-    // Storage paths are turned into signed URLs by the repository.
-    imageUrl: null,
-    identificationConfidence: row.identification_confidence,
+    // numeric arrives as a string from PostgREST.
+    identificationConfidence: row.identification_confidence === null ? null : Number(row.identification_confidence),
     createdAt: row.created_at,
   }
 }
 
-export function toSourceDocument(row: SourceDocumentRow): SourceDocument {
+export function toApplianceRecord(tree: ApplianceTree): ApplianceRecord {
   return {
-    id: row.id,
-    sourceType: row.source_type,
-    title: row.title,
-    reference: row.reference,
-    manufacturer: row.manufacturer,
-    modelScope: row.model_scope,
+    appliance: toAppliance(tree),
+    tasks: [...tree.maintenance_tasks].sort((a, b) => a.position - b.position).map(toTask),
+    approvedAt: tree.approved_at,
+    startDate: tree.start_date,
   }
 }
 
-export function toRecommendation(row: RecommendationRow, source: SourceDocumentRow): Recommendation {
-  if (row.source_document_id !== source.id) throw new Error('Recommendation and source document do not match.')
+// The add_appliance RPC's task payload.
+export function fromProposal(p: TaskProposal) {
   return {
-    id: row.id,
-    applianceId: row.appliance_id,
-    taskName: row.task_name,
-    description: row.description,
-    recommendedInterval: { count: row.recommended_interval_count, unit: row.recommended_interval_unit },
-    evidenceLevel: row.evidence_level,
-    source: toSourceDocument(source),
-    sourceLocation: row.source_location,
+    name: p.name,
+    instructions: p.instructions,
+    interval_count: p.interval.count,
+    interval_unit: p.interval.unit,
+    evidence_level: p.evidenceLevel,
+    source_type: p.source.type,
+    source_title: p.source.title,
+    source_url: p.source.url,
+    source_location: p.source.location,
+    source_quote: p.source.quote,
   }
-}
-
-export function toTask(row: TaskRow): Task {
-  return {
-    id: row.id,
-    applianceId: row.appliance_id,
-    recommendationId: row.recommendation_id,
-    status: row.status,
-    userInterval: { count: row.user_interval_count, unit: row.user_interval_unit },
-    startDate: row.start_date,
-    schedulingMode: row.scheduling_mode,
-    calendarEventId: row.calendar_event_id,
-  }
-}
-
-// Insert payload for a Task. approved_at is required by the schema for approved tasks.
-export function fromTask(task: Task, approvedAt: string): Omit<TaskRow, 'created_at'> {
-  return {
-    id: task.id,
-    appliance_id: task.applianceId,
-    recommendation_id: task.recommendationId,
-    status: task.status,
-    user_interval_count: task.userInterval.count,
-    user_interval_unit: task.userInterval.unit,
-    start_date: task.startDate,
-    scheduling_mode: task.schedulingMode,
-    calendar_event_id: task.calendarEventId,
-    approved_at: task.status === 'approved' || task.status === 'paused' ? approvedAt : null,
-  }
-}
-
-export function toCompletion(row: CompletionRow): Completion {
-  return { taskId: row.maintenance_task_id, completedOn: row.completed_on, notes: row.notes }
 }

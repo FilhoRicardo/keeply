@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { ApplianceCount, ApplianceList } from './appliance-list'
 import { AccountPanel } from './components/account-panel'
-import { ImportBanner } from './components/import-banner'
 import { scanEnabled } from './lib/features'
 
 export default function Home() {
@@ -18,7 +17,6 @@ export default function Home() {
       </header>
 
       <main className="home-content">
-        <ImportBanner />
         <AccountPanel />
         <section className="appliances-panel aster-glass" aria-labelledby="appliances-title">
           <div className="section-heading">

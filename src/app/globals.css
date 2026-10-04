@@ -403,12 +403,11 @@ a {
   font-size: 17px;
 }
 
-.plan-card--include,
-.plan-card--customise {
+.plan-card--accepted {
   border-color: rgba(19, 115, 63, 0.45);
 }
 
-.plan-card--skip {
+.plan-card--rejected {
   opacity: 0.7;
 }
 
@@ -492,6 +491,15 @@ a {
   font-size: 13px;
 }
 
+.source-quote {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 3px solid rgba(19, 115, 63, 0.35);
+  color: var(--aster-ink-2);
+  font-size: 13px;
+  font-style: italic;
+}
+
 .decision-status {
   color: var(--aster-ink-2);
   font-size: 13px;
@@ -500,7 +508,7 @@ a {
 
 .decision-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
 
@@ -543,8 +551,7 @@ a {
   width: 100%;
 }
 
-.form-panel,
-.customise-form {
+.form-panel {
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -686,12 +693,7 @@ a {
   margin-top: 10px !important;
 }
 
-.overdue {
-  color: #a3271b;
-}
-
-.skipped-note,
-.history {
+.skipped-note {
   color: var(--aster-ink-2);
   font-size: 13px;
 }
@@ -784,7 +786,7 @@ a {
   outline-offset: 3px;
 }
 
-.import-banner {
+.account-banner {
   margin-bottom: 14px;
 }
 

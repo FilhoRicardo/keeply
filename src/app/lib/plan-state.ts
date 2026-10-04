@@ -1,29 +1,19 @@
 import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
-import type { Appliance, Completion, Recommendation, Task } from '@/domain/model'
-import { proposeRecommendations, type CatalogEntry } from '@/domain/guidance'
-import { approvePlan, pauseTask, rescheduleTask, resumeTask, type Customisation, type Decision, type Decisions } from '@/domain/plan'
+import type { ApplianceRecord, MaintenanceTask, TaskProposal } from '@/domain/model'
+import { approvePlan, decideTask, type Decision } from '@/domain/plan'
 
-// Everything Keeply knows about one appliance. Pure transitions only: persistence lives in plan-store.ts.
-export type ApplianceRecord = {
-  appliance: Appliance
-  recommendations: Recommendation[]
-  decisions: Decisions
-  tasks: Task[]
-  completions: Completion[]
-  approvedAt: string | null
-}
+// Everything Keeply keeps: the owner's dishwashers and their plans. Pure transitions only;
+// persistence lives in plan-repository.ts.
+export type PlanState = { version: 2; records: ApplianceRecord[] }
 
-export type PlanState = { version: 1; records: ApplianceRecord[] }
-
-export const EMPTY_STATE: PlanState = { version: 1, records: [] }
+export const EMPTY_STATE: PlanState = { version: 2, records: [] }
 
 export type NewApplianceInput = {
   manufacturer: string
   model: string
   serialNumber: string
-  // Phase 2: photo of the label and the recogniser's confidence if the owner kept its proposal.
-  photo?: Blob | null
+  // The recogniser's confidence when the owner kept its proposal unchanged.
   confidence?: number | null
 }
 
@@ -36,68 +26,55 @@ export function validateNewAppliance(input: NewApplianceInput): string | null {
   return clean(input.manufacturer) ? null : 'Enter the manufacturer, for example Bosch.'
 }
 
-function updateRecord(state: PlanState, applianceId: string, update: (r: ApplianceRecord) => ApplianceRecord): PlanState {
-  if (!state.records.some((r) => r.appliance.id === applianceId)) throw new Error(`Unknown appliance ${applianceId}`)
-  return { ...state, records: state.records.map((r) => (r.appliance.id === applianceId ? update(r) : r)) }
-}
-
 export function findRecord(state: PlanState, applianceId: string): ApplianceRecord | undefined {
   return state.records.find((r) => r.appliance.id === applianceId)
+}
+
+function updateRecord(state: PlanState, applianceId: string, update: (r: ApplianceRecord) => ApplianceRecord): PlanState {
+  if (!findRecord(state, applianceId)) throw new Error(`Unknown appliance ${applianceId}`)
+  return { ...state, records: state.records.map((r) => (r.appliance.id === applianceId ? update(r) : r)) }
 }
 
 export function addAppliance(
   state: PlanState,
   input: NewApplianceInput,
-  id: string,
-  now: string,
-  imageUrl: string | null = null,
-  catalog: readonly CatalogEntry[] = [],
-): PlanState {
-  const error = validateNewAppliance(input)
-  if (error) throw new Error(error)
-  const appliance: Appliance = {
-    id,
-    category: 'dishwasher',
-    manufacturer: clean(input.manufacturer)!,
-    model: clean(input.model),
-    serialNumber: clean(input.serialNumber),
-    imageUrl,
-    identificationConfidence: input.confidence ?? null,
-    createdAt: now,
-  }
-  const record: ApplianceRecord = {
-    appliance,
-    recommendations: proposeRecommendations(appliance, catalog),
-    decisions: {},
-    tasks: [],
-    completions: [],
-    approvedAt: null,
-  }
-  return { ...state, records: [...state.records, record] }
-}
-
-export function setDecision(state: PlanState, applianceId: string, recommendationId: string, decision: Decision | null): PlanState {
-  return updateRecord(state, applianceId, (r) => {
-    if (r.approvedAt) throw new Error('This plan is already approved.')
-    const decisions = { ...r.decisions }
-    if (decision) decisions[recommendationId] = decision
-    else delete decisions[recommendationId]
-    return { ...r, decisions }
-  })
-}
-
-export function approve(
-  state: PlanState,
-  applianceId: string,
-  defaultStartDate: LocalDate,
+  proposals: readonly TaskProposal[],
   newId: () => string,
   now: string,
-): PlanState {
-  return updateRecord(state, applianceId, (r) => {
-    if (r.approvedAt) throw new Error('This plan is already approved.')
-    const tasks = approvePlan({ recommendations: r.recommendations, decisions: r.decisions, defaultStartDate, newId })
-    return { ...r, tasks, approvedAt: now }
-  })
+): { state: PlanState; applianceId: string } {
+  const error = validateNewAppliance(input)
+  if (error) throw new Error(error)
+  if (proposals.length === 0) throw new Error('A dishwasher needs at least one proposed task.')
+  const applianceId = newId()
+  const tasks: MaintenanceTask[] = proposals.map((p) => ({
+    ...p,
+    id: newId(),
+    applianceId,
+    status: 'proposed',
+    calendarEventId: null,
+  }))
+  const record: ApplianceRecord = {
+    appliance: {
+      id: applianceId,
+      manufacturer: clean(input.manufacturer)!,
+      model: clean(input.model),
+      serialNumber: clean(input.serialNumber),
+      identificationConfidence: input.confidence ?? null,
+      createdAt: now,
+    },
+    tasks,
+    approvedAt: null,
+    startDate: null,
+  }
+  return { state: { ...state, records: [...state.records, record] }, applianceId }
+}
+
+export function decide(state: PlanState, applianceId: string, taskId: string, decision: Decision | null): PlanState {
+  return updateRecord(state, applianceId, (r) => decideTask(r, taskId, decision))
+}
+
+export function approve(state: PlanState, applianceId: string, startDate: LocalDate, now: string): PlanState {
+  return updateRecord(state, applianceId, (r) => approvePlan(r, startDate, now))
 }
 
 export function recordCalendarResults(state: PlanState, applianceId: string, results: readonly WriteResult[]): PlanState {
@@ -105,45 +82,9 @@ export function recordCalendarResults(state: PlanState, applianceId: string, res
     ...r,
     tasks: r.tasks.map((task) => {
       const result = results.find((res) => res.taskId === task.id)
-      if (!result?.ok || task.status !== 'approved') return task
+      if (!result?.ok || task.status !== 'accepted' || !r.approvedAt) return task
       return { ...task, calendarEventId: result.eventId }
     }),
-  }))
-}
-
-export function addCompletion(
-  state: PlanState,
-  applianceId: string,
-  taskId: string,
-  completedOn: LocalDate,
-  notes: string | null = null,
-): PlanState {
-  return updateRecord(state, applianceId, (r) => {
-    if (!r.tasks.some((t) => t.id === taskId && t.status === 'approved')) throw new Error('Only approved tasks can be completed.')
-    const note = notes?.trim() || null
-    return { ...r, completions: [...r.completions, { taskId, completedOn, notes: note }] }
-  })
-}
-
-export function updateTaskSchedule(state: PlanState, applianceId: string, taskId: string, schedule: Customisation): PlanState {
-  return updateRecord(state, applianceId, (r) => {
-    if (!r.tasks.some((t) => t.id === taskId)) throw new Error(`Unknown task ${taskId}`)
-    return { ...r, tasks: r.tasks.map((t) => (t.id === taskId ? rescheduleTask(t, schedule) : t)) }
-  })
-}
-
-export function setTaskPaused(state: PlanState, applianceId: string, taskId: string, paused: boolean): PlanState {
-  return updateRecord(state, applianceId, (r) => {
-    if (!r.tasks.some((t) => t.id === taskId)) throw new Error(`Unknown task ${taskId}`)
-    return { ...r, tasks: r.tasks.map((t) => (t.id === taskId ? (paused ? pauseTask(t) : resumeTask(t)) : t)) }
-  })
-}
-
-// After the calendar confirms removal (pause), forget the event ids.
-export function clearCalendarEvents(state: PlanState, applianceId: string, taskIds: readonly string[]): PlanState {
-  return updateRecord(state, applianceId, (r) => ({
-    ...r,
-    tasks: r.tasks.map((t) => (taskIds.includes(t.id) ? { ...t, calendarEventId: null } : t)),
   }))
 }
 
@@ -152,11 +93,12 @@ export function removeAppliance(state: PlanState, applianceId: string): PlanStat
   return { ...state, records: state.records.filter((r) => r.appliance.id !== applianceId) }
 }
 
+// Plans saved by an older version of Keeply are not migrated (pre-release prototype).
 export function parseState(raw: string | null): PlanState {
   if (!raw) return EMPTY_STATE
   try {
     const parsed = JSON.parse(raw) as PlanState
-    return parsed?.version === 1 && Array.isArray(parsed.records) ? parsed : EMPTY_STATE
+    return parsed?.version === 2 && Array.isArray(parsed.records) ? parsed : EMPTY_STATE
   } catch {
     return EMPTY_STATE
   }

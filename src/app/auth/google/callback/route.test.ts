@@ -15,7 +15,7 @@ function callback(scope: string) {
   vi.stubGlobal('fetch', async () => Response.json({ access_token: 'at', expires_in: 3600, scope }))
   return GET(
     new NextRequest('http://keeply.local/auth/google/callback?code=c&state=s', {
-      headers: { cookie: 'keeply_gcal_state=s; keeply_gcal_return=/appliances/a/approve' },
+      headers: { cookie: 'keeply_gcal_state=s; keeply_gcal_return=/appliances/a/plan' },
     }),
   )
 }
@@ -23,13 +23,13 @@ function callback(scope: string) {
 describe('Google OAuth callback', () => {
   it('connects when calendar access is granted', async () => {
     const response = await callback(GOOGLE_CALENDAR_SCOPE)
-    expect(response.headers.get('location')).toBe('http://keeply.local/appliances/a/approve?calendar=connected')
+    expect(response.headers.get('location')).toBe('http://keeply.local/appliances/a/plan?calendar=connected')
     expect(response.cookies.get('keeply_gcal_token')?.value).toBe('at')
   })
 
   it('reports "denied" when the owner unticks calendar access', async () => {
     const response = await callback('openid email')
-    expect(response.headers.get('location')).toBe('http://keeply.local/appliances/a/approve?calendar=denied')
+    expect(response.headers.get('location')).toBe('http://keeply.local/appliances/a/plan?calendar=denied')
     expect(response.cookies.get('keeply_gcal_token')?.value ?? '').toBe('')
   })
 

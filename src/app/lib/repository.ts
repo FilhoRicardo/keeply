@@ -9,12 +9,10 @@ type Env = { url?: string; anonKey?: string }
 const ENV: Env = { url: process.env.NEXT_PUBLIC_SUPABASE_URL, anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY }
 
 // Supabase when the project is configured, device storage otherwise (local dev, previews).
-// v0.1 signs visitors in anonymously: no account screen, RLS still isolates each visitor.
+// Visitors are signed in anonymously until they sign in with Google; RLS isolates each visitor.
 export type PlanBackend = {
   repository: PlanRepository
   sink: EventSink
-  // With Supabase: plans saved on this device before the account existed, offered for import.
-  device?: PlanRepository
   account: AccountService
 }
 
@@ -35,7 +33,6 @@ export function createPlanBackend(env: Env = ENV): PlanBackend {
   return {
     repository,
     sink: supabaseSink(db, () => repository.accessToken!()),
-    device: createDevicePlanRepository(),
     account: supabaseAccount(db),
   }
 }

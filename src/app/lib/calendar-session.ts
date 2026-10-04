@@ -71,11 +71,3 @@ export function bearerToken(header: string | null): string | null {
   const match = /^Bearer (\S+)$/.exec(header ?? '')
   return match ? match[1] : null
 }
-
-// Device mode delete: task ids as stored on this device (any short id; events are Keeply-owned by id).
-export function parseTaskIds(body: unknown): string[] | null {
-  const { taskIds } = (body ?? {}) as { taskIds?: unknown }
-  if (!Array.isArray(taskIds) || taskIds.length === 0 || taskIds.length > MAX_EVENTS_PER_REQUEST) return null
-  if (!taskIds.every((id) => typeof id === 'string' && id.length > 0 && id.length <= 100)) return null
-  return [...new Set(taskIds as string[])]
-}

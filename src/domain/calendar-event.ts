@@ -1,11 +1,11 @@
 import { addInterval, type LocalDate } from './dates'
 import { evidenceLabel } from './evidence'
 import { formatInterval } from './format-interval'
-import type { Appliance, Completion, Recommendation, Task } from './model'
+import type { Appliance, ApplianceRecord, MaintenanceTask } from './model'
+import { calendarBound } from './plan'
 import { toRRule } from './recurrence'
-import { nextDue } from './schedule'
 
-// A provider-neutral all-day calendar event. Adapters in src/calendar translate it.
+// A provider-neutral all-day recurring calendar event. Adapters in src/calendar translate it.
 export type CalendarEventDraft = {
   taskId: string
   summary: string
@@ -20,35 +20,40 @@ export function applianceName(appliance: Pick<Appliance, 'manufacturer' | 'model
   return [appliance.manufacturer, appliance.model].filter(Boolean).join(' ') + ' dishwasher'
 }
 
-// fixed_calendar tasks become one recurring event. completion_based tasks become a single
-// event on the next due date, rescheduled when the owner records a completion.
-export function toCalendarEvent(
-  task: Task,
-  recommendation: Recommendation,
-  appliance: Appliance,
-  completions: readonly Completion[] = [],
-): CalendarEventDraft {
-  if (task.status !== 'approved') throw new Error('Only approved tasks may reach a calendar.')
-  if (task.recommendationId !== recommendation.id) throw new Error('Task and recommendation do not match.')
+// One recurring event per accepted task, from the plan's start date. After this the owner
+// manages it in their calendar.
+export function toCalendarEvent(task: MaintenanceTask, appliance: Appliance, startDate: LocalDate): CalendarEventDraft {
+  if (task.status !== 'accepted') throw new Error('Only accepted tasks may reach a calendar.')
+  if (task.applianceId !== appliance.id) throw new Error('Task and appliance do not match.')
 
-  const date = nextDue(task, completions)
-  const source = [recommendation.source.title, recommendation.sourceLocation].filter(Boolean).join(', ')
+  const { source } = task
   const description = [
-    recommendation.description,
+    task.instructions,
     '',
-    `Your schedule: ${formatInterval(task.userInterval)}${task.schedulingMode === 'completion_based' ? ' after each completion' : ''}`,
-    `Recommendation: ${formatInterval(recommendation.recommendedInterval)} (${evidenceLabel(recommendation.evidenceLevel)})`,
-    `Source: ${source}`,
+    `${formatInterval(task.interval)} · ${evidenceLabel(task.evidenceLevel)}`,
+    `Source: ${[source.title, source.location].filter(Boolean).join(', ')}`,
+    ...(source.quote ? [`“${source.quote}”`] : []),
+    ...(source.url ? [source.url] : []),
     '',
-    'Added by Keeply after you approved your maintenance plan.',
+    'Added by Keeply after you approved this task.',
   ].join('\n')
 
   return {
     taskId: task.id,
-    summary: `${recommendation.taskName} · ${applianceName(appliance)}`,
+    summary: `${task.name} · ${applianceName(appliance)}`,
     description,
-    date,
-    endDate: addInterval(date, { count: 1, unit: 'day' }),
-    recurrence: task.schedulingMode === 'fixed_calendar' ? [toRRule(task.userInterval, task.startDate)] : [],
+    date: startDate,
+    endDate: addInterval(startDate, { count: 1, unit: 'day' }),
+    recurrence: [toRRule(task.interval, startDate)],
   }
+}
+
+// Drafts for the given tasks of an approved plan. Rejected, unknown or unapproved tasks are
+// dropped: nothing reaches a calendar before Approval.
+export function draftsForTasks(record: ApplianceRecord, taskIds: readonly string[]): CalendarEventDraft[] {
+  if (!record.approvedAt || !record.startDate) throw new Error('Approve the plan before writing to a calendar.')
+  const wanted = new Set(taskIds)
+  return calendarBound(record)
+    .filter((t) => wanted.has(t.id))
+    .map((t) => toCalendarEvent(t, record.appliance, record.startDate!))
 }
