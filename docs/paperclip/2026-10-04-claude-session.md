@@ -325,6 +325,17 @@ Steps:
 3. Review pass found and fixed: the photo was read with `fetch(data:)`, which the CSP blocks, failing every import with a photo; and a failure part-way left a half-moved appliance. Imports now roll back (delete the new appliance) on any failure, and the photo is decoded locally and uploaded last.
 4. Tests: component (move both; failure keeps the rest and shows the error), integration (full approved plan with completion, notes and calendar link; failure part-way leaves nothing). Testing Library wait raised to 3 s to stop jsdom timing flakes. 210 unit/component, 9 integration, 3 e2e, 43 pgTAP.
 
+### 32. Sign in with Google (Builder 2; reviewer Builder 4)
+
+Ricardo's choice. `src/app/lib/account.ts`, `src/app/components/account-panel.tsx`, provider/backends, `supabase/migrations/20261004230000_profile_sync.sql`, README go-live step 3.
+
+Steps:
+1. Supabase Auth Google provider. An anonymous visitor's "Sign in with Google" links Google to the same account (`linkIdentity`), so their plans are kept and follow them to other devices. If that Google login already has Keeply, the panel says so and offers "Switch to that account" (anonymous plans stay behind; nothing merges silently). Sign out starts a fresh anonymous session. Hidden in device-only mode.
+2. This login is separate from calendar consent (`calendar.events`, `/auth/google`), which stays a narrower, explicit step.
+3. Profile sync trigger: linking Google updates `public.users` email/name (pgTAP).
+4. Review pass found and fixed: sign-out left the app with no session (repository cached the first session forever); the "already has Keeply" conflict arrives in the redirect URL, so it never showed (now read from the callback and the URL tidied); a thrown sign-in left the button disabled.
+5. Tests: account service (link vs plain sign-in, conflict, callback errors), account panel (offer, conflict + switch, signed-in + sign out, hidden in device mode), pgTAP. 220 unit/component, 9 integration, 3 e2e, 44 pgTAP. GoTrue itself is not run locally; the Google provider + Manual linking must be enabled in Supabase (README).
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

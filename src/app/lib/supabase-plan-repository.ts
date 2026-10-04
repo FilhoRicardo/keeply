@@ -58,7 +58,8 @@ export function createSupabasePlanRepository({
   now?: () => string
 }): PlanRepository {
   let session: Promise<void> | null = null
-  const ready = () => (session ??= ensureSession().catch((e) => ((session = null), Promise.reject(e))))
+  // Shared only while in flight: after a sign-out the next call starts a fresh session.
+  const ready = () => (session ??= ensureSession().finally(() => (session = null)))
 
   async function load(): Promise<PlanState> {
     await ready()

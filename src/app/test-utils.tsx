@@ -1,5 +1,6 @@
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import type { AccountService } from './lib/account'
 import { PlanProvider } from './lib/plan-context'
 import { createDevicePlanRepository, memoryStorage, type PlanRepository } from './lib/plan-repository'
 import { noopSink, type EventSink } from './lib/track'
@@ -26,11 +27,12 @@ export function renderWithPlan(
   repository: PlanRepository = testRepository(),
   sink: EventSink = noopSink,
   device?: PlanRepository,
+  account?: AccountService,
 ) {
   return {
     repository,
     ...render(
-      <PlanProvider repository={repository} sink={sink} device={device}>
+      <PlanProvider repository={repository} sink={sink} device={device} account={account}>
         {ui}
       </PlanProvider>,
     ),

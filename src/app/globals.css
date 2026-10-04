@@ -787,3 +787,7 @@ a {
 .import-banner {
   margin-bottom: 14px;
 }
+
+.account-line {
+  margin: 0 0 12px;
+}

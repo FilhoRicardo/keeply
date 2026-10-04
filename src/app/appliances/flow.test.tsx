@@ -545,3 +545,48 @@ describe('moving device plans into the account', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/network down/)
   })
 })
+
+// Lets the provider's async effects (plan load, account lookup) commit inside act().
+const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
+
+describe('account panel', () => {
+  const service = (account: import('../lib/account').Account, result = { ok: true } as import('../lib/account').SignInResult) => ({
+    current: vi.fn(async () => account),
+    onChange: () => () => {},
+    signInWithGoogle: vi.fn(async () => result),
+    switchToGoogleAccount: vi.fn(async () => ({ ok: true }) as const),
+    signOut: vi.fn(async () => {}),
+  })
+
+  it('offers Google sign-in to an anonymous visitor', async () => {
+    const accounts = service({ kind: 'anonymous' })
+    renderWithPlan(<Home />, repo, undefined, undefined, accounts)
+    await settle()
+    await act(async () => fireEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' })))
+    expect(accounts.signInWithGoogle).toHaveBeenCalled()
+  })
+
+  it('offers to switch when that Google login already has Keeply', async () => {
+    const accounts = service({ kind: 'anonymous' }, { ok: false, reason: 'already_registered', message: 'That Google account already has Keeply plans.' })
+    renderWithPlan(<Home />, repo, undefined, undefined, accounts)
+    await settle()
+    await act(async () => fireEvent.click(await screen.findByRole('button', { name: 'Sign in with Google' })))
+    expect(screen.getByRole('alert')).toHaveTextContent(/already has Keeply/)
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Switch to that account' })))
+    expect(accounts.switchToGoogleAccount).toHaveBeenCalled()
+  })
+
+  it('shows who is signed in and signs out', async () => {
+    const accounts = service({ kind: 'google', email: 'r@example.com', name: 'R' })
+    renderWithPlan(<Home />, repo, undefined, undefined, accounts)
+    expect(await screen.findByText(/Signed in as r@example.com/)).toBeInTheDocument()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Sign out' })))
+    expect(accounts.signOut).toHaveBeenCalled()
+  })
+
+  it('is hidden in device-only mode', async () => {
+    renderWithPlan(<Home />, repo)
+    await screen.findByText('No appliances yet.')
+    expect(screen.queryByRole('button', { name: 'Sign in with Google' })).not.toBeInTheDocument()
+  })
+})

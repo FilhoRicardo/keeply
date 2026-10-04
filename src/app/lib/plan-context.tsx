@@ -5,6 +5,7 @@ import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
 import type { Customisation, Decision } from '@/domain/plan'
 import type { PlanRepository } from './plan-repository'
+import { deviceAccount, type Account, type AccountService, type SignInResult } from './account'
 import { createPlanBackend, type PlanBackend } from './repository'
 import { findRecord, type NewApplianceInput, type PlanState } from './plan-state'
 import { defaultSink, safeTrack, type EventSink } from './track'
@@ -12,6 +13,13 @@ import { defaultSink, safeTrack, type EventSink } from './track'
 type PlanContextValue = {
   // null until the repository has loaded (server render, hydration, network).
   state: PlanState | null
+  // Who is signed in (device / anonymous / Google) and how to change it.
+  account: Account | null
+  // A Google sign-in that failed after the redirect back (e.g. login already has Keeply).
+  signInProblem: SignInResult | null
+  signInWithGoogle(): Promise<SignInResult>
+  switchToGoogleAccount(): Promise<SignInResult>
+  signOut(): Promise<void>
   // Dishwashers saved only on this device that can move into the Supabase account.
   pendingImport: number
   importDevicePlan(): Promise<void>
@@ -45,15 +53,19 @@ export function PlanProvider({
   repository,
   sink,
   device,
+  account: accountService,
   children,
 }: {
   repository?: PlanRepository
   sink?: EventSink
   device?: PlanRepository
+  account?: AccountService
   children: ReactNode
 }) {
   const [backend] = useState<PlanBackend>(() =>
-    repository ? { repository, sink: sink ?? defaultSink(), device } : createPlanBackend(),
+    repository
+      ? { repository, sink: sink ?? defaultSink(), device, account: accountService ?? deviceAccount }
+      : createPlanBackend(),
   )
   const repo = backend.repository
   const track = sink ?? backend.sink
@@ -61,6 +73,31 @@ export function PlanProvider({
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [pendingImport, setPendingImport] = useState(0)
+  const [account, setAccount] = useState<Account | null>(null)
+  const [signInProblem, setSignInProblem] = useState<SignInResult | null>(null)
+
+  useEffect(() => {
+    let live = true
+    backend.account.redirectProblem?.().then((p) => live && p && setSignInProblem(p), () => {})
+    return () => {
+      live = false
+    }
+  }, [backend.account])
+
+  // Track the signed-in account; a sign-in or sign-out changes whose plans are shown.
+  useEffect(() => {
+    let live = true
+    const refresh = () => backend.account.current().then((a) => live && setAccount(a), () => {})
+    refresh()
+    const unsubscribe = backend.account.onChange(() => {
+      refresh()
+      setAttempt((n) => n + 1)
+    })
+    return () => {
+      live = false
+      unsubscribe()
+    }
+  }, [backend.account])
   // Mutations run one at a time, so a slower earlier response can never overwrite a newer state.
   const queue = useRef<Promise<unknown>>(Promise.resolve())
 
@@ -116,6 +153,15 @@ export function PlanProvider({
       error,
       retry: () => setAttempt((n) => n + 1),
       pendingImport,
+      account,
+      signInProblem,
+      signInWithGoogle: () => backend.account.signInWithGoogle(),
+      switchToGoogleAccount: () => backend.account.switchToGoogleAccount(),
+      async signOut() {
+        await backend.account.signOut()
+        setState(null)
+        setAttempt((n) => n + 1)
+      },
       async importDevicePlan() {
         const { device } = backend
         if (!device || !repo.importRecord) return
@@ -176,7 +222,7 @@ export function PlanProvider({
         return next
       },
     }
-  }, [repo, state, error, track, pendingImport, backend])
+  }, [repo, state, error, track, pendingImport, backend, account, signInProblem])
 
   return (
     <PlanContext.Provider value={value}>

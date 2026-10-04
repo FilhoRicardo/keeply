@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(15);
+select plan(16);
 
 -- Two owners. The auth trigger gives each a profile and a home.
 insert into auth.users (id, email) values
@@ -93,6 +93,14 @@ select throws_ok(
   $$ insert into public.maintenance_completions (maintenance_task_id, completed_on, notes)
      values ('40000000-0000-0000-0000-000000000001', '2026-06-06', repeat('x', 281)) $$,
   '23514', null, 'completion notes stay short'
+);
+
+update auth.users set email = 'linked@example.com', raw_user_meta_data = '{"full_name": "Linked Owner"}'
+where id = '00000000-0000-0000-0000-00000000000a';
+select is(
+  (select email || ' / ' || name from public.users where id = '00000000-0000-0000-0000-00000000000a'),
+  'linked@example.com / Linked Owner',
+  'linking Google updates the profile'
 );
 
 -- Row-level security.

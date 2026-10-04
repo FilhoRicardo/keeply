@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { deviceAccount, supabaseAccount, type AccountService } from './account'
 import { createDevicePlanRepository, type PlanRepository } from './plan-repository'
 import { createSupabasePlanRepository } from './supabase-plan-repository'
 import { defaultSink, supabaseSink, type EventSink } from './track'
@@ -14,11 +15,12 @@ export type PlanBackend = {
   sink: EventSink
   // With Supabase: plans saved on this device before the account existed, offered for import.
   device?: PlanRepository
+  account: AccountService
 }
 
 export function createPlanBackend(env: Env = ENV): PlanBackend {
   if (!env.url || !env.anonKey || typeof window === 'undefined') {
-    return { repository: createDevicePlanRepository(), sink: defaultSink() }
+    return { repository: createDevicePlanRepository(), sink: defaultSink(), account: deviceAccount }
   }
   const db = createClient(env.url, env.anonKey)
   const repository = createSupabasePlanRepository({
@@ -30,7 +32,12 @@ export function createPlanBackend(env: Env = ENV): PlanBackend {
       if (error) throw new Error(`Could not start a Keeply session: ${error.message}`)
     },
   })
-  return { repository, sink: supabaseSink(db, () => repository.accessToken!()), device: createDevicePlanRepository() }
+  return {
+    repository,
+    sink: supabaseSink(db, () => repository.accessToken!()),
+    device: createDevicePlanRepository(),
+    account: supabaseAccount(db),
+  }
 }
 
 export function createPlanRepository(env: Env = ENV): PlanRepository {
