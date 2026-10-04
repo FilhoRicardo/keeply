@@ -187,6 +187,12 @@ Steps:
 1. Cache-first for `/_next/static/*` (content-hashed, immutable); old caches removed on activate. Pages stay network-first with the offline page as fallback; plan data is never cached by the worker.
 2. e2e: after one visit the worker controls the page, static files are cached, and an offline navigation shows the offline page. 3/3 e2e pass.
 
+### 18. Fix: overlapping saves could show stale decisions (Builder 1; reviewer Builder 3)
+
+`src/app/lib/plan-context.tsx`.
+
+Found in self-review: with a network store, two quick taps (e.g. Include on one card, Skip on another) ran concurrently; if the first response arrived last, its older snapshot overwrote the newer state and a saved decision looked missing. Mutations now run one at a time through a queue. Regression test fails without the fix and passes with it.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

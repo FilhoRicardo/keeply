@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
 import type { Customisation, Decision } from '@/domain/plan'
@@ -44,6 +44,8 @@ export function PlanProvider({
   const [state, setState] = useState<PlanState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+  // Mutations run one at a time, so a slower earlier response can never overwrite a newer state.
+  const queue = useRef<Promise<unknown>>(Promise.resolve())
 
   // Google OAuth returns with ?calendar=connected: record it once and tidy the URL.
   useEffect(() => {
@@ -74,9 +76,14 @@ export function PlanProvider({
   }, [repo, attempt])
 
   const value = useMemo<PlanContextValue>(() => {
-    const apply = async (pending: Promise<PlanState>) => {
+    const serial = <T,>(op: () => Promise<T>): Promise<T> => {
+      const run = queue.current.then(op, op)
+      queue.current = run.catch(() => {})
+      return run
+    }
+    const apply = async (op: () => Promise<PlanState>) => {
       try {
-        const next = await pending
+        const next = await serial(op)
         setState(next)
         setError(null)
         return next
@@ -94,7 +101,7 @@ export function PlanProvider({
       async addAppliance(input) {
         let added: Awaited<ReturnType<PlanRepository['addAppliance']>>
         try {
-          added = await repo.addAppliance(input)
+          added = await serial(() => repo.addAppliance(input))
         } catch (e) {
           setError(e instanceof Error ? e.message : String(e))
           throw e
@@ -108,27 +115,27 @@ export function PlanProvider({
         return applianceId
       },
       async setDecision(applianceId, recommendationId, decision) {
-        const next = await apply(repo.setDecision(applianceId, recommendationId, decision))
+        const next = await apply(() => repo.setDecision(applianceId, recommendationId, decision))
         if (decision) safeTrack(track, { name: 'recommendation_decided', applianceId, decision: decision.kind })
         return next
       },
       async approve(applianceId, start) {
-        const next = await apply(repo.approve(applianceId, start))
+        const next = await apply(() => repo.approve(applianceId, start))
         const tasks = findRecord(next, applianceId)?.tasks ?? []
         const approved = tasks.filter((t) => t.status === 'approved').length
         safeTrack(track, { name: 'plan_approved', applianceId, approved, skipped: tasks.length - approved })
         return next
       },
       async recordCalendarResults(applianceId, results) {
-        const next = await apply(repo.recordCalendarResults(applianceId, results))
+        const next = await apply(() => repo.recordCalendarResults(applianceId, results))
         const count = results.filter((r) => r.ok).length
         if (count > 0) safeTrack(track, { name: 'calendar_tasks_created', applianceId, count })
         return next
       },
-      deleteAppliance: (applianceId) => apply(repo.deleteAppliance(applianceId)),
-      updateTaskSchedule: (applianceId, taskId, schedule) => apply(repo.updateTaskSchedule(applianceId, taskId, schedule)),
+      deleteAppliance: (applianceId) => apply(() => repo.deleteAppliance(applianceId)),
+      updateTaskSchedule: (applianceId, taskId, schedule) => apply(() => repo.updateTaskSchedule(applianceId, taskId, schedule)),
       async addCompletion(applianceId, taskId, date) {
-        const next = await apply(repo.addCompletion(applianceId, taskId, date))
+        const next = await apply(() => repo.addCompletion(applianceId, taskId, date))
         safeTrack(track, { name: 'task_completed', applianceId })
         return next
       },

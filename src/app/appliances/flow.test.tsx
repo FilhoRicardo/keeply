@@ -324,3 +324,31 @@ describe('changing a schedule after approval', () => {
     expect(last.drafts).toEqual([expect.objectContaining({ taskId: 'task-1', recurrence: ['RRULE:FREQ=WEEKLY;INTERVAL=6'] })])
   })
 })
+
+describe('overlapping saves', () => {
+  it('applies decisions in order even when an earlier save is slower', async () => {
+    await addDishwasher()
+    const base = repo
+    let first = true
+    const slow: PlanRepository = {
+      ...base,
+      // Like a network store: the write lands at once, the snapshot comes back late.
+      async setDecision(a, r, d) {
+        const snapshot = await base.setDecision(a, r, d)
+        if (first) {
+          first = false
+          await new Promise((resolve) => setTimeout(resolve, 30))
+        }
+        return snapshot
+      },
+    }
+    renderWithPlan(<PlanReview applianceId="app-1" />, slow)
+    const filter = await screen.findByRole('article', { name: 'Clean the filter' })
+    const arms = screen.getByRole('article', { name: 'Check the spray arms' })
+    fireEvent.click(within(filter).getByRole('button', { name: 'Include' }))
+    fireEvent.click(within(arms).getByRole('button', { name: 'Skip' }))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 80)))
+    expect(within(arms).getByRole('button', { name: 'Skip' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(filter).getByRole('button', { name: 'Include' })).toHaveAttribute('aria-pressed', 'true')
+  })
+})
