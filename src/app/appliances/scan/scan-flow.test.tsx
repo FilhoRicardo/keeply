@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, fireEvent, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ApplianceRecognizer } from '@/domain/identification'
+import { noRecognizer, type ApplianceRecognizer } from '@/domain/identification'
 import { scanEnabled } from '../../lib/features'
 import type { PlanRepository } from '../../lib/plan-repository'
 import { findRecord } from '../../lib/plan-state'
@@ -26,7 +26,7 @@ async function takePhoto() {
 
 describe('ScanFlow without recognition (v0.1)', () => {
   it('guides the photo, says nothing was read, and keeps the photo with the typed identity', async () => {
-    renderWithPlan(<ScanFlow />, repo)
+    renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo)
     expect(screen.getByText(/photograph the label/i)).toBeInTheDocument()
     await takePhoto()
 

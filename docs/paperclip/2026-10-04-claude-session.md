@@ -274,6 +274,15 @@ Steps:
 3. Review pass found and fixed: a failed removal (not connected / expired token) was never retried, and an expired token was not reflected. The calendar panel now lists paused tasks whose reminders still exist, with "Remove from Google Calendar", and 401 flips the screen to Connect.
 4. Tests: domain, Google delete (404/410 tolerated), component pause/resume and failed-removal retry, integration (RLS, paused-only delete). 196 unit/component, 7 integration, 3 e2e pass.
 
+### 27. `/api/identify`: server seam for label recognition (Builder 1; reviewer Builder 3)
+
+`src/app/api/identify/route.ts`, `src/app/lib/identify.ts`; scan screen uses `httpRecognizer` by default.
+
+Steps:
+1. The scan screen posts the prepared photo to `/api/identify` (only when `NEXT_PUBLIC_KEEPLY_SCAN=1`, else 404). JPEG/PNG/WebP under 5 MB only. The photo is not stored by this route.
+2. `serverRecognizer()` returns `noRecognizer` in v0.1. The AI step later implements it on the server, so API keys never reach the browser; malformed proposals are dropped and any proposal is still only confirmed by the owner.
+3. Tests: route (off by default, photo validation, returns null). Real-browser check with the flag on: no errors. 199 unit/component pass.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

@@ -5,11 +5,11 @@ import { useEffect, useId, useState } from 'react'
 import {
   editIdentification,
   emptyIdentification,
-  noRecognizer,
   validateIdentification,
   type ApplianceIdentification,
   type ApplianceRecognizer,
 } from '@/domain/identification'
+import { httpRecognizer } from '../../lib/identify'
 import { usePlan } from '../../lib/plan-context'
 import { prepareLabelPhoto } from '../../lib/photo'
 
@@ -18,7 +18,8 @@ type Step =
   | { kind: 'reading'; photo: Blob; preview: string | null }
   | { kind: 'confirm'; photo: Blob; preview: string | null; identification: ApplianceIdentification; recognised: boolean; editing: boolean }
 
-export function ScanFlow({ recognizer = noRecognizer }: { recognizer?: ApplianceRecognizer }) {
+// Defaults to the server's recogniser (/api/identify), which proposes nothing in v0.1.
+export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: ApplianceRecognizer }) {
   const id = useId()
   const router = useRouter()
   const { addAppliance } = usePlan()
