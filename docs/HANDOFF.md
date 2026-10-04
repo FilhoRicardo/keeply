@@ -842,3 +842,37 @@ used by `/api/identify`) picks ChatGPT-authorized → BYO key →
 Keeply-hosted → Manual; only Manual is implemented. Any
 AI output is still only a proposal the owner confirms, and evidence
 levels are still enforced by `unsupportedEvidence` and the database.
+
+------------------------------------------------------------------------
+
+## 23. Owner decisions for the full magic-minute build (2026-10-04)
+
+Decided by Ricardo on 2026-10-04. These replace earlier wording where they
+conflict.
+
+-   **Finish line:** the full magic-minute flow (Phases 2--4): photo →
+    identification → manual retrieval → evidence-labelled plan →
+    approval → Google Calendar.
+-   **Order:** merge the current branch into `main` and deploy v0.1
+    first (free Vercel address, owner sets up Supabase, Google OAuth
+    and Vercel with step-by-step guidance), then build Phase 3 on a new
+    branch.
+-   **Manual retrieval:** web search (Brave Search API, server-side key)
+    for the manufacturer's own manual or support page, then the AI
+    provider (MiniMax) extracts candidate maintenance tasks with a page
+    reference and a verbatim quote.
+-   **Evidence rule for AI-read manuals:** a task may be labelled
+    **Manufacturer verified** only when its quote is found, by code and
+    not by the model, in the text of a document hosted by the
+    manufacturer, and the link and page are shown. Anything else is
+    downgraded (similar-model or general guidance). The AI is still not
+    the source of the interval; the manufacturer's document is.
+-   **AI for testers:** Keeply may fund AI for invited testers only:
+    an invite code is required, with at most 5 AI runs per tester per day
+    and 100 in total per day (one run = one photo read or one manual
+    read). Past the cap, Manual takes over. The owner confirms that
+    MiniMax's Token Plan terms allow this before enabling it. Not open to
+    the public.
+-   **Branding:** still open; deploy under a free Vercel address.
+-   **Paperclip:** keep the step log in `docs/paperclip/`; no handover
+    to other sessions and no Paperclip issue changes by Claude.
