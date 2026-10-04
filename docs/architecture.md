@@ -6,8 +6,16 @@ Next.js (App Router) + TypeScript `strict`, pnpm, ESLint, Vitest. Verify with `p
 |---|---|---|
 | `src/domain/` | Pure plan logic, no IO: Recommendation → Task decisions, Approval rules, interval → recurrence mapping. Most tests live here. | itself only |
 | `src/db/` | Supabase client and queries. The only module that talks to Postgres. | `domain` |
-| `src/calendar/` | Google Calendar adapter behind a small `CalendarWriter` interface (shape comes from the KEE-4 spike). | `domain` |
+| `src/calendar/` | Google Calendar adapter and OAuth helpers behind a small `CalendarWriter` interface. | `domain` |
 | `src/app/` | Routes and UI only. Calls domain, db and calendar; holds no business rules. | all of the above |
+
+## Phase 1 flow
+
+`/` → `/appliances/new` → `/appliances/[id]/plan` (Include / Customise / Skip) → `/appliances/[id]/approve` → `/appliances/[id]` (record, next due, completions).
+
+- Until a Supabase project exists, plan state lives in browser storage: `src/app/lib/plan-state.ts` (pure transitions, tested) and `plan-store.ts` (localStorage + `useSyncExternalStore`). Replace the store with `src/db` queries when Supabase is provisioned.
+- Google Calendar: `/auth/google/start` and `/auth/google/callback` (state cookie, `calendar.events` scope, access token in an httpOnly cookie scoped to `/api/calendar`). `/api/calendar/status` reports configured/connected; `POST /api/calendar/events` validates drafts and writes them. Without `GOOGLE_*` env vars, approval saves on the device only.
+- Event ids are derived from Task ids, so retrying a write never duplicates an event.
 
 ## Rules
 
