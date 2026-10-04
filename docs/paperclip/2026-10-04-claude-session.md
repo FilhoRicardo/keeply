@@ -346,6 +346,16 @@ Ricardo's instruction (2026-10-04): spell out the architecture and research Open
 
 Owner action: submit OpenAI's Sign in with ChatGPT interest form for the hosted app.
 
+### 34. AI provider layer, Manual only (Builder 1; reviewer Builder 3)
+
+Step 1 of `docs/ai/chatgpt-integration-plan.md`; no OpenAI calls, so within AGENTS.md rule 8. `src/ai/provider.ts`, `/api/identify`.
+
+Steps:
+1. `selectProvider()` picks the first available of ChatGPT-authorized → BYO API key → Keeply-hosted → Manual; a failing provider falls through; Manual always serves. Only Manual is implemented.
+2. Provider context is separate from Keeply login (an `authorisation` for AI usage, not the Supabase session), per HANDOFF §22.
+3. `src/ai` is server-only (`server-only` package): importing it from browser code fails the build (verified by a deliberate leak). Domain lint boundary now covers `src/ai`.
+4. Tests: order, first-available, fall-through, Manual whatever the env says. 224 unit/component pass.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

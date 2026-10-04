@@ -837,7 +837,8 @@ tokens/credentials securely and follow OpenAI's current security
 requirements. If OpenAI changes the feature, only provider A changes;
 Keeply is not redesigned.
 
-Code seam today: `serverRecognizer()` in `src/app/lib/identify.ts`
-(behind `/api/identify`) is where a provider's recogniser plugs in. Any
+Code seam today: `selectProvider()` in `src/ai/provider.ts` (server-only,
+used by `/api/identify`) picks ChatGPT-authorized → BYO key →
+Keeply-hosted → Manual; only Manual is implemented. Any
 AI output is still only a proposal the owner confirms, and evidence
 levels are still enforced by `unsupportedEvidence` and the database.

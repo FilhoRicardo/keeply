@@ -42,6 +42,6 @@ Migrations `20261004120000` … `20261004220000`: schema + RLS, plan decisions, 
 
 ## Open decisions
 
-- Anonymous sign-in vs a real login (anonymous plans are lost if the browser session is cleared).
-- When to enable scanning, and which recogniser implements `serverRecognizer()` (Phase 2 AI).
+- Sign in with Google is built (anonymous plans upgrade in place); enable the Supabase Google provider and Manual linking to switch it on.
+- When to enable scanning, and which AI provider in `src/ai/provider.ts` is built first (Phase 2 AI; ChatGPT only after the research in `docs/ai/chatgpt-integration-plan.md` is confirmed).
 - Who fills the guidance catalog, from which manuals (`docs/guidance-catalog.md`).

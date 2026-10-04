@@ -1,13 +1,7 @@
-import { noRecognizer, type ApplianceIdentification, type ApplianceRecognizer } from '@/domain/identification'
+import type { ApplianceIdentification, ApplianceRecognizer } from '@/domain/identification'
 
 export const MAX_PHOTO_BYTES = 5_000_000
 export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
-
-// The recogniser the server uses. v0.1 has none; an AI-backed one goes here, keeping its API
-// key on the server. Whatever it returns is only a proposal the owner confirms or corrects.
-export function serverRecognizer(): ApplianceRecognizer {
-  return noRecognizer
-}
 
 export function checkPhoto(photo: { size: number; type: string } | null): string | null {
   if (!photo) return 'Attach a photo.'

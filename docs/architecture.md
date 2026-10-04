@@ -7,6 +7,7 @@ Next.js (App Router) + TypeScript `strict`, pnpm, ESLint, Vitest. Verify with `p
 | `src/domain/` | Pure plan logic, no IO: Recommendation → Task decisions, Approval rules, interval → recurrence mapping. Most tests live here. | itself only |
 | `src/db/` | Supabase client and queries. The only module that talks to Postgres. | `domain` |
 | `src/calendar/` | Google Calendar adapter and OAuth helpers behind a small `CalendarWriter` interface. | `domain` |
+| `src/ai/` | Server-only AI provider layer (`selectProvider`: ChatGPT-authorized → BYO key → Keeply-hosted → Manual). Holds any AI credentials; never imported by client code (`server-only`). Separate from Keeply login. | `domain` |
 | `src/app/` | Routes and UI only. Calls domain, db and calendar; holds no business rules. | all of the above |
 
 ## Phase 1 flow

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { validateIdentification, type ApplianceIdentification } from '@/domain/identification'
-import { checkPhoto, serverRecognizer } from '../../lib/identify'
+import { selectProvider } from '@/ai/provider'
+import { checkPhoto } from '../../lib/identify'
 import { scanEnabled } from '../../lib/features'
 
 // Reads an appliance label photo. The photo is not stored here; the owner's confirmed photo is
@@ -13,7 +14,7 @@ export async function POST(request: NextRequest) {
   const problem = checkPhoto(file)
   if (problem) return NextResponse.json({ error: problem }, { status: 400 })
 
-  const proposal = await serverRecognizer().recognise(file!).catch(() => null)
+  const proposal = await selectProvider({ env: process.env }).recogniser.recognise(file!).catch(() => null)
   // Never pass on a malformed proposal.
   const identification = wellFormed(proposal) ? proposal : null
   return NextResponse.json({ identification }, { headers: { 'Cache-Control': 'no-store' } })
