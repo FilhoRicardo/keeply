@@ -36,6 +36,7 @@ Code: `src/ai/minimax.ts` (all MiniMax request/response handling), `src/ai/ident
   - Uncertain cases (synthetic, rendered in the session): whole dishwasher front with no plate → `unknown`, all null (twice); the same BUSH plate blurred and low-contrast → `dishwasher`, all fields null, confidence 0.2, then `unknown`; Keeply icon → `unknown`, all null (twice). In every case nothing was invented and the app showed the neutral "could not read a dishwasher label" message with the manual form. Clear synthetic BUSH plate → exact (2/2).
   - Fallback: MiniMax unreachable (dead base URL) → server logs "[identify] minimax failed: fetch failed", manual form, owner-typed save with confidence null; server without `MINIMAX_API_KEY` → manual form, zero MiniMax calls.
   - Still true: confidence does not flag misreads (the WY answers were 0.97–0.98), so the owner's check stays essential. One plate is not an accuracy rate; more real labels are needed before invited users.
+- 2026-10-04 21:00 UTC, **hosted (Vercel Preview, owner only)**: `e529dd4` with branch-scoped Preview variables, behind Vercel login. Two uploads in the owner's browser, two MiniMax calls: real BUSH plate → BUSH / WV9-6S / 150804092, confirmed by the owner and saved; whole-dishwasher photo → nothing proposed, manual form. First proof on the deployed stack (Vercel function → MiniMax-M3 with the Token Plan key).
 
 ## Account
 

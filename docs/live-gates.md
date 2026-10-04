@@ -12,6 +12,8 @@ Environment under test: Vercel Preview of branch `claude/dazzling-mayer-ytyahw` 
 | G1 Anonymous session and persistence | 2026-10-04 | First attempt failed with "Anonymous sign-ins are disabled"; owner enabled them. Manual Bosch add then reached the three-task plan; `appliances` had the Bosch row and `maintenance_tasks` exactly 3 linked rows (general guidance, proposed); both survived a reload. |
 | G2 Approval → Google Calendar | 2026-10-04 | `GOOGLE_*` saved for Preview only (secret values never in chat); redeploy Ready; owner completed OAuth. Bosch appliance `09e14405-9f89-4ea9-b260-d246efde2661` approved with "Clean the filter" accepted, the other two rejected. Keeply showed "Plan approved" and the task as Added. Google Calendar shows one all-day event "Clean the filter · Bosch dishwasher" on 4 Oct 2026, monthly on day 4, with instructions, the general-guidance source and the approval line. In `maintenance_tasks` the accepted task has `calendar_event_id` `kp6163…3131` (Keeply's deterministic id); both rejected tasks are NULL. |
 
+| G8 AI label reading on the hosted preview (owner only) | 2026-10-04 | Preview of `e529dd4` rebuilt with branch-scoped Preview variables (`MINIMAX_API_KEY` Secret, `MINIMAX_MODEL=MiniMax-M3`, `NEXT_PUBLIC_KEEPLY_SCAN=1`); Deployment Protection: Standard, Require Log In, no exceptions. Exactly two uploads in the owner's browser: (1) the real BUSH plate → confirm screen Dishwasher / BUSH / WV9-6S / 150804092 with the look-alike reminder and Confirm / Edit / Rescan; nothing saved until the owner pressed Confirm; saved appliance `e8dd832b-5ff0-47d8-a6d5-eeeb4ed57927` and opened its plan with 3 undecided general-guidance tasks. (2) A real photo of a whole dishwasher with no readable label → the neutral "could not read a dishwasher label" message and a blank manual form; no identity invented; not saved. Production and invited-user scanning stay off. |
+
 ## Open (not yet verified live)
 
 ### G3 Isolation between visitors (owner, about 2 minutes)
@@ -32,7 +34,7 @@ Expected from G1–G2: `appliance_added`, `plan_proposed` (`tasks: 3, verified: 
 
 ### G5 Sign in with Google (account identity; separate from Calendar)
 
-Not configured yet: the button is visible but fails until these owner steps are done.
+Google provider enabled in Supabase with the client ID and secret (2026-10-04). Still to confirm: the Supabase callback URI on the Google client, Manual linking, the URL configuration, then the test.
 
 1. Google Cloud → the same OAuth client "Keeply preview" → add Authorized redirect URI `https://xmilbvzbptmozwjphvsx.supabase.co/auth/v1/callback`.
 2. Supabase → Authentication → Sign In / Providers → **Google**: enable, paste the client ID and secret (owner, directly).
