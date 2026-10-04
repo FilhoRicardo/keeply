@@ -170,6 +170,17 @@ export async function updateTaskSchedule(db: SupabaseClient, task: Task) {
   )
 }
 
+export async function setTaskStatus(db: SupabaseClient, taskId: string, from: Task['status'], to: Task['status']) {
+  const { data, error } = await db.from('maintenance_tasks').update({ status: to }).eq('id', taskId).eq('status', from).select('id')
+  if (error) throw new Error(`Supabase: ${error.message}`)
+  if (!data || data.length === 0) throw new Error(`Task ${taskId} is not ${from}.`)
+}
+
+export async function clearCalendarEventIds(db: SupabaseClient, taskIds: readonly string[]) {
+  if (taskIds.length === 0) return
+  check(await db.from('maintenance_tasks').update({ calendar_event_id: null }).in('id', [...taskIds]))
+}
+
 export const PHOTO_BUCKET = 'appliance-photos'
 
 // Uploads the label photo to the owner's folder (RLS on storage.objects) and links it.

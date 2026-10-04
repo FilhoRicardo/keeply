@@ -19,13 +19,19 @@ vi.mock('next/navigation', () => ({
 
 type Calls = { url: string; body?: unknown }[]
 
-function mockFetch(status: { configured: boolean; connected: boolean }, calls: Calls) {
+function mockFetch(status: { configured: boolean; connected: boolean }, calls: Calls, opts: { failDeletes?: number } = {}) {
+  let failDeletes = opts.failDeletes ?? 0
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, body: init?.body ? JSON.parse(init.body as string) : undefined })
       if (url === '/api/calendar/status') return Response.json(status)
       if (url === '/api/calendar/disconnect') return Response.json({ connected: false })
+      if (url === '/api/calendar/events' && init?.method === 'DELETE') {
+        if (failDeletes-- > 0) return new Response(null, { status: 502 })
+        const { taskIds } = JSON.parse(init.body as string) as { taskIds: string[] }
+        return Response.json({ results: taskIds.map((taskId) => ({ taskId, ok: true })) })
+      }
       if (url === '/api/calendar/events') {
         const { drafts } = JSON.parse(init!.body as string) as { drafts: { taskId: string }[] }
         return Response.json({ results: drafts.map((d) => ({ taskId: d.taskId, ok: true, eventId: `evt-${d.taskId}` })) })
@@ -420,5 +426,51 @@ describe('curated guidance on the plan screen', () => {
     expect(screen.getByText(/shows where its guidance comes from/)).toBeInTheDocument()
     fireEvent.click(within(card).getByRole('button', { name: 'Why? / View source' }))
     expect(within(card).getByText(/Fixture manual, p\. 40/)).toBeInTheDocument()
+  })
+})
+
+describe('pausing and resuming a task', () => {
+  it('removes the reminder from the calendar on pause and adds it back on resume', async () => {
+    const calls: Calls = []
+    mockFetch({ configured: true, connected: true }, calls)
+    await addDishwasher()
+    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
+    await approveWith()
+    expect((await record()).tasks[0].calendarEventId).toBe('evt-task-1')
+
+    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
+    await screen.findByRole('heading', { name: 'Clean the filter' })
+    await waitFor(() => expect(calls.filter((c) => c.url === '/api/calendar/status').length).toBeGreaterThan(1))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Pause reminders' })))
+
+    expect(await screen.findByText('Paused. Its reminder was removed from Google Calendar.')).toBeInTheDocument()
+    expect(screen.getByText('Paused')).toBeInTheDocument()
+    expect(calls.some((c) => c.url === '/api/calendar/events' && (c.body as { taskIds?: string[] }).taskIds?.[0] === 'task-1')).toBe(true)
+    expect((await record()).tasks[0]).toMatchObject({ status: 'paused', calendarEventId: null })
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Resume' })))
+    expect(await screen.findByText('Resumed and back in Google Calendar.')).toBeInTheDocument()
+    expect((await record()).tasks[0]).toMatchObject({ status: 'approved', calendarEventId: 'evt-task-1' })
+  })
+})
+
+describe('a paused task whose reminder could not be removed', () => {
+  it('offers to remove it again later', async () => {
+    const calls: Calls = []
+    mockFetch({ configured: true, connected: true }, calls, { failDeletes: 1 })
+    await addDishwasher()
+    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
+    await approveWith()
+
+    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
+    await screen.findByRole('heading', { name: 'Clean the filter' })
+    await waitFor(() => expect(calls.filter((c) => c.url === '/api/calendar/status').length).toBeGreaterThan(1))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Pause reminders' })))
+    expect(await screen.findByText('Paused, but its Google Calendar reminder could not be removed.')).toBeInTheDocument()
+    expect(screen.getByText('1 paused task still has a reminder in Google Calendar.')).toBeInTheDocument()
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Remove from Google Calendar' })))
+    expect(await screen.findByText('Paused reminders removed from Google Calendar.')).toBeInTheDocument()
+    expect((await record()).tasks[0]).toMatchObject({ status: 'paused', calendarEventId: null })
   })
 })

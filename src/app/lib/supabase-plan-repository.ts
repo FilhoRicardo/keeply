@@ -2,6 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   addApplianceWithRecommendations,
   attachPhoto,
+  clearCalendarEventIds,
+  setTaskStatus,
   signPhotoUrls,
   deleteAppliance,
   updateTaskSchedule,
@@ -128,6 +130,16 @@ export function createSupabasePlanRepository({
       const task = (await record(applianceId)).tasks.find((t) => t.id === taskId)
       if (!task) throw new Error(`Unknown task ${taskId}`)
       await updateTaskSchedule(db, rescheduleTask(task, schedule))
+      return load()
+    },
+    async setTaskPaused(applianceId, taskId, paused) {
+      await record(applianceId)
+      await setTaskStatus(db, taskId, paused ? 'approved' : 'paused', paused ? 'paused' : 'approved')
+      return load()
+    },
+    async clearCalendarEvents(applianceId, taskIds) {
+      await ready()
+      await clearCalendarEventIds(db, taskIds)
       return load()
     },
     async deleteAppliance(applianceId) {

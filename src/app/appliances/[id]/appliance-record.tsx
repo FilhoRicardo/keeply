@@ -14,8 +14,10 @@ import { LoadingPanel, NotFoundPanel } from '../../components/screen'
 import {
   connectUrl,
   disconnectCalendar,
+  removeTaskEvents,
   fetchCalendarStatus,
   needsReschedule,
+  pendingCalendarRemovals,
   pendingCalendarTasks,
   writeApprovedTasks,
   writeTasks,
@@ -35,7 +37,8 @@ const OUTCOME_COPY: Record<string, string> = {
 }
 
 export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
-  const { state, addCompletion, recordCalendarResults, accessToken, updateTaskSchedule } = usePlan()
+  const { state, addCompletion, recordCalendarResults, accessToken, updateTaskSchedule, setTaskPaused, clearCalendarEvents } =
+    usePlan()
   const outcome = useSearchParams().get('approved')
   const [calendar, setCalendar] = useState<CalendarStatus | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -64,16 +67,35 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
   }
 
   const now = today()
-  const approved = record.tasks.filter((t) => t.status === 'approved')
+  const approved = record.tasks.filter((t) => t.status === 'approved' || t.status === 'paused')
   const pending = pendingCalendarTasks(record)
+  const removals = pendingCalendarRemovals(record)
+
+  // Removes paused tasks' events and forgets their ids; returns the task ids removed.
+  async function removeFromCalendar(target: NonNullable<typeof record>, taskIds: readonly string[]): Promise<string[] | null> {
+    const result = await removeTaskEvents(target, taskIds, await accessToken())
+    if (result.kind === 'not_connected') setCalendar((c) => (c ? { ...c, connected: false } : c))
+    if (result.kind !== 'removed') return null
+    if (result.taskIds.length > 0) await clearCalendarEvents(applianceId, result.taskIds).catch(() => {})
+    return result.taskIds
+  }
 
   async function retry() {
     setBusy(true)
     try {
+      const stale = removals.map((t) => t.id)
+      const removed = stale.length > 0 ? await removeFromCalendar(record!, stale) : []
+      const removedAll = removed !== null && stale.every((id) => removed.includes(id))
+      if (pending.length === 0) {
+        setMessage(removedAll ? 'Paused reminders removed from Google Calendar.' : 'Some reminders could not be removed. Try again later.')
+        return
+      }
       const result = await writeApprovedTasks(record!, await accessToken())
       if (result.kind === 'written') {
         await recordCalendarResults(applianceId, result.results)
-        setMessage(result.results.every((r) => r.ok) ? 'Added to Google Calendar.' : 'Some tasks still failed. Try again later.')
+        setMessage(
+          result.results.every((r) => r.ok) && removedAll ? 'Added to Google Calendar.' : 'Some tasks still failed. Try again later.',
+        )
       } else {
         setMessage(result.kind === 'not_connected' ? 'Connect Google Calendar first.' : 'Google Calendar could not be reached.')
         if (result.kind === 'not_connected') setCalendar((c) => (c ? { ...c, connected: false } : c))
@@ -102,6 +124,44 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
       result.kind === 'written' && result.results.every((r) => r.ok)
         ? 'Schedule updated in Keeply and Google Calendar.'
         : 'Schedule updated, but the calendar reminder could not be changed.',
+    )
+  }
+
+  async function pause(taskId: string) {
+    let state
+    try {
+      state = await setTaskPaused(applianceId, taskId, true)
+    } catch {
+      return
+    }
+    const next = findRecord(state, applianceId)!
+    const task = next.tasks.find((t) => t.id === taskId)!
+    if (!task.calendarEventId) return setMessage('Paused. Keeply will not remind you until you resume it.')
+    if (!calendar?.connected) return setMessage('Paused. Connect Google Calendar to remove its reminder.')
+    const removed = await removeFromCalendar(next, [taskId])
+    if (removed?.includes(taskId)) {
+      setMessage('Paused. Its reminder was removed from Google Calendar.')
+    } else {
+      setMessage('Paused, but its Google Calendar reminder could not be removed.')
+    }
+  }
+
+  async function resume(taskId: string) {
+    let state
+    try {
+      state = await setTaskPaused(applianceId, taskId, false)
+    } catch {
+      return
+    }
+    const next = findRecord(state, applianceId)!
+    const task = next.tasks.find((t) => t.id === taskId)!
+    if (!calendar?.connected) return setMessage('Resumed. Connect Google Calendar to add its reminder again.')
+    const result = await writeTasks(next, [task], await accessToken())
+    if (result.kind === 'written') await recordCalendarResults(applianceId, result.results).catch(() => {})
+    setMessage(
+      result.kind === 'written' && result.results.every((r) => r.ok)
+        ? 'Resumed and back in Google Calendar.'
+        : 'Resumed, but its Google Calendar reminder could not be added.',
     )
   }
 
@@ -176,10 +236,14 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
               <dl>
                 <div>
                   <dt>Next due</dt>
-                  <dd className={isOverdue(due, now) ? 'overdue' : undefined}>
-                    {formatDate(due)}
-                    {isOverdue(due, now) && ' (overdue)'}
-                  </dd>
+                  {task.status === 'paused' ? (
+                    <dd>Paused</dd>
+                  ) : (
+                    <dd className={isOverdue(due, now) ? 'overdue' : undefined}>
+                      {formatDate(due)}
+                      {isOverdue(due, now) && ' (overdue)'}
+                    </dd>
+                  )}
                 </div>
                 <div>
                   <dt>Your schedule</dt>
@@ -211,15 +275,24 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
                   onCancel={() => setEditing(null)}
                   onSave={(schedule) => changeSchedule(task.id, schedule)}
                 />
+              ) : task.status === 'paused' ? (
+                <button type="button" className="aster-btn aster-btn--ghost full-width" onClick={() => resume(task.id)}>
+                  Resume
+                </button>
               ) : (
-                <div className="button-row">
-                  <button type="button" className="aster-btn aster-btn--ghost" onClick={() => setEditing(task.id)}>
-                    Change schedule
+                <>
+                  <div className="button-row">
+                    <button type="button" className="aster-btn aster-btn--ghost" onClick={() => setEditing(task.id)}>
+                      Change schedule
+                    </button>
+                    <button type="button" className="aster-btn aster-btn--ghost" onClick={() => markDone(task.id)}>
+                      Mark done today
+                    </button>
+                  </div>
+                  <button type="button" className="link-button" onClick={() => pause(task.id)}>
+                    Pause reminders
                   </button>
-                  <button type="button" className="aster-btn aster-btn--ghost" onClick={() => markDone(task.id)}>
-                    Mark done today
-                  </button>
-                </div>
+                </>
               )}
             </li>
           )
@@ -243,14 +316,22 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
       </ul>
 
       <CalendarReturnNotice />
-      {pending.length > 0 && (
+      {(pending.length > 0 || removals.length > 0) && (
         <section className="calendar-panel aster-inner" aria-label="Google Calendar">
-          <p>
-            {pending.length} approved {pending.length === 1 ? 'task is' : 'tasks are'} not in Google Calendar yet.
-          </p>
+          {pending.length > 0 && (
+            <p>
+              {pending.length} approved {pending.length === 1 ? 'task is' : 'tasks are'} not in Google Calendar yet.
+            </p>
+          )}
+          {removals.length > 0 && (
+            <p>
+              {removals.length} paused {removals.length === 1 ? 'task still has a reminder' : 'tasks still have reminders'} in Google
+              Calendar.
+            </p>
+          )}
           {calendar?.connected ? (
             <button type="button" className="aster-btn aster-btn--primary full-width" disabled={busy} onClick={retry}>
-              Add to Google Calendar
+              {pending.length > 0 ? 'Add to Google Calendar' : 'Remove from Google Calendar'}
             </button>
           ) : calendar?.configured ? (
             <a className="aster-btn aster-btn--ghost full-width" href={connectUrl(`/appliances/${applianceId}`)}>

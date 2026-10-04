@@ -264,6 +264,16 @@ Steps:
 
 Team action: fill the catalog from real manuals using `docs/guidance-catalog.md`.
 
+### 26. Pause and resume a task (Builder 1 + Builder 2; reviewers Builder 3 + Builder 4)
+
+`pauseTask` / `resumeTask` in `src/domain/plan.ts`; `CalendarWriter.deleteEvent`, `removeEvents`; `DELETE /api/calendar/events`; both repositories; record screen.
+
+Steps:
+1. "Pause reminders" on an active task: status becomes paused (schedule and history kept), and its Google event is deleted. Resume makes it active and writes the event again (same id; bodies say `status: confirmed` so a cancelled event is revived).
+2. `DELETE /api/calendar/events`: event ids derive from Keeply task ids, so only Keeply's own events can be removed; with Supabase the server deletes only the caller's paused tasks (another user gets 404).
+3. Review pass found and fixed: a failed removal (not connected / expired token) was never retried, and an expired token was not reflected. The calendar panel now lists paused tasks whose reminders still exist, with "Remove from Google Calendar", and 401 flips the screen to Connect.
+4. Tests: domain, Google delete (404/410 tolerated), component pause/resume and failed-removal retry, integration (RLS, paused-only delete). 196 unit/component, 7 integration, 3 e2e pass.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

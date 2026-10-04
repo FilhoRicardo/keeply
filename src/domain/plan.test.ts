@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { approvalBlockers, approvePlan, calendarBound, canApprove, rescheduleTask, validateCustomisation, type Decisions } from './plan'
+import { approvalBlockers, approvePlan, calendarBound, canApprove, pauseTask, rescheduleTask, resumeTask, validateCustomisation, type Decisions } from './plan'
 import { frozen, recommendation, sequentialIds } from './test-fixtures'
 
 const filter = recommendation()
@@ -116,5 +116,27 @@ describe('rescheduleTask', () => {
   it('refuses skipped tasks and invalid schedules', () => {
     expect(() => rescheduleTask(skipped, change)).toThrow(/approved/)
     expect(() => rescheduleTask(approved, { ...change, interval: { count: 0, unit: 'day' } })).toThrow()
+  })
+})
+
+describe('pause and resume', () => {
+  const [active, skipped] = approvePlan({
+    recommendations: recs,
+    decisions: { [filter.id]: { kind: 'include' }, [rinse.id]: { kind: 'skip' } },
+    defaultStartDate: '2026-10-05',
+    newId: sequentialIds(),
+  })
+
+  it('pauses an active task out of the calendar and resumes it', () => {
+    const paused = pauseTask(active)
+    expect(paused.status).toBe('paused')
+    expect(calendarBound([paused])).toEqual([])
+    expect(resumeTask(paused)).toEqual(active)
+  })
+
+  it('refuses to pause skipped or already paused tasks', () => {
+    expect(() => pauseTask(skipped)).toThrow()
+    expect(() => pauseTask(pauseTask(active))).toThrow()
+    expect(() => resumeTask(active)).toThrow()
   })
 })

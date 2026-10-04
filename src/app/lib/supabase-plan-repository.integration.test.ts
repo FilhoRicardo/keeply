@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net'
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest } from 'next/server'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { POST } from '../api/calendar/events/route'
+import { DELETE, POST } from '../api/calendar/events/route'
 import { findRecord } from './plan-state'
 import { createSupabasePlanRepository } from './supabase-plan-repository'
 import { supabaseSink } from './track'
@@ -235,5 +235,52 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Curated guidance catalog', () => {
 
     const other = await repo.addAppliance({ manufacturer: 'Fixturebrand', model: 'ZZ-1', serialNumber: '' })
     expect(findRecord(other.state, other.applianceId)!.recommendations.every((r) => r.evidenceLevel === 'general_guidance')).toBe(true)
+  })
+})
+
+describe.skipIf(!KEEPLY_POSTGREST_URL)('Pausing with Supabase', () => {
+  it('pauses and resumes under RLS, and only removes events of the caller’s paused tasks', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', supabaseUrl)
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key-unused')
+    const realFetch = globalThis.fetch
+    const deleted: string[] = []
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (!url.startsWith('https://www.googleapis.com/')) return realFetch(input, init)
+      if (init?.method === 'DELETE') deleted.push(url.split('/').pop()!)
+      return new Response(null, { status: 204 })
+    })
+    try {
+      const repo = repoFor(OWNER)
+      const { applianceId, state } = await repo.addAppliance({ manufacturer: 'Bosch', model: '', serialNumber: '' })
+      const [a, b, c] = findRecord(state, applianceId)!.recommendations
+      await repo.setDecision(applianceId, a.id, { kind: 'include' })
+      await repo.setDecision(applianceId, b.id, { kind: 'include' })
+      await repo.setDecision(applianceId, c.id, { kind: 'skip' })
+      const [first, second] = findRecord(await repo.approve(applianceId, '2026-10-05'), applianceId)!.tasks
+
+      const paused = findRecord(await repo.setTaskPaused(applianceId, first.id, true), applianceId)!
+      expect(paused.tasks.map((t) => t.status)).toEqual(['paused', 'approved', 'skipped'])
+      await expect(repo.setTaskPaused(applianceId, first.id, true)).rejects.toThrow()
+
+      const remove = (user: string, taskIds: string[]) =>
+        DELETE(
+          new NextRequest('http://keeply.local/api/calendar/events', {
+            method: 'DELETE',
+            headers: { 'content-type': 'application/json', cookie: 'keeply_gcal_token=g', authorization: `Bearer ${jwt(user)}` },
+            body: JSON.stringify({ applianceId, taskIds }),
+          }),
+        )
+      const response = await remove(OWNER, [first.id, second.id])
+      expect((await response.json()).results.map((r: { taskId: string }) => r.taskId)).toEqual([first.id])
+      expect(deleted).toHaveLength(1)
+      expect((await remove(OTHER, [first.id])).status).toBe(404)
+
+      const resumed = findRecord(await repo.setTaskPaused(applianceId, first.id, false), applianceId)!
+      expect(resumed.tasks[0].status).toBe('approved')
+    } finally {
+      vi.unstubAllGlobals()
+      vi.unstubAllEnvs()
+    }
   })
 })

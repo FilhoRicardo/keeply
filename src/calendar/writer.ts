@@ -5,6 +5,8 @@ import type { CalendarEventDraft } from '@/domain/calendar-event'
 // so retries never duplicate and a completion-based Task can move to its next due date.
 export interface CalendarWriter {
   upsertEvent(draft: CalendarEventDraft): Promise<{ eventId: string }>
+  // Removes the Task's event (e.g. when the owner pauses it). Already gone counts as removed.
+  deleteEvent(taskId: string): Promise<void>
 }
 
 export type WriteResult =
@@ -21,6 +23,21 @@ export async function writeEvents(writer: CalendarWriter, drafts: readonly Calen
       results.push({ taskId: draft.taskId, ok: true, eventId })
     } catch (error) {
       results.push({ taskId: draft.taskId, ok: false, error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+  return results
+}
+
+export type RemoveResult = { taskId: string; ok: true } | { taskId: string; ok: false; error: string }
+
+export async function removeEvents(writer: CalendarWriter, taskIds: readonly string[]): Promise<RemoveResult[]> {
+  const results: RemoveResult[] = []
+  for (const taskId of taskIds) {
+    try {
+      await writer.deleteEvent(taskId)
+      results.push({ taskId, ok: true })
+    } catch (error) {
+      results.push({ taskId, ok: false, error: error instanceof Error ? error.message : String(error) })
     }
   }
   return results

@@ -108,3 +108,15 @@ export function rescheduleTask(task: Task, customisation: Customisation): Task {
     schedulingMode: customisation.schedulingMode,
   }
 }
+
+// Pausing stops a Task reaching the calendar (its event is removed); resuming brings it back.
+// The Task, its schedule and its history are kept.
+export function pauseTask(task: Task): Task {
+  if (task.status !== 'approved') throw new Error('Only active tasks can be paused.')
+  return { ...task, status: 'paused' }
+}
+
+export function resumeTask(task: Task): Task {
+  if (task.status !== 'paused') throw new Error('Only paused tasks can be resumed.')
+  return { ...task, status: 'approved' }
+}

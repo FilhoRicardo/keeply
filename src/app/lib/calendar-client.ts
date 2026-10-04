@@ -76,3 +76,33 @@ export async function disconnectCalendar(): Promise<boolean> {
     return false
   }
 }
+
+// Paused tasks whose event is still in the calendar (removal skipped or failed).
+export function pendingCalendarRemovals(record: ApplianceRecord) {
+  return record.tasks.filter((t) => t.status === 'paused' && t.calendarEventId !== null)
+}
+
+export type CalendarRemoveOutcome = { kind: 'removed'; taskIds: string[] } | { kind: 'not_connected' } | { kind: 'failed' }
+
+// Takes paused tasks' events off the calendar. Only Keeply's own events can be addressed.
+export async function removeTaskEvents(
+  record: ApplianceRecord,
+  taskIds: readonly string[],
+  accessToken: string | null = null,
+): Promise<CalendarRemoveOutcome> {
+  if (taskIds.length === 0) return { kind: 'removed', taskIds: [] }
+  const body = accessToken ? { applianceId: record.appliance.id, taskIds } : { taskIds }
+  try {
+    const response = await fetch('/api/calendar/events', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+      body: JSON.stringify(body),
+    })
+    if (response.status === 401) return { kind: 'not_connected' }
+    if (!response.ok) return { kind: 'failed' }
+    const { results } = (await response.json()) as { results: { taskId: string; ok: boolean }[] }
+    return { kind: 'removed', taskIds: results.filter((r) => r.ok).map((r) => r.taskId) }
+  } catch {
+    return { kind: 'failed' }
+  }
+}
