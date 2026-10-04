@@ -60,3 +60,14 @@ describe('device plan repository', () => {
     expect((await repo.load()).records).toEqual([])
   })
 })
+
+describe('deleteAppliance', () => {
+  it('removes only that appliance', async () => {
+    const repo = createDevicePlanRepository({ storage: memoryStorage(), newId: ids() })
+    const { applianceId: a } = await repo.addAppliance(input)
+    const { applianceId: b } = await repo.addAppliance(input)
+    const state = await repo.deleteAppliance(a)
+    expect(state.records.map((r) => r.appliance.id)).toEqual([b])
+    await expect(repo.deleteAppliance(a)).rejects.toThrow(/Unknown appliance/)
+  })
+})

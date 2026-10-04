@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { applianceName } from '@/domain/calendar-event'
 import { formatInterval } from '@/domain/format-interval'
 import { isOverdue, nextDue } from '@/domain/schedule'
+import { DeleteAppliance } from '../../components/delete-appliance'
 import { EvidenceBadge } from '../../components/evidence-badge'
 import { LoadingPanel, NotFoundPanel } from '../../components/screen'
 import {
@@ -222,6 +223,11 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
           {message}
         </p>
       )}
+      <DeleteAppliance
+        applianceId={applianceId}
+        name={applianceName(record.appliance)}
+        hasCalendarEvents={record.tasks.some((t) => t.calendarEventId !== null)}
+      />
     </>
   )
 }

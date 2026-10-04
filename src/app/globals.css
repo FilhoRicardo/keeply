@@ -743,3 +743,14 @@ a {
   box-shadow: var(--aster-glass-shadow);
   transform: translateX(-50%);
 }
+
+.danger-link {
+  color: #a3271b;
+}
+
+.aster-btn--danger {
+  border: 0;
+  color: white;
+  background: #a3271b;
+  cursor: pointer;
+}

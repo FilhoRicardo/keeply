@@ -5,6 +5,7 @@ import {
   addAppliance,
   addCompletion,
   approve,
+  removeAppliance,
   parseState,
   recordCalendarResults,
   setDecision,
@@ -24,6 +25,8 @@ export interface PlanRepository {
   approve(applianceId: string, defaultStartDate: LocalDate): Promise<PlanState>
   recordCalendarResults(applianceId: string, results: readonly WriteResult[]): Promise<PlanState>
   addCompletion(applianceId: string, taskId: string, completedOn: LocalDate): Promise<PlanState>
+  // Removes the appliance and everything under it from Keeply (not from the calendar).
+  deleteAppliance(applianceId: string): Promise<PlanState>
   // Bearer token for server routes that act on this user's plan (Supabase only).
   accessToken?(): Promise<string | null>
   // Optional change feed (other tabs, realtime). Listener should reload.
@@ -89,6 +92,7 @@ export function createDevicePlanRepository({
     approve: (applianceId, defaultStartDate) => mutate((s) => approve(s, applianceId, defaultStartDate, newId, now())),
     recordCalendarResults: (applianceId, results) => mutate((s) => recordCalendarResults(s, applianceId, results)),
     addCompletion: (applianceId, taskId, completedOn) => mutate((s) => addCompletion(s, applianceId, taskId, completedOn)),
+    deleteAppliance: (applianceId) => mutate((s) => removeAppliance(s, applianceId)),
     subscribe(listener) {
       if (typeof window === 'undefined') return () => {}
       const onStorage = (e: StorageEvent) => e.key === DEVICE_STORAGE_KEY && listener()

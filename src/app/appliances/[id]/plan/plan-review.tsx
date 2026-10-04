@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { applianceName } from '@/domain/calendar-event'
 import { approvalBlockers } from '@/domain/plan'
+import { DeleteAppliance } from '../../../components/delete-appliance'
 import { RecommendationCard } from '../../../components/recommendation-card'
 import { LoadingPanel, NotFoundPanel } from '../../../components/screen'
 import { usePlan } from '../../../lib/plan-context'
@@ -77,6 +78,7 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
           </Link>
         )}
       </div>
+      <DeleteAppliance applianceId={applianceId} name={applianceName(record.appliance)} hasCalendarEvents={false} />
     </>
   )
 }

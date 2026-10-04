@@ -23,6 +23,7 @@ type PlanContextValue = {
   approve(applianceId: string, defaultStartDate: LocalDate): Promise<PlanState>
   recordCalendarResults(applianceId: string, results: readonly WriteResult[]): Promise<PlanState>
   addCompletion(applianceId: string, taskId: string, completedOn: LocalDate): Promise<PlanState>
+  deleteAppliance(applianceId: string): Promise<PlanState>
 }
 
 const PlanContext = createContext<PlanContextValue | null>(null)
@@ -123,6 +124,7 @@ export function PlanProvider({
         if (count > 0) safeTrack(track, { name: 'calendar_tasks_created', applianceId, count })
         return next
       },
+      deleteAppliance: (applianceId) => apply(repo.deleteAppliance(applianceId)),
       async addCompletion(applianceId, taskId, date) {
         const next = await apply(repo.addCompletion(applianceId, taskId, date))
         safeTrack(track, { name: 'task_completed', applianceId })

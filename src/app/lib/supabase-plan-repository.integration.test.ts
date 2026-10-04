@@ -112,6 +112,20 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase plan repository', () => {
     const other = repoFor(OTHER)
     expect(findRecord(await other.load(), applianceId)).toBeUndefined()
     await expect(other.approve(applianceId, '2026-10-05')).rejects.toThrow(/Unknown appliance/)
+    await expect(other.deleteAppliance(applianceId)).rejects.toThrow(/Unknown appliance/)
+    expect(findRecord(await owner.load(), applianceId)).toBeDefined()
+  })
+
+  it('deletes an approved appliance with everything under it', async () => {
+    const repo = repoFor(OWNER)
+    const { applianceId, state } = await repo.addAppliance({ manufacturer: 'AEG', model: '', serialNumber: '' })
+    for (const rec of findRecord(state, applianceId)!.recommendations) await repo.setDecision(applianceId, rec.id, { kind: 'include' })
+    const approved = findRecord(await repo.approve(applianceId, '2026-10-05'), applianceId)!
+    await repo.addCompletion(applianceId, approved.tasks[0].id, '2026-10-06')
+    expect(findRecord(await repo.deleteAppliance(applianceId), applianceId)).toBeUndefined()
+    const left = execFileSync('psql', [KEEPLY_INTEGRATION_DB!, '-tAc',
+      `select (select count(*) from maintenance_recommendations where appliance_id = '${applianceId}') + (select count(*) from maintenance_tasks where appliance_id = '${applianceId}')`]).toString().trim()
+    expect(left).toBe('0')
   })
 })
 

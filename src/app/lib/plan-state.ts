@@ -102,6 +102,11 @@ export function addCompletion(state: PlanState, applianceId: string, taskId: str
   })
 }
 
+export function removeAppliance(state: PlanState, applianceId: string): PlanState {
+  if (!findRecord(state, applianceId)) throw new Error(`Unknown appliance ${applianceId}`)
+  return { ...state, records: state.records.filter((r) => r.appliance.id !== applianceId) }
+}
+
 export function parseState(raw: string | null): PlanState {
   if (!raw) return EMPTY_STATE
   try {

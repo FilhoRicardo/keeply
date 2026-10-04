@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   addApplianceWithRecommendations,
+  deleteAppliance,
   insertApprovedTasks,
   insertCompletion,
   loadApplianceTrees,
@@ -100,6 +101,11 @@ export function createSupabasePlanRepository({
     async recordCalendarResults(applianceId, results) {
       await ready()
       for (const result of results) if (result.ok) await setCalendarEventId(db, result.taskId, result.eventId)
+      return load()
+    },
+    async deleteAppliance(applianceId) {
+      await ready()
+      await deleteAppliance(db, applianceId)
       return load()
     },
     async addCompletion(applianceId, taskId, completedOn) {

@@ -278,3 +278,23 @@ describe('calendar_connected', () => {
     expect(window.location.search).toBe('')
   })
 })
+
+describe('deleting a dishwasher', () => {
+  it('asks first, mentions calendar events, then removes it and goes home', async () => {
+    mockFetch({ configured: true, connected: true }, [])
+    await addDishwasher()
+    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
+    await approveWith()
+
+    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete this dishwasher' }))
+    expect(screen.getByText(/Events already in Google Calendar stay there/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect((await repo.load()).records).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this dishwasher' }))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Delete' })))
+    expect(push).toHaveBeenLastCalledWith('/')
+    expect((await repo.load()).records).toEqual([])
+  })
+})

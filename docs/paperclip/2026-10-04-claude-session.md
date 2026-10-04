@@ -153,6 +153,15 @@ Known limit for a human check: axe cannot compute colour contrast over the trans
 
 Note for the CEO/CTO on KEE-23: the app connects to Google Calendar itself with `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` in Vercel (redirect `https://<domain>/auth/google/callback`). The **Supabase Google auth provider is not needed** unless Google sign-in is added later. The service-role key is not used by the app.
 
+### 14. Delete a dishwasher (Builder 2; reviewer Builder 4)
+
+`src/app/components/delete-appliance.tsx`, `deleteAppliance` on both repositories, `src/db/plan-queries.ts`.
+
+Steps:
+1. "Delete this dishwasher" on the plan and record screens, with a confirm step. Removes the appliance and everything under it from Keeply; says plainly that events already in Google Calendar stay there (Keeply never deletes calendar events).
+2. Device and Supabase repositories; Supabase delete cascades under RLS and reports "Unknown appliance" for someone else's id.
+3. Tests: component flow, device repository, integration (cascade leaves no rows; other user cannot delete). 140 unit/component, 5 integration, 2 e2e pass.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
