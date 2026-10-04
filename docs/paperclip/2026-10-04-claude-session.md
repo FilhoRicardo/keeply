@@ -128,6 +128,15 @@ Steps:
 4. `calendar_connected` recorded once when Google redirects back with `?calendar=connected`; the query is removed from the URL.
 5. Integration test: events land under the visitor's own id (4/4 integration tests pass).
 
+### 11. Playwright Phase 1 walkthrough in CI (Builder 2; reviewer Builder 4)
+
+`e2e/phase1.spec.ts`, `playwright.config.ts`, CI job `e2e`, `pnpm e2e`.
+
+Steps:
+1. Pixel 7 viewport against a production build: add dishwasher → three General guidance cards (no "verified") → Include / Customise (2 months, completion-based) / Why? / Skip → approval summary → approve (device mode) → record → mark done → Home shows "2 active tasks". Asserts no horizontal scroll and no console errors (CSP included).
+2. Google connect without config redirects safely (open-redirect attempt falls back to `/`); events route refuses without a token.
+3. Passes locally (2/2). CI job not yet run on GitHub.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
