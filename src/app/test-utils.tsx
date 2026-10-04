@@ -21,11 +21,16 @@ export function testRepository(): PlanRepository {
   }
 }
 
-export function renderWithPlan(ui: ReactNode, repository: PlanRepository = testRepository(), sink: EventSink = noopSink) {
+export function renderWithPlan(
+  ui: ReactNode,
+  repository: PlanRepository = testRepository(),
+  sink: EventSink = noopSink,
+  device?: PlanRepository,
+) {
   return {
     repository,
     ...render(
-      <PlanProvider repository={repository} sink={sink}>
+      <PlanProvider repository={repository} sink={sink} device={device}>
         {ui}
       </PlanProvider>,
     ),

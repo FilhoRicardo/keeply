@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { findRecord } from './plan-state'
-import { createDevicePlanRepository, DEVICE_STORAGE_KEY, memoryStorage } from './plan-repository'
+import { blobToDataUrl, createDevicePlanRepository, dataUrlToBlob, DEVICE_STORAGE_KEY, memoryStorage } from './plan-repository'
 
 function ids() {
   let n = 0
@@ -92,5 +92,14 @@ describe('device photos', () => {
     const state = await repo.load()
     expect(state.records.find((r) => r.appliance.id === small.applianceId)!.appliance.imageUrl).toMatch(/^data:image\/jpeg;base64,/)
     expect(state.records.find((r) => r.appliance.id === big.applianceId)!.appliance.imageUrl).toBeNull()
+  })
+})
+
+describe('dataUrlToBlob', () => {
+  it('round-trips a device photo without fetch', async () => {
+    const bytes = new Uint8Array([0xff, 0xd8, 0x00, 0x7f, 0xff, 0xd9])
+    const blob = dataUrlToBlob(await blobToDataUrl(new Blob([bytes], { type: 'image/jpeg' })))
+    expect(blob.type).toBe('image/jpeg')
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(bytes)
   })
 })

@@ -13,6 +13,7 @@ import {
   parseState,
   recordCalendarResults,
   setDecision,
+  type ApplianceRecord,
   type NewApplianceInput,
   type PlanState,
 } from './plan-state'
@@ -36,6 +37,9 @@ export interface PlanRepository {
   clearCalendarEvents(applianceId: string, taskIds: readonly string[]): Promise<PlanState>
   // Removes the appliance and everything under it from Keeply (not from the calendar).
   deleteAppliance(applianceId: string): Promise<PlanState>
+  // Supabase only: copy a plan kept on this device into the account (identity, recommendations,
+  // decisions, tasks, completions, photo). Task ids are kept so calendar events stay linked.
+  importRecord?(record: ApplianceRecord): Promise<void>
   // Bearer token for server routes that act on this user's plan (Supabase only).
   accessToken?(): Promise<string | null>
   // Optional change feed (other tabs, realtime). Listener should reload.
@@ -54,7 +58,17 @@ export async function blobToDataUrl(blob: Blob): Promise<string> {
   return `data:${blob.type || 'application/octet-stream'};base64,${btoa(binary)}`
 }
 
-type KeyValueStorage = Pick<Storage, 'getItem' | 'setItem'>
+// Decodes without fetch(): the production CSP's connect-src does not allow data: URLs.
+export function dataUrlToBlob(url: string): Blob {
+  const match = /^data:([^;,]*)(;base64)?,(.*)$/s.exec(url)
+  if (!match) throw new Error('Not a data URL.')
+  const [, type, base64, payload] = match
+  const binary = base64 ? atob(payload) : decodeURIComponent(payload)
+  const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0))
+  return new Blob([bytes], { type: type || 'application/octet-stream' })
+}
+
+type KeyValueStorage =Pick<Storage, 'getItem' | 'setItem'>
 
 // Browser storage can be missing or throw (private mode, quota, disabled cookies).
 export function browserStorage(): KeyValueStorage | null {

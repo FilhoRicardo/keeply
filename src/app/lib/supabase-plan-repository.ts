@@ -21,8 +21,10 @@ import { toAppliance, toCompletion, toRecommendation, toTask } from '@/db/rows'
 import { proposeRecommendations } from '@/domain/guidance'
 import { GENERAL_DISHWASHER_GUIDANCE } from '@/domain/mock-recommendations'
 import { approvePlan, rescheduleTask, type Decisions } from '@/domain/plan'
-import type { PlanRepository } from './plan-repository'
+import { dataUrlToBlob, type PlanRepository } from './plan-repository'
 import { validateNewAppliance, type ApplianceRecord, type PlanState } from './plan-state'
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export function toApplianceRecord(tree: ApplianceTree): ApplianceRecord {
   const sources = new Map(tree.source_documents.map((s) => [s.id, s]))
@@ -144,6 +146,63 @@ export function createSupabasePlanRepository({
       await ready()
       await clearCalendarEventIds(db, taskIds)
       return load()
+    },
+    async importRecord(source) {
+      await ready()
+      const { appliance } = source
+      const applianceId = await addApplianceWithRecommendations(
+        db,
+        { manufacturer: appliance.manufacturer, model: appliance.model ?? '', serialNumber: appliance.serialNumber ?? '' },
+        GENERAL_DISHWASHER_GUIDANCE,
+        source.recommendations,
+        appliance.identificationConfidence,
+      )
+      // All or nothing: a half-imported appliance stays on the device, so a retry would duplicate it
+      // (and collide on the kept task ids). Remove what was created before rethrowing.
+      try {
+        const tree = await loadApplianceTree(db, applianceId)
+        if (!tree) throw new Error('Imported appliance could not be read back.')
+        const created = toApplianceRecord(tree).recommendations
+        const recId = new Map(source.recommendations.map((r, i) => [r.id, created[i].id]))
+
+        // Decisions first: they freeze once tasks exist.
+        for (const [oldId, decision] of Object.entries(source.decisions)) {
+          const mapped = recId.get(oldId)
+          if (mapped) await saveDecision(db, applianceId, mapped, decision)
+        }
+        if (source.approvedAt && source.tasks.length > 0) {
+          const taskId = new Map(source.tasks.map((t) => [t.id, UUID.test(t.id) ? t.id : newId()]))
+          await insertApprovedTasks(
+            db,
+            source.tasks.map((t) => ({
+              ...t,
+              id: taskId.get(t.id)!,
+              applianceId,
+              recommendationId: recId.get(t.recommendationId)!,
+              // A new id means a new calendar event id; drop the old link rather than point at the wrong event.
+              calendarEventId: taskId.get(t.id) === t.id ? t.calendarEventId : null,
+            })),
+            source.approvedAt,
+          )
+          for (const c of source.completions) {
+            const mapped = taskId.get(c.taskId)
+            if (mapped) await insertCompletion(db, mapped, c.completedOn, c.notes)
+          }
+        }
+      } catch (e) {
+        await deleteAppliance(db, applianceId).catch(() => {})
+        throw e
+      }
+      // The photo is best effort, like addAppliance: a failure never loses the appliance.
+      if (appliance.imageUrl?.startsWith('data:')) {
+        try {
+          const { data } = await db.auth.getSession()
+          const userId = data.session?.user.id
+          if (userId) await attachPhoto(db, userId, applianceId, dataUrlToBlob(appliance.imageUrl))
+        } catch {
+          // Keep the imported plan without its photo.
+        }
+      }
     },
     async deleteAppliance(applianceId) {
       await ready()

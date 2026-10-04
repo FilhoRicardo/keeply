@@ -315,6 +315,16 @@ A high-effort code review across `origin/main...HEAD` found 10 issues; all fixed
 
 Verified: 207 unit/component, 7 integration, 3 e2e, 43 pgTAP, build.
 
+### 31. Move device plans into the Supabase account (Builder 2; reviewer Builder 4)
+
+`importRecord` in `src/app/lib/supabase-plan-repository.ts`; `ImportBanner` on Home; `PlanBackend.device`; `supabase/config.toml` no longer pins Postgres 16.
+
+Steps:
+1. With Supabase on, Home shows "N dishwashers are saved only on this device. Move them to your Keeply account" (Move / Not now; nothing is ever discarded).
+2. Each dishwasher is recreated with its recommendations (and sources), decisions, approved tasks (same task ids, so Google event ids stay linked), completions with notes, and photo; then removed from the device. One at a time, so a retry never duplicates what already moved.
+3. Review pass found and fixed: the photo was read with `fetch(data:)`, which the CSP blocks, failing every import with a photo; and a failure part-way left a half-moved appliance. Imports now roll back (delete the new appliance) on any failure, and the photo is decoded locally and uploaded last.
+4. Tests: component (move both; failure keeps the rest and shows the error), integration (full approved plan with completion, notes and calendar link; failure part-way leaves nothing). Testing Library wait raised to 3 s to stop jsdom timing flakes. 210 unit/component, 9 integration, 3 e2e, 43 pgTAP.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

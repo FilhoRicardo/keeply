@@ -498,3 +498,50 @@ describe('recording a completion', () => {
     expect(screen.getByText(/1 Feb 2026 \(Very greasy\)/)).toBeInTheDocument()
   })
 })
+
+describe('moving device plans into the account', () => {
+  it('offers the move, imports each dishwasher and clears it from the device', async () => {
+    const { createDevicePlanRepository, memoryStorage } = await import('../lib/plan-repository')
+    const device = createDevicePlanRepository({ storage: memoryStorage(), newId: () => crypto.randomUUID() })
+    await device.addAppliance({ manufacturer: 'Bosch', model: 'OLD-1', serialNumber: '' })
+    await device.addAppliance({ manufacturer: 'Miele', model: '', serialNumber: '' })
+
+    // The "account": a separate store with an importRecord that copies identity.
+    const imported: string[] = []
+    const account: PlanRepository = {
+      ...repo,
+      async importRecord(record) {
+        imported.push(record.appliance.manufacturer)
+        await repo.addAppliance({ manufacturer: record.appliance.manufacturer, model: record.appliance.model ?? '', serialNumber: '' })
+      },
+    }
+
+    renderWithPlan(<Home />, account, undefined, device)
+    expect(await screen.findByText(/2 dishwashers are saved only on this device/)).toBeInTheDocument()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Move to my account' })))
+
+    expect(imported).toEqual(['Bosch', 'Miele'])
+    expect((await device.load()).records).toEqual([])
+    expect(screen.queryByText(/saved only on this device/)).not.toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /Bosch OLD-1 dishwasher/ })).toBeInTheDocument()
+  })
+
+  it('keeps what did not move when an import fails', async () => {
+    const { createDevicePlanRepository, memoryStorage } = await import('../lib/plan-repository')
+    const device = createDevicePlanRepository({ storage: memoryStorage(), newId: () => crypto.randomUUID() })
+    await device.addAppliance({ manufacturer: 'Bosch', model: '', serialNumber: '' })
+    await device.addAppliance({ manufacturer: 'Miele', model: '', serialNumber: '' })
+    let calls = 0
+    const account: PlanRepository = {
+      ...repo,
+      async importRecord() {
+        if (++calls === 2) throw new Error('network down')
+      },
+    }
+    renderWithPlan(<Home />, account, undefined, device)
+    await screen.findByText('No appliances yet.')
+    await act(async () => fireEvent.click(await screen.findByRole('button', { name: 'Move to my account' })))
+    expect((await device.load()).records.map((r) => r.appliance.manufacturer)).toEqual(['Miele'])
+    expect(await screen.findByRole('alert')).toHaveTextContent(/network down/)
+  })
+})

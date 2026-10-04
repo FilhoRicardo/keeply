@@ -1,5 +1,3 @@
-# Supabase CLI config. Defaults apply to everything not set here.
+# Supabase CLI config. Defaults apply to everything not set here (including the Postgres
+# version, so local matches what the CLI creates for new projects).
 project_id = "keeply"
-
-[db]
-major_version = 16

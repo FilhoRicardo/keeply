@@ -284,3 +284,49 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Pausing with Supabase', () => {
     }
   })
 })
+
+describe.skipIf(!KEEPLY_POSTGREST_URL)('Importing a device plan', () => {
+  it('recreates an approved plan with decisions, tasks, completions, calendar links and photo', async () => {
+    const { addAppliance, addCompletion, approve, EMPTY_STATE, setDecision } = await import('./plan-state')
+    const appId = crypto.randomUUID()
+    let state = addAppliance(EMPTY_STATE, { manufacturer: 'Bosch', model: 'IMPORT-1', serialNumber: 'S1' }, appId, 'now', 'data:image/jpeg;base64,/9j/2Q==')
+    const [a, b, c] = findRecord(state, appId)!.recommendations
+    state = setDecision(state, appId, a.id, { kind: 'include' })
+    state = setDecision(state, appId, b.id, { kind: 'customise', interval: { count: 6, unit: 'week' }, startDate: '2026-09-01', schedulingMode: 'completion_based' })
+    state = setDecision(state, appId, c.id, { kind: 'skip' })
+    state = approve(state, appId, '2026-09-01', () => crypto.randomUUID(), '2026-09-01T10:00:00Z')
+    const tasks = findRecord(state, appId)!.tasks
+    state = addCompletion(state, appId, tasks[1].id, '2026-09-20', 'Done early')
+    const device = findRecord(state, appId)!
+    const withEvent = { ...device, tasks: device.tasks.map((t, i) => (i === 0 ? { ...t, calendarEventId: 'evt-old' } : t)) }
+
+    const repo = repoFor(OWNER)
+    await repo.importRecord!(withEvent)
+    const moved = (await repo.load()).records.find((r) => r.appliance.model === 'IMPORT-1')!
+
+    expect(moved.appliance).toMatchObject({ manufacturer: 'Bosch', serialNumber: 'S1' })
+    expect(moved.recommendations.map((r) => r.taskName)).toEqual(device.recommendations.map((r) => r.taskName))
+    expect(moved.approvedAt).not.toBeNull()
+    expect(moved.tasks.map((t) => [t.id, t.status, t.userInterval.count, t.calendarEventId])).toEqual([
+      [tasks[0].id, 'approved', 1, 'evt-old'],
+      [tasks[1].id, 'approved', 6, null],
+      [tasks[2].id, 'skipped', 3, null],
+    ])
+    expect(moved.completions).toEqual([{ taskId: tasks[1].id, completedOn: '2026-09-20', notes: 'Done early' }])
+    expect(Object.values(moved.decisions).map((d) => d.kind)).toEqual(['include', 'customise', 'skip'])
+  })
+
+  it('leaves nothing behind when an import fails part-way', async () => {
+    const { addAppliance, addCompletion, approve, EMPTY_STATE, setDecision } = await import('./plan-state')
+    const appId = crypto.randomUUID()
+    let state = addAppliance(EMPTY_STATE, { manufacturer: 'Bosch', model: 'ROLLBACK-1', serialNumber: '' }, appId, 'now')
+    for (const rec of findRecord(state, appId)!.recommendations) state = setDecision(state, appId, rec.id, { kind: 'include' })
+    state = approve(state, appId, '2026-09-01', () => crypto.randomUUID(), '2026-09-01T10:00:00Z')
+    // The database refuses completions in the future, so this import fails after the appliance exists.
+    state = addCompletion(state, appId, findRecord(state, appId)!.tasks[0].id, '2999-01-01')
+
+    const repo = repoFor(OWNER)
+    await expect(repo.importRecord!(findRecord(state, appId)!)).rejects.toThrow(/completion_not_in_future/)
+    expect((await repo.load()).records.some((r) => r.appliance.model === 'ROLLBACK-1')).toBe(false)
+  })
+})

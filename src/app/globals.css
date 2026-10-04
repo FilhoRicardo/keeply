@@ -783,3 +783,7 @@ a {
   outline: 3px solid rgba(19, 115, 63, 0.35);
   outline-offset: 3px;
 }
+
+.import-banner {
+  margin-bottom: 14px;
+}

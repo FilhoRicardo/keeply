@@ -5,13 +5,16 @@ import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
 import type { Customisation, Decision } from '@/domain/plan'
 import type { PlanRepository } from './plan-repository'
-import { createPlanBackend } from './repository'
+import { createPlanBackend, type PlanBackend } from './repository'
 import { findRecord, type NewApplianceInput, type PlanState } from './plan-state'
 import { defaultSink, safeTrack, type EventSink } from './track'
 
 type PlanContextValue = {
   // null until the repository has loaded (server render, hydration, network).
   state: PlanState | null
+  // Dishwashers saved only on this device that can move into the Supabase account.
+  pendingImport: number
+  importDevicePlan(): Promise<void>
   // Last storage failure, shown in a banner with a retry.
   error: string | null
   retry(): void
@@ -41,20 +44,30 @@ function enqueue<T>(queue: { current: Promise<unknown> }, op: () => Promise<T>):
 export function PlanProvider({
   repository,
   sink,
+  device,
   children,
 }: {
   repository?: PlanRepository
   sink?: EventSink
+  device?: PlanRepository
   children: ReactNode
 }) {
-  const [backend] = useState(() => (repository ? { repository, sink: sink ?? defaultSink() } : createPlanBackend()))
+  const [backend] = useState<PlanBackend>(() =>
+    repository ? { repository, sink: sink ?? defaultSink(), device } : createPlanBackend(),
+  )
   const repo = backend.repository
   const track = sink ?? backend.sink
   const [state, setState] = useState<PlanState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+  const [pendingImport, setPendingImport] = useState(0)
   // Mutations run one at a time, so a slower earlier response can never overwrite a newer state.
   const queue = useRef<Promise<unknown>>(Promise.resolve())
+
+  useEffect(() => {
+    if (!backend.device || !repo.importRecord) return
+    backend.device.load().then((s) => setPendingImport(s.records.length), () => setPendingImport(0))
+  }, [backend.device, repo])
 
   // Google OAuth returns with ?calendar=connected: record it once and tidy the URL.
   useEffect(() => {
@@ -102,6 +115,21 @@ export function PlanProvider({
       state,
       error,
       retry: () => setAttempt((n) => n + 1),
+      pendingImport,
+      async importDevicePlan() {
+        const { device } = backend
+        if (!device || !repo.importRecord) return
+        await apply(async () => {
+          // One appliance at a time, each removed from the device only once it is safely imported,
+          // so a retry after a failure never duplicates what already moved.
+          for (const record of (await device.load()).records) {
+            await repo.importRecord!(record)
+            await device.deleteAppliance(record.appliance.id)
+            setPendingImport((n) => Math.max(0, n - 1))
+          }
+          return repo.load()
+        })
+      },
       storageKind: repo.kind,
       accessToken: () => repo.accessToken?.() ?? Promise.resolve(null),
       async addAppliance(input) {
@@ -148,7 +176,7 @@ export function PlanProvider({
         return next
       },
     }
-  }, [repo, state, error, track])
+  }, [repo, state, error, track, pendingImport, backend])
 
   return (
     <PlanContext.Provider value={value}>
