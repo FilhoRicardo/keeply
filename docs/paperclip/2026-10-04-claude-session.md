@@ -106,6 +106,17 @@ Steps:
 
 Risk for the reviewer: the job has not run on GitHub yet (no Actions access from the cloud session). The pgTAP install via `docker exec` into the service container is the step most likely to need a tweak.
 
+### 9. Security headers for the Vercel deploy (Builder 1; reviewer Builder 3)
+
+`next.config.ts`, `src/app/security-headers.test.ts`.
+
+Steps:
+1. CSP limited to self, Google Fonts and `*.supabase.co`; `frame-ancestors 'none'`, `object-src 'none'`; `unsafe-eval` only in dev.
+2. nosniff, Referrer-Policy, X-Frame-Options DENY, HSTS, Permissions-Policy (camera kept for Phase 2 scan), `x-powered-by` off.
+3. Verified on a production build: full flow in Chromium with no CSP violations.
+
+Known limit: scripts still need `'unsafe-inline'` (no nonce setup yet).
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
