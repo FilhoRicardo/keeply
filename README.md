@@ -35,6 +35,8 @@ CI runs all four on every pull request.
 
 ## Rules that the code enforces
 
+- AI label reading on public deployments only for invited testers: each scan reserves one billable attempt in Supabase first (5 per tester, 100 in total per UTC day; `docs/testers.md`). Refusals call nothing.
+
 - Nothing reaches a calendar before Approval; rejected tasks never do. Approval needs every task decided and one accepted.
 - A proposed task is never rewritten (database trigger); the owner only accepts or rejects it.
 - Manufacturer verified needs a linked, quoted manufacturer document (database check); general and similar-model guidance never read as verified.

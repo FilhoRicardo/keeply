@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { AccessDenial } from '@/domain/identification'
 
 // Beta usage counts (docs/HANDOFF.md §15). Event names and small counts only: no names, models,
 // photos or dates.
@@ -10,6 +11,8 @@ export type FunnelEvent =
   | { name: 'plan_approved'; accepted: number; rejected: number }
   | { name: 'calendar_connected' }
   | { name: 'calendar_tasks_created'; count: number }
+  | { name: 'invite_redeemed' }
+  | { name: 'scan_denied'; reason: AccessDenial }
 
 export type EventSink = (event: FunnelEvent) => void
 

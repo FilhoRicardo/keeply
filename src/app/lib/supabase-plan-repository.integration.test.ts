@@ -190,3 +190,44 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase usage sink', () => {
     expect(JSON.parse(props.toString().trim())).toEqual({ accepted: 2, rejected: 1 })
   })
 })
+
+describe.skipIf(!KEEPLY_POSTGREST_URL)('Scan invites and limits under concurrency', () => {
+  const psql = (sql: string) => execFileSync('psql', [KEEPLY_INTEGRATION_DB!, '-tAc', sql]).toString().trim()
+  const dbFor = (user: string) => createClient(supabaseUrl, jwt(user), { auth: { persistSession: false, autoRefreshToken: false } })
+  // Leaves the database as it found it, so the test can be rerun the same day.
+  const reset = () =>
+    psql(
+      'delete from public.scan_usage; delete from public.scan_daily_totals; ' +
+        'delete from public.scan_invites; update public.scan_limits set per_tester_daily = 5, global_daily = 100',
+    )
+
+  it('holds the per-tester and daily limits exactly when scans arrive at once', async () => {
+    const { reserveScan, redeemInvite, scanAllowance } = await import('@/db/scan-access')
+    reset()
+    try {
+      psql('update public.scan_limits set per_tester_daily = 5, global_daily = 7')
+      const [codeA, codeB] = [psql("select public.create_scan_invite('Tester A')"), psql("select public.create_scan_invite('Tester B')")]
+
+      const a = dbFor(OWNER)
+      const b = dbFor(OTHER)
+      expect(await reserveScan(a)).toBe('no_invite')
+      expect(await redeemInvite(a, codeA.toLowerCase())).toBe('invited')
+      expect(await redeemInvite(b, codeA)).toBe('invalid')
+      expect(await redeemInvite(b, codeB)).toBe('invited')
+
+      const burst = async (db: ReturnType<typeof dbFor>) => Promise.all(Array.from({ length: 12 }, () => reserveScan(db)))
+      const first = await burst(a)
+      expect(first.filter((r) => r === 'allowed')).toHaveLength(5)
+      expect(first.filter((r) => r === 'tester_limit')).toHaveLength(7)
+
+      const second = await burst(b)
+      expect(second.filter((r) => r === 'allowed')).toHaveLength(2)
+      expect(second.filter((r) => r === 'daily_limit')).toHaveLength(10)
+      expect(psql('select scans from public.scan_daily_totals')).toBe('7')
+
+      expect(await scanAllowance(b)).toEqual({ status: 'invited', testerLeft: 3, globalLeft: 0 })
+    } finally {
+      reset()
+    }
+  })
+})

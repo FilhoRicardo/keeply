@@ -867,7 +867,8 @@ conflict.
     manufacturer, and the link and page are shown. Anything else is
     downgraded (similar-model or general guidance). The AI is still not
     the source of the interval; the manufacturer's document is.
--   **AI for testers:** Keeply may fund AI for invited testers only:
+-   **AI for testers** (built 2026-10-05; `docs/testers.md`): limits count billable attempts per UTC
+    day and are never refunded, since a failed provider call may still be billed. Keeply may fund AI for invited testers only:
     an invite code is required, with at most 5 AI runs per tester per day
     and 100 in total per day (one run = one photo read or one manual
     read). Past the cap, Manual takes over. The owner confirms that

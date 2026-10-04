@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
 import type { Decision } from '@/domain/plan'
@@ -123,6 +123,9 @@ export function PlanProvider({
     }
   }, [repo, attempt])
 
+  // Stable, so screens can depend on it in effects.
+  const accessToken = useCallback(() => repo.accessToken?.() ?? Promise.resolve(null), [repo])
+
   const value = useMemo<PlanContextValue>(() => {
     const apply = async (op: () => Promise<PlanState>) => {
       try {
@@ -149,7 +152,7 @@ export function PlanProvider({
         setAttempt((n) => n + 1)
       },
       storageKind: repo.kind,
-      accessToken: () => repo.accessToken?.() ?? Promise.resolve(null),
+      accessToken,
       track: (event) => safeTrack(sinkRef, event),
       async addAppliance(input, scanned = false) {
         let applianceId = ''
@@ -184,7 +187,7 @@ export function PlanProvider({
       },
       deleteAppliance: (applianceId) => apply(() => repo.deleteAppliance(applianceId)),
     }
-  }, [repo, state, error, sinkRef, backend, account, signInProblem, proposer])
+  }, [repo, state, error, sinkRef, backend, account, signInProblem, proposer, accessToken])
 
   return (
     <PlanContext.Provider value={value}>

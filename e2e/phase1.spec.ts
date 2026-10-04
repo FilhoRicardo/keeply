@@ -73,6 +73,17 @@ test('Google connect without configuration returns safely', async ({ request }) 
   expect((await request.post('/api/calendar/events', { data: { drafts: [] } })).status()).toBe(401)
 })
 
+test('invite page is accessible and scanning stays shut when it is off', async ({ page, request }) => {
+  await page.goto('/invite?code=KP-1234-5678-9ABC-DEF0')
+  await expect(page.getByLabel('Invite code')).toHaveValue('KP-1234-5678-9ABC-DEF0')
+  await noHorizontalScroll(page)
+  await accessible(page)
+  expect((await request.get('/appliances/scan')).status()).toBe(404)
+  expect((await request.post('/api/identify', { multipart: { photo: { name: 'a.jpg', mimeType: 'image/jpeg', buffer: Buffer.from([0xff, 0xd8]) } } })).status()).toBe(404)
+  expect(await (await request.get('/api/scan-access')).json()).toEqual({ ai: false })
+  expect((await request.post('/api/scan-access', { data: { code: 'KP-1234-5678-9ABC-DEF0' } })).status()).toBe(503)
+})
+
 test('works offline after the first visit', async ({ page, context }) => {
   await page.goto('/')
   await page.evaluate(async () => {

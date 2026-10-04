@@ -416,6 +416,10 @@ Supabase: 11 `funnel_events` matching the manual, Calendar and hosted-scan steps
 
 Google sign-in linked the anonymous owner (same user id, Bosch and BUSH kept); sign-out gave an empty Home; signing in again offered "Switch to that account" and restored only the owner's dishwashers. A second anonymous visitor could not open BUSH and created its own "Isolation test" under a different user id; the owner could not open it either. All owner-only preview gates now pass: storage, Calendar, AI scan, usage counts, sign-in, isolation. Remaining for invited testers: `docs/live-gates.md` G7.
 
+### 45. Invited-tester AI access with server-enforced limits (Builder 1; overnight goal)
+
+Migration `20261005100000_scan_invites.sql`: hashed one-use invite codes (owner creates them in SQL), per-user per-UTC-day counts and a daily total, `reserve_scan()` locking the day's row so concurrent scans cannot exceed 5 per tester / 100 per day; attempts are never refunded (a failed provider call may be billed); missing limits fail closed; visitors cannot read or change invites, counters or limits; revoke/re-invite/anonymous sessions never reset a count. `/api/identify` reserves before any billable call and refuses with 403 (no provider call) otherwise; `KEEPLY_SCAN_ACCESS=open` is ignored in Vercel Production. `/invite?code=` redeems; the scan screen shows what is left and does not upload when a refusal is already known. Two review passes (20 findings; material ones fixed, including dropping refunds after the coordination note). Checks: 216 unit, 57 pgTAP, 8 integration (incl. 12-way concurrency), 4 e2e.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

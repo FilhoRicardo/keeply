@@ -4,6 +4,7 @@ import type { ApplianceIdentity } from '@/ai/identity'
 import { selectProvider } from '@/ai/provider'
 import { checkPhoto } from '../../lib/identify'
 import { scanEnabled } from '../../lib/features'
+import { admitScan, aiScanLive } from '../../lib/scan-gate'
 
 // The MiniMax adapter waits up to 25 s; give the function room on Vercel.
 export const maxDuration = 30
@@ -42,9 +43,17 @@ export async function POST(request: NextRequest) {
   if (problem) return NextResponse.json({ error: problem }, { status: 400 })
 
   const provider = selectProvider({ env: process.env })
+  // Billable providers only after an attempt is reserved for this caller; a refusal calls nothing.
+  if (aiScanLive()) {
+    const decision = await admitScan(request)
+    if (decision !== 'allowed') {
+      return NextResponse.json({ error: 'scan_denied', reason: decision }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
+    }
+  }
   const identity = await provider
     .identifyAppliance({ bytes: new Uint8Array(await file!.arrayBuffer()), mimeType: file!.type })
     .catch((error: unknown) => {
+      // The attempt still counts: the provider may have billed it.
       console.error(`[identify] ${provider.kind} failed:`, error instanceof Error ? error.message : error)
       return null
     })

@@ -16,8 +16,18 @@ export type ApplianceIdentification = {
 export type RecognitionResult = {
   // A proposal for the owner to confirm, edit or rescan; null when nothing usable was read.
   identification: ApplianceIdentification | null
-  // Why there is no proposal, when the photo was read but is not usable.
-  notice: 'not_a_dishwasher' | null
+  // Why there is no proposal: the photo was read but is not usable, or AI reading was not allowed
+  // (no invite, or a scan limit reached).
+  notice: RecognitionNotice | null
+}
+
+// Reading outcomes ('not_a_dishwasher') and access refusals (nothing was sent to a provider).
+export const ACCESS_DENIALS = ['no_invite', 'tester_limit', 'daily_limit', 'ai_unavailable'] as const
+export type AccessDenial = (typeof ACCESS_DENIALS)[number]
+export type RecognitionNotice = 'not_a_dishwasher' | AccessDenial
+
+export function isAccessDenial(notice: RecognitionNotice | null): notice is AccessDenial {
+  return (ACCESS_DENIALS as readonly string[]).includes(notice ?? '')
 }
 
 export interface ApplianceRecognizer {

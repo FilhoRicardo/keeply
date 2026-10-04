@@ -28,6 +28,8 @@ fi
 pnpm install --frozen-lockfile
 [ "$CHECK" = 1 ] && pnpm verify:minimax
 NEXT_PUBLIC_KEEPLY_SCAN=1 pnpm build
+# This private run has no Supabase invites, so AI access is open to whoever reaches this server.
+export KEEPLY_SCAN_ACCESS=open
 
 echo
 echo "Open http://localhost:$PORT/appliances/scan"

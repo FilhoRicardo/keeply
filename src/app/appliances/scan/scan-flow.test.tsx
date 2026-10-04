@@ -139,3 +139,43 @@ describe('ScanFlow privacy', () => {
     expect(screen.getByText(/could not read a dishwasher label in this photo/)).toBeInTheDocument()
   })
 })
+
+describe('ScanFlow for invited testers', () => {
+  it.each([
+    ['no_invite', /AI label reading is for invited testers, so the photo was not sent to the AI service/],
+    ['tester_limit', /You have used today’s AI scans, so the photo was not sent/],
+    ['daily_limit', /reached today’s AI scan limit, so the photo was not sent/],
+  ] as const)('explains a %s refusal and offers the manual form', async (notice, copy) => {
+    const events: { name: string }[] = []
+    const refusing: ApplianceRecognizer = { recognise: async () => ({ identification: null, notice }) }
+    renderWithPlan(<ScanFlow recognizer={refusing} />, repo, (e) => void events.push(e))
+    await takePhoto()
+    expect(screen.getByText(copy)).toBeInTheDocument()
+    expect(screen.getByLabelText('Manufacturer')).toHaveValue('')
+    expect(events.map((e) => e.name)).toEqual(['scan_started', 'scan_denied'])
+  })
+
+  it('shows how many AI scans are left, or how to get an invite', async () => {
+    const access = { ai: true, access: 'invited', testerLeft: 3, globalLeft: 40 }
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(access)))
+    renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo)
+    expect(await screen.findByText('AI label reading: 3 scans left today.')).toBeInTheDocument()
+    vi.unstubAllGlobals()
+
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ai: true, access: 'no_invite' })))
+    renderWithPlan(<ScanFlow recognizer={noRecognizer} />, testRepository())
+    expect(await screen.findByRole('link', { name: 'Have an invite code?' })).toHaveAttribute('href', '/invite')
+    vi.unstubAllGlobals()
+  })
+
+  it('does not upload the photo when the visitor already has no invite', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ai: true, access: 'no_invite' })))
+    const recognise = vi.fn(async () => ({ identification: null, notice: null }))
+    renderWithPlan(<ScanFlow recognizer={{ recognise }} />, repo)
+    await screen.findByRole('link', { name: 'Have an invite code?' })
+    await takePhoto()
+    expect(recognise).not.toHaveBeenCalled()
+    expect(screen.getByText(/the photo was not sent to the AI service/)).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+})

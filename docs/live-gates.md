@@ -24,7 +24,7 @@ Environment under test: Vercel Preview of branch `claude/dazzling-mayer-ytyahw` 
 - Decline the calendar permission on Google's screen → Keeply says nothing was added and still allows Approval.
 - After about an hour the Google token expires: the app asks to reconnect; **Add N tasks to Google Calendar** on the dishwasher page retries without duplicating.
 
-### G8 AI label reading, owner-only on the hosted preview
+### G8 AI label reading, owner-only on the hosted preview (passed; setup reference)
 
 Verified in a cloud session on 2026-10-04 (not on Vercel): MiniMax-M3 with the owner's Token Plan key reads the real BUSH plate exactly through the full app path after the JPEG-quality fix (`docs/ai/minimax.md`). Hosted scanning is off.
 
@@ -50,14 +50,31 @@ Verified in a cloud session on 2026-10-04 (not on Vercel): MiniMax-M3 with the o
 4. Production has no flag: its `/appliances/scan` stays 404.
 5. Afterwards, unless kept for private use: delete the three variables and redeploy.
 
-### G7 Invited testers (not started)
+### G9 Invites and scan limits (built 2026-10-05; live check pending)
 
-Everything above is proven on the owner-only, login-protected preview. For invited testers, in order:
+Server-enforced invites and limits (`docs/testers.md`): 56 pgTAP checks (including grants, re-invite, account deletion), a PostgREST concurrency test (12 simultaneous scans → exactly 5 allowed per tester and exactly the daily remainder), route tests proving refusals make no provider call, and an e2e check that scanning stays shut by default. Not yet verified on the hosted stack.
 
-1. **Owner decision: merge PR #4.** Production then deploys from `main`; Vercel's Standard Protection does not cover the production domain, so it is public.
-2. **Production configuration (owner):** add `https://<production-domain>/auth/google/callback` to the Google client; set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` (that URI) for **Production**; in Supabase URL Configuration set the Site URL to the production domain and allowlist it. The Supabase variables are already set for Production.
-3. **Production smoke test (owner, no AI):** manual add → accept/reject → approve → one Calendar event; Google sign-in. Scanning stays off in Production.
-4. **Testers' Google accounts:** the Google app is in Testing, so each tester's Gmail must be added as a test user (up to 100) before they can sign in or connect a calendar. They will see Google's "unverified app" screen.
-5. **Testers use manual entry until AI for testers is ready.** Scanning for others needs all of: a pay-as-you-go MiniMax key (the Token Plan is for individual use; owner cost decision), MiniMax spend limits, and the §23 invite code with 5 per tester and 100 per day caps (agreed scope, not built). Until then Production keeps `NEXT_PUBLIC_KEEPLY_SCAN` unset.
-6. **The plan is still general guidance.** Finding the manufacturer's manual (Phase 3, §23: Brave Search + MiniMax reading the manual, verified only with a code-checked quote) is not built; it needs a Brave Search API key (owner) and the same AI-for-testers decisions as scanning.
-7. Optional: G6 failure paths; delete the test rows (Bosch, BUSH, Isolation test); remove the preview's MiniMax variables when private testing ends.
+1. **Apply the migration (Codex, SQL Editor):** run `supabase/migrations/20261005100000_scan_invites.sql` once. It only adds tables and functions; the existing rows are untouched.
+2. **Preview is now invite-only:** the preview has no `KEEPLY_SCAN_ACCESS`, so the owner needs an invite there too. Create one: `select public.create_scan_invite('Owner');`. Signed in as the owner on the preview, open `/invite?code=<code>` → **Accept invite** → "Invite accepted".
+3. **Live checks (one MiniMax call in total):**
+   - Private window on the preview (a new anonymous visitor, no invite): Scan shows "AI label reading is for invited testers…"; photograph anything → "AI label reading is for invited testers, so the photo was not sent to the AI service" and the manual form. Vercel logs show no `[identify] minimax` line for it.
+   - Owner (invited): Scan shows "AI label reading: 5 scans left today." One BUSH scan → the same proposal as before; the note then says 4 left.
+   - SQL: `select * from public.scan_daily_totals;` → 1 for today; `select name, props from public.funnel_events order by occurred_at desc limit 4;` → `invite_redeemed`, `scan_denied` (`no_invite`), `scan_started`, `label_read`.
+4. Rollback for this step only: `update public.scan_limits set global_daily = 0;` stops all AI scans at once without a deploy.
+
+### G7 Invited testers
+
+The invite limits (G9) are built. For a public test round, in order:
+
+1. **Merge PR #4** (authorised; done once CI and review pass). Production then deploys from `main`. Vercel Standard Protection does not cover the production domain, so it is public. Production has no `NEXT_PUBLIC_KEEPLY_SCAN` and no MiniMax key: scanning stays off there (scan page and `/api/identify` 404).
+2. **Production configuration (Codex in the browser; owner enters secrets):**
+   - Note the production domain from Vercel → Project → Domains (shown below as `<prod>`).
+   - Google Cloud → the OAuth client: add redirect URIs `https://<prod>/auth/google/callback`. The Supabase callback is already there.
+   - Vercel → Environment Variables, **Production**: `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (the same values as Preview; owner enters them), and `GOOGLE_REDIRECT_URI` = `https://<prod>/auth/google/callback`. Redeploy production.
+   - Supabase → Authentication → URL Configuration: Site URL `https://<prod>`; add `https://<prod>` to Redirect URLs (keep the preview entry). Without this, Google sign-in on production returns to the preview.
+3. **Production smoke test (no AI):** manual add → accept 1, reject 2 → connect Calendar → approve → one monthly event; Google sign-in keeps the dishwasher; `/appliances/scan` is 404.
+4. **Testers:** add each tester's Gmail as a Google test user (Google Auth Platform → Audience; up to 100). Send them the production link. They type their dishwasher's details.
+5. **AI for testers (optional, owner decision):** needs a pay-as-you-go MiniMax key (not the Token Plan key, which stays Preview-only) with spending limits set in MiniMax. Then in Vercel **Production**: `MINIMAX_API_KEY` (Sensitive), `MINIMAX_MODEL=MiniMax-M3`, `NEXT_PUBLIC_KEEPLY_SCAN=1`; redeploy; create one invite per tester (`docs/testers.md`). Never set `KEEPLY_SCAN_ACCESS` in Production (it is ignored there anyway).
+6. Optional: G6 failure paths; delete the test rows (Bosch, BUSH, Isolation test).
+
+**Rollback:** Vercel → Deployments → the previous production deployment → **Promote to Production** (instant). Code: revert the merge commit on `main`. AI only: remove `NEXT_PUBLIC_KEEPLY_SCAN` from Production and redeploy, or `update public.scan_limits set global_daily = 0;` (immediate). Database: the migrations only add objects; nothing needs undoing to roll the app back.
