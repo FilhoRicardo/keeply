@@ -85,6 +85,17 @@ Steps:
 
 Owner actions this needs: `supabase db push`, enable Anonymous sign-ins, set the two `NEXT_PUBLIC_SUPABASE_*` vars in Vercel (all already in KEE-23's wizard scope).
 
+### 7. Calendar writes load approved tasks server-side (Builder 1; reviewer Builder 3)
+
+Commit: see the "server-side calendar" commit after `38e8be9`. `src/app/api/calendar/events/route.ts`, `src/app/lib/calendar-drafts.ts`, `src/app/lib/calendar-session.ts`.
+
+Steps:
+1. With Supabase configured, `POST /api/calendar/events` accepts only `{applianceId, taskIds}` plus the user's Supabase bearer token, loads the plan under that session (RLS) and builds the drafts itself. Browser-supplied drafts are rejected (400). Device mode keeps the validated-drafts path.
+2. Shared `draftsForTasks` (approved tasks only, plan must be approved) used by client and server.
+3. Integration test through the real route + PostgREST: owner's 2 approved tasks written, skipped task never written, other user 404, no session 401, drafts 400.
+
+Closes the follow-up "load approved tasks server-side instead of trusting browser drafts".
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
@@ -99,9 +110,9 @@ Please review the branch commit by commit and comment on Paperclip or the PR. Fo
 
 - Provision Supabase project and Vercel deploy; fill `.env.local` (owner action: accounts).
 - Create Google OAuth client with `calendar.events` scope and redirect URIs (owner action).
-- Move plan persistence from localStorage to `src/db` and have `/api/calendar/events` load approved tasks server-side instead of trusting browser drafts.
-- Supabase adapter for `PlanRepository` and anonymous sign-in (decide: anonymous vs real login).
+- Decide whether v0.1 keeps anonymous sign-in or adds a real login (anonymous plans are lost if the browser's session is cleared).
+- Migrate a device-stored plan into Supabase on first sign-in (currently not migrated).
 - Supabase sink for funnel events (an `events` table).
 - `calendar_connected` funnel event (needs a server-side or post-redirect hook).
 
-Done in this session (were follow-ups): completion-based calendar rescheduling, hydration placeholder, storage fallback.
+Done in this session (were follow-ups): completion-based calendar rescheduling, hydration placeholder, storage fallback, Supabase adapter, server-side calendar task loading.

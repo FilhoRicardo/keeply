@@ -63,6 +63,11 @@ export function createSupabasePlanRepository({
   return {
     kind: 'supabase',
     load,
+    async accessToken() {
+      await ready()
+      const { data } = await db.auth.getSession()
+      return data.session?.access_token ?? null
+    },
     async addAppliance(input) {
       const error = validateNewAppliance(input)
       if (error) throw new Error(error)

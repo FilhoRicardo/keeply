@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseDrafts, safeReturnTo, withQuery } from './calendar-session'
+import { bearerToken, parseDrafts, parseTaskRequest, safeReturnTo, withQuery } from './calendar-session'
 
 const draft = {
   taskId: 't1',
@@ -42,5 +42,29 @@ describe('parseDrafts', () => {
     ['too many', { drafts: Array.from({ length: 21 }, () => draft) }],
   ])('rejects %s', (_name, body) => {
     expect(parseDrafts(body)).toBeNull()
+  })
+})
+
+describe('parseTaskRequest', () => {
+  const id = '3f2b9c1e-1111-4222-8333-444455556666'
+
+  it('accepts an appliance id and de-duplicated task ids', () => {
+    expect(parseTaskRequest({ applianceId: id, taskIds: [id, id] })).toEqual({ applianceId: id, taskIds: [id] })
+  })
+
+  it.each([
+    ['missing appliance', { taskIds: [id] }],
+    ['non-uuid task', { applianceId: id, taskIds: ['task-1'] }],
+    ['no tasks', { applianceId: id, taskIds: [] }],
+  ])('rejects %s', (_name, body) => {
+    expect(parseTaskRequest(body)).toBeNull()
+  })
+})
+
+describe('bearerToken', () => {
+  it('reads a bearer token', () => {
+    expect(bearerToken('Bearer abc.def')).toBe('abc.def')
+    expect(bearerToken('Basic abc')).toBeNull()
+    expect(bearerToken(null)).toBeNull()
   })
 })

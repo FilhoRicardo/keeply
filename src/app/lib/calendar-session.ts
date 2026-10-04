@@ -51,3 +51,19 @@ export function parseDrafts(body: unknown): CalendarEventDraft[] | null {
     recurrence: [...recurrence],
   }))
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Supabase mode: the browser names tasks; the server loads them under the user's session.
+export function parseTaskRequest(body: unknown): { applianceId: string; taskIds: string[] } | null {
+  const { applianceId, taskIds } = (body ?? {}) as { applianceId?: unknown; taskIds?: unknown }
+  if (typeof applianceId !== 'string' || !UUID.test(applianceId)) return null
+  if (!Array.isArray(taskIds) || taskIds.length === 0 || taskIds.length > MAX_EVENTS_PER_REQUEST) return null
+  if (!taskIds.every((id) => typeof id === 'string' && UUID.test(id))) return null
+  return { applianceId, taskIds: [...new Set(taskIds as string[])] }
+}
+
+export function bearerToken(header: string | null): string | null {
+  const match = /^Bearer (\S+)$/.exec(header ?? '')
+  return match ? match[1] : null
+}

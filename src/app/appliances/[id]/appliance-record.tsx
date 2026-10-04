@@ -31,7 +31,7 @@ const OUTCOME_COPY: Record<string, string> = {
 }
 
 export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
-  const { state, addCompletion, recordCalendarResults } = usePlan()
+  const { state, addCompletion, recordCalendarResults, accessToken } = usePlan()
   const outcome = useSearchParams().get('approved')
   const [calendar, setCalendar] = useState<CalendarStatus | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -64,7 +64,7 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
 
   async function retry() {
     setBusy(true)
-    const result = await writeApprovedTasks(record!)
+    const result = await writeApprovedTasks(record!, await accessToken())
     if (result.kind === 'written') {
       await recordCalendarResults(applianceId, result.results)
       setMessage(result.results.every((r) => r.ok) ? 'Added to Google Calendar.' : 'Some tasks still failed. Try again later.')
@@ -90,7 +90,7 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
       setMessage(`Next due ${moved}. Connect Google Calendar to move the reminder.`)
       return
     }
-    const result = await writeTasks(next, [task])
+    const result = await writeTasks(next, [task], await accessToken())
     setMessage(
       result.kind === 'written' && result.results.every((r) => r.ok)
         ? `Reminder moved to ${moved}.`

@@ -17,7 +17,7 @@ import { today } from '../../../lib/today'
 
 export function ApprovalSummary({ applianceId }: { applianceId: string }) {
   const router = useRouter()
-  const { state, approve, recordCalendarResults } = usePlan()
+  const { state, approve, recordCalendarResults, accessToken } = usePlan()
   const [calendar, setCalendar] = useState<CalendarStatus | null>(null)
   const [startDate, setStartDate] = useState(today)
   const [busy, setBusy] = useState(false)
@@ -61,7 +61,7 @@ export function ApprovalSummary({ applianceId }: { applianceId: string }) {
     }
     let outcome = 'saved'
     if (calendar?.connected) {
-      const result = await writeApprovedTasks(findRecord(approved, applianceId)!)
+      const result = await writeApprovedTasks(findRecord(approved, applianceId)!, await accessToken())
       if (result.kind === 'written') {
         const after = findRecord(await recordCalendarResults(applianceId, result.results), applianceId)!
         outcome = after.tasks.every((t) => t.status !== 'approved' || t.calendarEventId) ? 'calendar' : 'partial'

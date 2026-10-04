@@ -24,6 +24,8 @@ export interface PlanRepository {
   approve(applianceId: string, defaultStartDate: LocalDate): Promise<PlanState>
   recordCalendarResults(applianceId: string, results: readonly WriteResult[]): Promise<PlanState>
   addCompletion(applianceId: string, taskId: string, completedOn: LocalDate): Promise<PlanState>
+  // Bearer token for server routes that act on this user's plan (Supabase only).
+  accessToken?(): Promise<string | null>
   // Optional change feed (other tabs, realtime). Listener should reload.
   subscribe?(listener: () => void): () => void
 }

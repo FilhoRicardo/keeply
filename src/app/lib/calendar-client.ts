@@ -1,8 +1,8 @@
 import type { WriteResult } from '@/calendar/writer'
-import { toCalendarEvent } from '@/domain/calendar-event'
 import { calendarBound } from '@/domain/plan'
 import type { CalendarStatus } from '../api/calendar/status/route'
 import type { Task } from '@/domain/model'
+import { draftsForTasks } from './calendar-drafts'
 import type { ApplianceRecord } from './plan-state'
 
 export type { CalendarStatus }
@@ -29,8 +29,8 @@ export function pendingCalendarTasks(record: ApplianceRecord) {
 export type CalendarWriteOutcome = { kind: 'written'; results: WriteResult[] } | { kind: 'not_connected' } | { kind: 'failed' }
 
 // Writes approved tasks not yet in the calendar.
-export function writeApprovedTasks(record: ApplianceRecord): Promise<CalendarWriteOutcome> {
-  return writeTasks(record, pendingCalendarTasks(record))
+export function writeApprovedTasks(record: ApplianceRecord, accessToken: string | null = null): Promise<CalendarWriteOutcome> {
+  return writeTasks(record, pendingCalendarTasks(record), accessToken)
 }
 
 // Completion-based tasks are a single event on the next due date; after a completion, move it.
@@ -39,18 +39,26 @@ export function needsReschedule(task: Task): boolean {
 }
 
 // Creates or updates the calendar event for each given task (upsert per task).
-export async function writeTasks(record: ApplianceRecord, tasks: readonly Task[]): Promise<CalendarWriteOutcome> {
-  if (!record.approvedAt) throw new Error('Approve the plan before writing to a calendar.')
-  const drafts = calendarBound(tasks).map((task) => {
-    const rec = record.recommendations.find((r) => r.id === task.recommendationId)!
-    return toCalendarEvent(task, rec, record.appliance, record.completions)
-  })
+// With a Supabase session the server loads the approved tasks itself and only task ids are sent;
+// with device storage the browser sends the drafts.
+export async function writeTasks(
+  record: ApplianceRecord,
+  tasks: readonly Task[],
+  accessToken: string | null = null,
+): Promise<CalendarWriteOutcome> {
+  const drafts = draftsForTasks(record, tasks)
   if (drafts.length === 0) return { kind: 'written', results: [] }
+  const body = accessToken
+    ? { applianceId: record.appliance.id, taskIds: drafts.map((d) => d.taskId) }
+    : { drafts }
   try {
     const response = await fetch('/api/calendar/events', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ drafts }),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify(body),
     })
     if (response.status === 401) return { kind: 'not_connected' }
     if (!response.ok) return { kind: 'failed' }

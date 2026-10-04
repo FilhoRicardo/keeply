@@ -3,7 +3,9 @@ import { createHmac } from 'node:crypto'
 import { createServer, request, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { createClient } from '@supabase/supabase-js'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { NextRequest } from 'next/server'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { POST } from '../api/calendar/events/route'
 import { findRecord } from './plan-state'
 import { createSupabasePlanRepository } from './supabase-plan-repository'
 
@@ -109,5 +111,61 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase plan repository', () => {
     const other = repoFor(OTHER)
     expect(findRecord(await other.load(), applianceId)).toBeUndefined()
     await expect(other.approve(applianceId, '2026-10-05')).rejects.toThrow(/Unknown appliance/)
+  })
+})
+
+describe.skipIf(!KEEPLY_POSTGREST_URL)('POST /api/calendar/events with Supabase', () => {
+  async function approvedPlan() {
+    const repo = repoFor(OWNER)
+    const { applianceId, state } = await repo.addAppliance({ manufacturer: 'Bosch', model: '', serialNumber: '' })
+    const [a, b, c] = findRecord(state, applianceId)!.recommendations
+    await repo.setDecision(applianceId, a.id, { kind: 'include' })
+    await repo.setDecision(applianceId, b.id, { kind: 'include' })
+    await repo.setDecision(applianceId, c.id, { kind: 'skip' })
+    return { applianceId, tasks: findRecord(await repo.approve(applianceId, '2026-10-05'), applianceId)!.tasks }
+  }
+
+  function call(user: string | null, body: unknown) {
+    return POST(
+      new NextRequest('http://keeply.local/api/calendar/events', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          cookie: 'keeply_gcal_token=google-token',
+          ...(user ? { authorization: `Bearer ${jwt(user)}` } : {}),
+        },
+        body: JSON.stringify(body),
+      }),
+    )
+  }
+
+  it('loads approved tasks under the caller’s session and never writes skipped ones', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', supabaseUrl)
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key-unused')
+    const realFetch = globalThis.fetch
+    const google: string[] = []
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (!url.startsWith('https://www.googleapis.com/')) return realFetch(input, init)
+      google.push(JSON.parse(String(init?.body)).summary)
+      return Response.json({ id: `evt-${google.length}` })
+    })
+    try {
+      const { applianceId, tasks } = await approvedPlan()
+
+      const response = await call(OWNER, { applianceId, taskIds: tasks.map((t) => t.id) })
+      expect(response.status).toBe(200)
+      const { results } = await response.json()
+      expect(results.map((r: { taskId: string }) => r.taskId)).toEqual([tasks[0].id, tasks[1].id])
+      expect(google).toEqual(['Clean the filter · Bosch dishwasher', 'Run a cleaning cycle · Bosch dishwasher'])
+
+      expect((await call(OTHER, { applianceId, taskIds: [tasks[0].id] })).status).toBe(404)
+      expect((await call(null, { applianceId, taskIds: [tasks[0].id] })).status).toBe(401)
+      expect((await call(OWNER, { drafts: [] })).status).toBe(400)
+      expect(google).toHaveLength(2)
+    } finally {
+      vi.unstubAllGlobals()
+      vi.unstubAllEnvs()
+    }
   })
 })

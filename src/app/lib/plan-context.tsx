@@ -16,6 +16,8 @@ type PlanContextValue = {
   error: string | null
   retry(): void
   storageKind: PlanRepository['kind']
+  // Supabase session token for server routes; null with device storage.
+  accessToken(): Promise<string | null>
   addAppliance(input: NewApplianceInput): Promise<string>
   setDecision(applianceId: string, recommendationId: string, decision: Decision | null): Promise<PlanState>
   approve(applianceId: string, defaultStartDate: LocalDate): Promise<PlanState>
@@ -76,6 +78,7 @@ export function PlanProvider({
       error,
       retry: () => setAttempt((n) => n + 1),
       storageKind: repo.kind,
+      accessToken: () => repo.accessToken?.() ?? Promise.resolve(null),
       async addAppliance(input) {
         let added: Awaited<ReturnType<PlanRepository['addAppliance']>>
         try {

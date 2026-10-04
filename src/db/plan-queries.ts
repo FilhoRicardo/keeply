@@ -28,12 +28,15 @@ function check<T>({ data, error }: { data: T | null; error: { message: string } 
   return data as T
 }
 
+const TREE = '*, source_documents(*), maintenance_recommendations(*), maintenance_tasks(*, maintenance_completions(*)), plan_decisions(*)'
+
 export async function loadApplianceTrees(db: SupabaseClient): Promise<ApplianceTree[]> {
-  const result = await db
-    .from('appliances')
-    .select('*, source_documents(*), maintenance_recommendations(*), maintenance_tasks(*, maintenance_completions(*)), plan_decisions(*)')
-    .order('created_at')
-  return check(result) as ApplianceTree[]
+  return check(await db.from('appliances').select(TREE).order('created_at')) as ApplianceTree[]
+}
+
+// One appliance, or null if it does not exist or belongs to someone else (RLS).
+export async function loadApplianceTree(db: SupabaseClient, applianceId: string): Promise<ApplianceTree | null> {
+  return check(await db.from('appliances').select(TREE).eq('id', applianceId).maybeSingle()) as ApplianceTree | null
 }
 
 export type NewRecommendation = Pick<Recommendation, 'taskName' | 'description' | 'recommendedInterval' | 'evidenceLevel' | 'sourceLocation'>
