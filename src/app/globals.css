@@ -5,10 +5,11 @@
   --aster-font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --aster-ink: #1d2421;
   --aster-ink-2: #5a615b;
-  --aster-ink-3: #8a928d;
+  /* Darkened from the Aster #8a928d / #5f9d79 to reach WCAG AA (4.5:1) for small text. */
+  --aster-ink-3: #5f6661;
   --aster-green: #13733f;
   --aster-green-deep: #115c34;
-  --aster-green-soft: #5f9d79;
+  --aster-green-soft: #2f6e49;
   --aster-green-grad: linear-gradient(180deg, #23a564, #13733f);
   --aster-green-mark: linear-gradient(150deg, #2bb172, #0f6b3f);
   --aster-glass-bg: rgba(255, 255, 255, 0.46);

@@ -145,7 +145,7 @@ Steps:
 1. Home appliance row: "N active tasks · Next: <task>, <date>" or "<task> overdue since <date>"; skipped tasks ignored.
 2. axe-core WCAG 2 A/AA scan on Home, add form, plan review, approval and record screens: no violations.
 
-Known limit for a human check: axe cannot compute colour contrast over the translucent "glass" panels, so small grey text (eyebrow labels, `--aster-ink-3`) needs a manual contrast review.
+Known limit: axe cannot compute colour contrast over the translucent "glass" panels; checked by hand in slice 15.
 
 ### 13. README and go-live notes (Builder 1)
 
@@ -161,6 +161,14 @@ Steps:
 1. "Delete this dishwasher" on the plan and record screens, with a confirm step. Removes the appliance and everything under it from Keeply; says plainly that events already in Google Calendar stay there (Keeply never deletes calendar events).
 2. Device and Supabase repositories; Supabase delete cascades under RLS and reports "Unknown appliance" for someone else's id.
 3. Tests: component flow, device repository, integration (cascade leaves no rows; other user cannot delete). 140 unit/component, 5 integration, 2 e2e pass.
+
+### 15. Text contrast to WCAG AA (Builder 2; reviewer Builder 4; brand owner to confirm)
+
+`src/app/globals.css`.
+
+Steps:
+1. Measured small text against the darkest background it sits on (`#e1e7e3`): `--aster-ink-3` `#8a928d` was 2.55:1 and `--aster-green-soft` `#5f9d79` 2.54:1 (AA needs 4.5:1).
+2. Darkened to `#5f6661` (4.7:1) and `#2f6e49` (4.86:1). These deviate from the Aster tokens; the brand owner should confirm or pick other AA-passing values.
 
 ## Review requests for Builders 3–4 (Codex)
 
