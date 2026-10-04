@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 
 // Errors that are about the environment, not the app (e.g. fonts blocked by a proxy).
@@ -12,6 +13,12 @@ function watchConsole(page: Page) {
   return problems
 }
 
+// WCAG A/AA violations on the current screen (axe-core).
+async function accessible(page: Page) {
+  const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()
+  expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([])
+}
+
 async function noHorizontalScroll(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 }
@@ -21,10 +28,12 @@ test('add a dishwasher, decide, approve and see the record', async ({ page }) =>
   await page.goto('/')
   await expect(page.getByText('No appliances yet.')).toBeVisible()
   await noHorizontalScroll(page)
+  await accessible(page)
 
   await page.getByRole('link', { name: 'Add manually' }).click()
   await page.getByLabel('Manufacturer').fill('Bosch')
   await page.getByLabel(/Model number/).fill('SMS6ZCI49E')
+  await accessible(page)
   await page.getByRole('button', { name: 'Continue to maintenance plan' }).click()
 
   await expect(page).toHaveURL(/\/plan$/)
@@ -43,11 +52,13 @@ test('add a dishwasher, decide, approve and see the record', async ({ page }) =>
   await expect(card('Check the spray arms').getByText(/could not find model-specific guidance/)).toBeVisible()
   await card('Check the spray arms').getByRole('button', { name: 'Skip' }).click()
   await noHorizontalScroll(page)
+  await accessible(page)
 
   await page.getByRole('link', { name: 'Review plan' }).click()
   await expect(page).toHaveURL(/\/approve$/)
   await expect(page.getByText(/2 tasks will be added to your calendar, 1 skipped/)).toBeVisible()
   await expect(page.getByText(/not set up on this server/)).toBeVisible()
+  await accessible(page)
   await page.getByRole('button', { name: 'Approve maintenance plan' }).click()
 
   await expect(page).toHaveURL(/approved=saved/)
@@ -57,9 +68,10 @@ test('add a dishwasher, decide, approve and see the record', async ({ page }) =>
   await page.getByRole('button', { name: 'Mark done today' }).first().click()
   await expect(page.getByText(/^Done/).first()).toBeVisible()
   await noHorizontalScroll(page)
+  await accessible(page)
 
   await page.goto('/')
-  await expect(page.getByRole('link', { name: /Bosch SMS6ZCI49E dishwasher/ })).toContainText('2 active tasks')
+  await expect(page.getByRole('link', { name: /Bosch SMS6ZCI49E dishwasher/ })).toContainText('2 active tasks · Next:')
   expect(problems).toEqual([])
 })
 

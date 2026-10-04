@@ -137,6 +137,16 @@ Steps:
 2. Google connect without config redirects safely (open-redirect attempt falls back to `/`); events route refuses without a token.
 3. Passes locally (2/2). CI job not yet run on GitHub.
 
+### 12. Home shows the next task; accessibility checks in e2e (Builder 2; reviewer Builder 4)
+
+`src/app/appliance-list.tsx`, `e2e/phase1.spec.ts`.
+
+Steps:
+1. Home appliance row: "N active tasks · Next: <task>, <date>" or "<task> overdue since <date>"; skipped tasks ignored.
+2. axe-core WCAG 2 A/AA scan on Home, add form, plan review, approval and record screens: no violations.
+
+Known limit for a human check: axe cannot compute colour contrast over the translucent "glass" panels, so small grey text (eyebrow labels, `--aster-ink-3`) needs a manual contrast review.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
