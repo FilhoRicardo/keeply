@@ -412,6 +412,10 @@ Preview of `e529dd4` with `MINIMAX_API_KEY` (Secret), `MINIMAX_MODEL`, `NEXT_PUB
 
 Supabase: 11 `funnel_events` matching the manual, Calendar and hosted-scan steps, counts and booleans only; BUSH row stored as confirmed (confidence 0.95) with 3 tasks. Open: G3 isolation (second visitor), G5 Google sign-in, G6 optional failure paths, G7 production/testers.
 
+### 44. Google sign-in (G5) and isolation (G3) passed (Ricardo, with Codex in his browser)
+
+Google sign-in linked the anonymous owner (same user id, Bosch and BUSH kept); sign-out gave an empty Home; signing in again offered "Switch to that account" and restored only the owner's dishwashers. A second anonymous visitor could not open BUSH and created its own "Isolation test" under a different user id; the owner could not open it either. All owner-only preview gates now pass: storage, Calendar, AI scan, usage counts, sign-in, isolation. Remaining for invited testers: `docs/live-gates.md` G7.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
