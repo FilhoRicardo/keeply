@@ -3,10 +3,10 @@
 import Link from 'next/link'
 import { applianceName } from '@/domain/calendar-event'
 import { approvalBlockers } from '@/domain/plan'
-import { NotFoundPanel } from '../../../components/screen'
 import { RecommendationCard } from '../../../components/recommendation-card'
-import { findRecord, setDecision } from '../../../lib/plan-state'
-import { updatePlanState, usePlanState } from '../../../lib/plan-store'
+import { LoadingPanel, NotFoundPanel } from '../../../components/screen'
+import { usePlan } from '../../../lib/plan-context'
+import { findRecord } from '../../../lib/plan-state'
 import { today } from '../../../lib/today'
 
 const BLOCKER_COPY = {
@@ -16,8 +16,8 @@ const BLOCKER_COPY = {
 }
 
 export function PlanReview({ applianceId }: { applianceId: string }) {
-  const state = usePlanState()
-  if (!state) return null
+  const { state, setDecision } = usePlan()
+  if (!state) return <LoadingPanel />
   const record = findRecord(state, applianceId)
   if (!record) return <NotFoundPanel />
 
@@ -55,7 +55,7 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
             recommendation={rec}
             decision={record.decisions[rec.id]}
             today={today()}
-            onDecide={(decision) => updatePlanState((s) => setDecision(s, applianceId, rec.id, decision))}
+            onDecide={(decision) => setDecision(applianceId, rec.id, decision)}
           />
         ))}
       </div>

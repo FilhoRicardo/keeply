@@ -2,6 +2,7 @@ import type { WriteResult } from '@/calendar/writer'
 import { toCalendarEvent } from '@/domain/calendar-event'
 import { calendarBound } from '@/domain/plan'
 import type { CalendarStatus } from '../api/calendar/status/route'
+import type { Task } from '@/domain/model'
 import type { ApplianceRecord } from './plan-state'
 
 export type { CalendarStatus }
@@ -27,9 +28,20 @@ export function pendingCalendarTasks(record: ApplianceRecord) {
 
 export type CalendarWriteOutcome = { kind: 'written'; results: WriteResult[] } | { kind: 'not_connected' } | { kind: 'failed' }
 
-export async function writeApprovedTasks(record: ApplianceRecord): Promise<CalendarWriteOutcome> {
+// Writes approved tasks not yet in the calendar.
+export function writeApprovedTasks(record: ApplianceRecord): Promise<CalendarWriteOutcome> {
+  return writeTasks(record, pendingCalendarTasks(record))
+}
+
+// Completion-based tasks are a single event on the next due date; after a completion, move it.
+export function needsReschedule(task: Task): boolean {
+  return task.status === 'approved' && task.schedulingMode === 'completion_based' && task.calendarEventId !== null
+}
+
+// Creates or updates the calendar event for each given task (upsert per task).
+export async function writeTasks(record: ApplianceRecord, tasks: readonly Task[]): Promise<CalendarWriteOutcome> {
   if (!record.approvedAt) throw new Error('Approve the plan before writing to a calendar.')
-  const drafts = pendingCalendarTasks(record).map((task) => {
+  const drafts = calendarBound(tasks).map((task) => {
     const rec = record.recommendations.find((r) => r.id === task.recommendationId)!
     return toCalendarEvent(task, rec, record.appliance, record.completions)
   })

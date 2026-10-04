@@ -16,9 +16,9 @@ export async function POST(request: NextRequest) {
   let unauthorised = false
   const writer = googleCalendarWriter({ accessToken })
   const results = await writeEvents({
-    async createEvent(draft) {
+    async upsertEvent(draft) {
       try {
-        return await writer.createEvent(draft)
+        return await writer.upsertEvent(draft)
       } catch (error) {
         if (error instanceof GoogleCalendarError && error.status === 401) unauthorised = true
         throw error

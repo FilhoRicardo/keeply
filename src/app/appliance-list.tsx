@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { applianceName } from '@/domain/calendar-event'
-import { usePlanState } from './lib/plan-store'
+import { usePlan } from './lib/plan-context'
 
 function DishwasherIcon() {
   return (
@@ -16,7 +16,7 @@ function DishwasherIcon() {
 }
 
 export function ApplianceCount() {
-  const state = usePlanState()
+  const { state } = usePlan()
   return (
     <span className="appliance-count" aria-hidden="true">
       {state?.records.length ?? 0}
@@ -25,8 +25,16 @@ export function ApplianceCount() {
 }
 
 export function ApplianceList() {
-  const state = usePlanState()
-  const records = state?.records ?? []
+  const { state } = usePlan()
+  if (!state) {
+    return (
+      <div className="empty-state aster-inner" aria-busy="true">
+        <DishwasherIcon />
+        <p>Loading your appliances…</p>
+      </div>
+    )
+  }
+  const records = state.records
 
   if (records.length === 0) {
     return (

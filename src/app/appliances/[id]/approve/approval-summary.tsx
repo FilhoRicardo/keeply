@@ -8,16 +8,16 @@ import { isLocalDate } from '@/domain/dates'
 import { formatInterval } from '@/domain/format-interval'
 import { canApprove } from '@/domain/plan'
 import { EvidenceBadge } from '../../../components/evidence-badge'
-import { NotFoundPanel } from '../../../components/screen'
+import { LoadingPanel, NotFoundPanel } from '../../../components/screen'
 import { connectUrl, fetchCalendarStatus, writeApprovedTasks, type CalendarStatus } from '../../../lib/calendar-client'
-import { approve, findRecord, recordCalendarResults } from '../../../lib/plan-state'
-import { getPlanState, updatePlanState, usePlanState } from '../../../lib/plan-store'
+import { usePlan } from '../../../lib/plan-context'
+import { findRecord } from '../../../lib/plan-state'
 import { formatDate } from '../../../lib/format-date'
 import { today } from '../../../lib/today'
 
-export function ApprovalSummary({ applianceId, newId = () => crypto.randomUUID() }: { applianceId: string; newId?: () => string }) {
+export function ApprovalSummary({ applianceId }: { applianceId: string }) {
   const router = useRouter()
-  const state = usePlanState()
+  const { state, approve, recordCalendarResults } = usePlan()
   const [calendar, setCalendar] = useState<CalendarStatus | null>(null)
   const [startDate, setStartDate] = useState(today)
   const [busy, setBusy] = useState(false)
@@ -26,7 +26,7 @@ export function ApprovalSummary({ applianceId, newId = () => crypto.randomUUID()
     fetchCalendarStatus().then(setCalendar)
   }, [])
 
-  if (!state) return null
+  if (!state) return <LoadingPanel />
   const record = findRecord(state, applianceId)
   if (!record) return <NotFoundPanel />
   if (record.approvedAt) {
@@ -51,13 +51,12 @@ export function ApprovalSummary({ applianceId, newId = () => crypto.randomUUID()
   async function onApprove() {
     setBusy(true)
     // Approval: the only place Tasks are created.
-    const approved = updatePlanState((s) => approve(s, applianceId, startDate, newId, new Date().toISOString()))
+    const approved = await approve(applianceId, startDate)
     let outcome = 'saved'
     if (calendar?.connected) {
       const result = await writeApprovedTasks(findRecord(approved, applianceId)!)
       if (result.kind === 'written') {
-        updatePlanState((s) => recordCalendarResults(s, applianceId, result.results))
-        const after = findRecord(getPlanState(), applianceId)!
+        const after = findRecord(await recordCalendarResults(applianceId, result.results), applianceId)!
         outcome = after.tasks.every((t) => t.status !== 'approved' || t.calendarEventId) ? 'calendar' : 'partial'
       } else {
         outcome = result.kind

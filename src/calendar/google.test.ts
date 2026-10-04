@@ -37,7 +37,7 @@ describe('googleCalendarWriter', () => {
     const fetchMock = respond(200, { id: 'evt-1' })
     const writer = googleCalendarWriter({ accessToken: 'token', fetch: fetchMock })
 
-    await expect(writer.createEvent(draft)).resolves.toEqual({ eventId: 'evt-1' })
+    await expect(writer.upsertEvent(draft)).resolves.toEqual({ eventId: 'evt-1' })
 
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('https://www.googleapis.com/calendar/v3/calendars/primary/events')
@@ -53,25 +53,46 @@ describe('googleCalendarWriter', () => {
 
   it('omits recurrence for a single event', async () => {
     const fetchMock = respond(200, { id: 'evt-1' })
-    await googleCalendarWriter({ accessToken: 't', fetch: fetchMock }).createEvent({ ...draft, recurrence: [] })
+    await googleCalendarWriter({ accessToken: 't', fetch: fetchMock }).upsertEvent({ ...draft, recurrence: [] })
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).not.toHaveProperty('recurrence')
   })
 
-  it('treats 409 as already written so retries never duplicate', async () => {
-    const writer = googleCalendarWriter({ accessToken: 't', fetch: respond(409) })
-    await expect(writer.createEvent(draft)).resolves.toEqual({ eventId: googleEventId(draft.taskId) })
+  it('updates the existing event on 409 so retries and reschedules never duplicate', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('{}', { status: 409 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: googleEventId(draft.taskId) }), { status: 200 }))
+    const writer = googleCalendarWriter({ accessToken: 't', fetch: fetchMock })
+
+    await expect(writer.upsertEvent({ ...draft, date: '2026-11-05', endDate: '2026-11-06' })).resolves.toEqual({
+      eventId: googleEventId(draft.taskId),
+    })
+    const [url, init] = fetchMock.mock.calls[1]
+    expect(init?.method).toBe('PUT')
+    expect(url).toBe(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${googleEventId(draft.taskId)}`)
+    expect(JSON.parse(init?.body as string)).toMatchObject({ start: { date: '2026-11-05' } })
+  })
+
+  it('surfaces a failed update', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('{}', { status: 409 }))
+      .mockResolvedValueOnce(new Response('{}', { status: 403 }))
+    await expect(googleCalendarWriter({ accessToken: 't', fetch: fetchMock }).upsertEvent(draft)).rejects.toMatchObject({
+      status: 403,
+    })
   })
 
   it('surfaces other failures with their status', async () => {
     const writer = googleCalendarWriter({ accessToken: 't', fetch: respond(401) })
-    await expect(writer.createEvent(draft)).rejects.toMatchObject({ status: 401 })
+    await expect(writer.upsertEvent(draft)).rejects.toMatchObject({ status: 401 })
   })
 })
 
 describe('writeEvents', () => {
   it('keeps going after one failure and reports each task', async () => {
     const writer: CalendarWriter = {
-      createEvent: vi
+      upsertEvent: vi
         .fn()
         .mockRejectedValueOnce(new Error('boom'))
         .mockResolvedValueOnce({ eventId: 'evt-2' }),

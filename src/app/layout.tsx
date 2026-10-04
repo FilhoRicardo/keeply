@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import type { ReactNode } from 'react'
 import './globals.css'
+import { PlanProvider } from './lib/plan-context'
 import { ServiceWorkerRegistration } from './service-worker-registration'
 
 export const metadata: Metadata = {
@@ -28,7 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
-        {children}
+        <PlanProvider>{children}</PlanProvider>
         <ServiceWorkerRegistration />
       </body>
     </html>

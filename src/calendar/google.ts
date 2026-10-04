@@ -21,7 +21,7 @@ export class GoogleCalendarError extends Error {
 }
 
 // Google event ids use base32hex (0-9, a-v), 5–1024 chars. A deterministic id per Task makes
-// retries idempotent: a second insert returns 409 instead of creating a duplicate.
+// writes idempotent: a second insert returns 409 and becomes an update instead of a duplicate.
 export function googleEventId(taskId: string): string {
   const encoded = Array.from(new TextEncoder().encode(taskId), (b) => b.toString(16).padStart(2, '0')).join('')
   return `kp${encoded}`
@@ -50,21 +50,26 @@ export function googleCalendarWriter({
   calendarId?: string
   fetch?: Fetch
 }): CalendarWriter {
+  const eventsUrl = `${EVENTS_URL}/${encodeURIComponent(calendarId)}/events`
+  const send = (method: 'POST' | 'PUT', url: string, body: unknown) =>
+    fetchImpl(url, {
+      method,
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  const fail = (status: number): never => {
+    throw new GoogleCalendarError(`Google Calendar rejected the event (${status})`, status)
+  }
+
   return {
-    async createEvent(draft) {
+    async upsertEvent(draft) {
       const body = googleEventBody(draft)
-      const response = await fetchImpl(`${EVENTS_URL}/${encodeURIComponent(calendarId)}/events`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      // Already written on an earlier attempt.
-      if (response.status === 409) return { eventId: body.id }
-      if (!response.ok) {
-        throw new GoogleCalendarError(`Google Calendar rejected the event (${response.status})`, response.status)
-      }
-      const created = (await response.json()) as { id: string }
-      return { eventId: created.id }
+      let response = await send('POST', eventsUrl, body)
+      // The Task already has an event: update it in place (retry, or a new due date).
+      if (response.status === 409) response = await send('PUT', `${eventsUrl}/${body.id}`, body)
+      if (!response.ok) fail(response.status)
+      const saved = (await response.json()) as { id?: string }
+      return { eventId: saved.id ?? body.id }
     },
   }
 }

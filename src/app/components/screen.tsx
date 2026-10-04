@@ -30,6 +30,14 @@ export function Screen({
   )
 }
 
+export function LoadingPanel() {
+  return (
+    <div className="empty-state aster-inner" aria-busy="true">
+      <p>Loading…</p>
+    </div>
+  )
+}
+
 export function NotFoundPanel() {
   return (
     <div className="empty-state aster-inner">

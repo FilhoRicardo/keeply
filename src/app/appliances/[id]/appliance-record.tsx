@@ -7,10 +7,18 @@ import { applianceName } from '@/domain/calendar-event'
 import { formatInterval } from '@/domain/format-interval'
 import { isOverdue, nextDue } from '@/domain/schedule'
 import { EvidenceBadge } from '../../components/evidence-badge'
-import { NotFoundPanel } from '../../components/screen'
-import { connectUrl, fetchCalendarStatus, pendingCalendarTasks, writeApprovedTasks, type CalendarStatus } from '../../lib/calendar-client'
-import { addCompletion, findRecord, recordCalendarResults } from '../../lib/plan-state'
-import { updatePlanState, usePlanState } from '../../lib/plan-store'
+import { LoadingPanel, NotFoundPanel } from '../../components/screen'
+import {
+  connectUrl,
+  fetchCalendarStatus,
+  needsReschedule,
+  pendingCalendarTasks,
+  writeApprovedTasks,
+  writeTasks,
+  type CalendarStatus,
+} from '../../lib/calendar-client'
+import { usePlan } from '../../lib/plan-context'
+import { findRecord } from '../../lib/plan-state'
 import { formatDate } from '../../lib/format-date'
 import { today } from '../../lib/today'
 
@@ -23,7 +31,7 @@ const OUTCOME_COPY: Record<string, string> = {
 }
 
 export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
-  const state = usePlanState()
+  const { state, addCompletion, recordCalendarResults } = usePlan()
   const outcome = useSearchParams().get('approved')
   const [calendar, setCalendar] = useState<CalendarStatus | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -33,7 +41,7 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
     fetchCalendarStatus().then(setCalendar)
   }, [])
 
-  if (!state) return null
+  if (!state) return <LoadingPanel />
   const record = findRecord(state, applianceId)
   if (!record) return <NotFoundPanel />
 
@@ -58,13 +66,30 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
     setBusy(true)
     const result = await writeApprovedTasks(record!)
     if (result.kind === 'written') {
-      updatePlanState((s) => recordCalendarResults(s, applianceId, result.results))
+      await recordCalendarResults(applianceId, result.results)
       setMessage(result.results.every((r) => r.ok) ? 'Added to Google Calendar.' : 'Some tasks still failed. Try again later.')
     } else {
       setMessage(result.kind === 'not_connected' ? 'Connect Google Calendar first.' : 'Google Calendar could not be reached.')
       if (result.kind === 'not_connected') setCalendar((c) => (c ? { ...c, connected: false } : c))
     }
     setBusy(false)
+  }
+
+  async function markDone(taskId: string) {
+    const next = findRecord(await addCompletion(applianceId, taskId, now), applianceId)!
+    const task = next.tasks.find((t) => t.id === taskId)!
+    if (!needsReschedule(task)) return
+    const moved = formatDate(nextDue(task, next.completions))
+    if (!calendar?.connected) {
+      setMessage(`Next due ${moved}. Connect Google Calendar to move the reminder.`)
+      return
+    }
+    const result = await writeTasks(next, [task])
+    setMessage(
+      result.kind === 'written' && result.results.every((r) => r.ok)
+        ? `Reminder moved to ${moved}.`
+        : `Next due ${moved}, but the calendar reminder could not be moved.`,
+    )
   }
 
   return (
@@ -142,7 +167,7 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
               <button
                 type="button"
                 className="aster-btn aster-btn--ghost full-width"
-                onClick={() => updatePlanState((s) => addCompletion(s, applianceId, task.id, now))}
+                onClick={() => markDone(task.id)}
               >
                 Mark done today
               </button>
@@ -167,8 +192,13 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
           ) : calendar ? (
             <p>Google Calendar is not set up on this server yet.</p>
           ) : null}
-          {message && <p role="status">{message}</p>}
         </section>
+      )}
+
+      {message && (
+        <p className="notice" role="status">
+          {message}
+        </p>
       )}
     </>
   )

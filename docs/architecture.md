@@ -13,9 +13,9 @@ Next.js (App Router) + TypeScript `strict`, pnpm, ESLint, Vitest. Verify with `p
 
 `/` → `/appliances/new` → `/appliances/[id]/plan` (Include / Customise / Skip) → `/appliances/[id]/approve` → `/appliances/[id]` (record, next due, completions).
 
-- Until a Supabase project exists, plan state lives in browser storage: `src/app/lib/plan-state.ts` (pure transitions, tested) and `plan-store.ts` (localStorage + `useSyncExternalStore`). Replace the store with `src/db` queries when Supabase is provisioned.
+- Storage seam: screens use `usePlan()` (`src/app/lib/plan-context.tsx`), which calls an async `PlanRepository` (`plan-repository.ts`). Today it is the device adapter (localStorage, falls back to memory; transitions in `plan-state.ts`). A Supabase adapter plugs into `<PlanProvider>` without screen changes; steps in `src/db/README.md`.
 - Google Calendar: `/auth/google/start` and `/auth/google/callback` (state cookie, `calendar.events` scope, access token in an httpOnly cookie scoped to `/api/calendar`). `/api/calendar/status` reports configured/connected; `POST /api/calendar/events` validates drafts and writes them. Without `GOOGLE_*` env vars, approval saves on the device only.
-- Event ids are derived from Task ids, so retrying a write never duplicates an event.
+- Event ids are derived from Task ids and writes are upserts, so retries never duplicate and marking a completion-based task done moves its event to the next due date.
 
 ## Rules
 
