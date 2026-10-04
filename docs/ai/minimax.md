@@ -1,12 +1,17 @@
 # MiniMax appliance-identification provider
 
-Status (2026-10-04): **adapter implemented; live verification pending.** All tests use mocks or a local stand-in server, not MiniMax. Real calls happen only when `MINIMAX_API_KEY` is set on the server (and scanning is enabled); otherwise Keeply stays in Manual mode.
+Status (2026-10-04): **adapter implemented; MiniMax-M3 image input verified live with this account's Token Plan key (synthetic images only); real-label accuracy not yet tested.** `pnpm test` and CI use mocks or a local stand-in server, not MiniMax. Real calls happen only when `MINIMAX_API_KEY` is set on the server (and scanning is enabled); otherwise Keeply stays in Manual mode.
 
 Code: `src/ai/minimax.ts` (all MiniMax request/response handling), `src/ai/identity.ts` (Keeply's neutral schema `applianceType, manufacturer, model, serialNumber, confidence`), `src/ai/provider.ts` (selection; Manual always last). Workflow: photo → `/api/identify` → provider → neutral identity → Confirm / Edit / Rescan. Nothing is saved without the owner confirming; any edit drops the AI confidence. Only photos the browser re-encoded (EXIF/GPS dropped) are sent.
 
 ## Verification log
 
-- 2026-10-04 17:00 UTC, cloud session started before the API credential was saved: `pnpm verify:minimax` → HTTP 403 from the session's egress proxy ("Host not in allowlist: api.minimax.io"). The request never reached MiniMax; image-input acceptance is **not yet tested**. Next: run again in a new session (the credential applies to sessions started after it was saved).
+- 2026-10-04 17:00 UTC, earlier cloud session: `pnpm verify:minimax` → HTTP 403 "Host not in allowlist: api.minimax.io". The request never reached MiniMax. Root cause (found 17:11 UTC): Node's built-in `fetch` ignores `HTTPS_PROXY`, so the test bypassed the credential-injecting proxy and the sandbox firewall answered. Fixed in the test path only: the script sets `NODE_USE_ENV_PROXY=1`, and the test now reports a firewall/proxy block separately from a MiniMax rejection.
+- 2026-10-04 17:11–17:13 UTC, new cloud session with the "MiniMax Keeply verification" API credential (proxy-injected; the key was never visible to commands). Model `MiniMax-M3`, `https://api.minimax.io/v1/chat/completions`, `image_url` data URI, `thinking` disabled:
+  - Default synthetic Keeply icon (`public/icons/icon-512.png`): HTTP 200, valid schema, `{"applianceType":"unknown","manufacturer":null,"model":null,"serialNumber":null,"confidence":0}`. This is correct for an image with no label, and nothing was invented.
+  - Synthetic rendered label with an invented brand (NORDVIK, Type DW-4821X, S/N 7731004215K; generated in the session, not committed): `{"applianceType":"dishwasher","manufacturer":"NORDVIK","model":"DW-4821X","serialNumber":"7731004215K","confidence":0.98}`. All three fields exactly match the printed text, so the image is actually read.
+  - **Answers open question 1:** this Token Plan key may send image input to MiniMax-M3 on `/v1/chat/completions`.
+  - **Not established:** accuracy on real photographed labels (glare, angle, wear, small print). No real photo was supplied. Next: `KEEPLY_LABEL_PHOTO=… pnpm verify:minimax` locally with a few real labels.
 
 ## Account
 
@@ -30,7 +35,7 @@ The cloud session could not open MiniMax's docs (network policy), so everything 
 
 ## Open questions before enabling real calls
 
-1. **Entitlement:** the Token Plan covers MiniMax-M3, and M3 accepts images, but no excerpt states explicitly that a Token Plan (`sk-cp-`) key may send `image_url` input to M3 on `/v1/chat/completions` (image understanding is also described via the separate VLM API / `understand_image` tool). General M3 capability ≠ this plan's entitlement; one real call settles it.
+1. ~~**Entitlement**~~ **Answered 2026-10-04 (see Verification log): yes, image input to M3 works with this key.** Original question: the Token Plan covers MiniMax-M3, and M3 accepts images, but no excerpt states explicitly that a Token Plan (`sk-cp-`) key may send `image_url` input to M3 on `/v1/chat/completions` (image understanding is also described via the separate VLM API / `understand_image` tool). General M3 capability ≠ this plan's entitlement; one real call settles it.
 2. **Terms:** may a Token Plan key serve requests from a deployed app's users, or is it limited to the subscriber's own tools? Check the Token Plan terms before using it in production.
 3. **Limits:** whether the 5-hour/weekly windows suit a beta (each label read is one image request).
 4. **Region:** international (`api.minimax.io`) vs mainland (`api.minimaxi.com`) host for this account; set `MINIMAX_BASE_URL` if needed.
@@ -61,7 +66,7 @@ Not yet: enabling real AI for beta users is a separate decision.
 
 On a machine with network access to `api.minimax.io` (e.g. the Mac), from the repo:
 
-**Entitlement check (cloud or local):** `pnpm verify:minimax` (optionally `KEEPLY_LABEL_PHOTO=path/to/label.jpg`). Pass: it prints a parsed identity (any image works for the entitlement question; a real label tests accuracy). A MiniMax error about image input or model access answers question 1. In a cloud session without the API credential, the proxy itself returns 403.
+**Entitlement check (cloud or local):** `pnpm verify:minimax` (optionally `KEEPLY_LABEL_PHOTO=path/to/label.jpg`). Pass: it prints a parsed identity (any image works for the entitlement question; a real label tests accuracy). A MiniMax error about image input or model access answers question 1. In a cloud session, a 403 "Host not in allowlist" means the request bypassed the credential proxy or no matching credential exists. The test reports it as an egress-proxy block, not a MiniMax error.
 
 **App flow (local only):** with `.env.local` holding `MINIMAX_API_KEY` and `NEXT_PUBLIC_KEEPLY_SCAN=1`:
 

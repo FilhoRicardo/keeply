@@ -8,15 +8,23 @@ import { identifyWithMiniMax, MINIMAX_VISION_MODELS } from './minimax'
 // environment's API credential for api.minimax.io is injected by the egress proxy, so this test
 // strips its own placeholder Authorization header and lets the proxy add the real one.
 // Locally (no proxy), set MINIMAX_API_KEY in .env.local / the shell instead.
+// Node's built-in fetch ignores HTTPS_PROXY unless NODE_USE_ENV_PROXY=1 (set by the script); without
+// it the request skips the credential-injecting proxy and the sandbox firewall answers 403 itself.
 const model = process.env.MINIMAX_MODEL?.trim() || 'MiniMax-M3'
 const baseUrl = (process.env.MINIMAX_BASE_URL?.trim() || 'https://api.minimax.io/v1').replace(/\/+$/, '')
 const localKey = process.env.MINIMAX_API_KEY?.trim()
 const photoPath = process.env.KEEPLY_LABEL_PHOTO || 'public/icons/icon-512.png'
 
-const viaProxy: typeof fetch = (input, init) => {
+const viaProxy: typeof fetch = async (input, init) => {
   const headers = new Headers(init?.headers)
   if (!localKey) headers.delete('Authorization')
-  return fetch(input, { ...init, headers })
+  const response = await fetch(input, { ...init, headers })
+  // Tell a block by the session's egress proxy apart from a MiniMax rejection.
+  if (response.status === 403) {
+    const text = await response.clone().text()
+    if (text.startsWith('Host not in allowlist')) throw new Error(`Egress proxy blocked the request before it reached MiniMax: ${text.slice(0, 80)}`)
+  }
+  return response
 }
 
 describe('MiniMax live (verification only)', () => {

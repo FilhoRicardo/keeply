@@ -5,5 +5,5 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   plugins: [react()],
   resolve: { tsconfigPaths: true, alias: { 'server-only': new URL('./test/server-only-stub.ts', import.meta.url).pathname } },
-  test: { environment: 'node', include: ['src/**/*.live.test.ts'] },
+  test: { environment: 'node', include: ['src/**/*.live.test.ts'], silent: false, reporters: ['verbose'] },
 })
