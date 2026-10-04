@@ -33,29 +33,37 @@ The cloud session could not open MiniMax's docs (network policy), so everything 
 
 ## Entering the key safely
 
-Variable names read by the server: `MINIMAX_API_KEY` (required), `MINIMAX_MODEL` (default `MiniMax-M3`), `MINIMAX_BASE_URL` (default `https://api.minimax.io/v1`), plus `NEXT_PUBLIC_KEEPLY_SCAN=1` to show the scan screen. Never paste the key into chat, an issue or a commit.
+Never paste the key into chat, an issue or a commit. The app reads `MINIMAX_API_KEY` (server only), `MINIMAX_MODEL` (default `MiniMax-M3`), `MINIMAX_BASE_URL` (default `https://api.minimax.io/v1`); `NEXT_PUBLIC_KEEPLY_SCAN=1` shows the scan screen.
 
-- **Local (recommended first):** in the root of your local clone of this repo (the folder with `package.json`, on branch `claude/dazzling-mayer-ytyahw`), create `.env.local`. It is gitignored (`.env.*` in `.gitignore`). Next.js loads it on the server only; variables without `NEXT_PUBLIC_` never reach the browser.
-- **Claude cloud session:** the cloud environment menu in the session's title bar → Edit → add `MINIMAX_API_KEY` under API credentials (or as an environment variable), and under Network access choose Custom and add `api.minimax.io` (and `platform.minimax.io` for the docs), keeping the default package managers. Network steps: https://code.claude.com/docs/en/cloud-environments#network-access. **A new session is needed** to pick up either change; until then `api.minimax.io` stays blocked here.
-- **Vercel:** do not add it there yet; enabling real AI for beta users is a separate decision.
+### Claude cloud session (verification only)
+
+Per [cloud environments](https://code.claude.com/docs/en/cloud-environments) (Pro/Max): add an **API credential** in the environment's settings (cloud environment menu in the session title bar → Edit → API credentials), restricted to host **`api.minimax.io`**, header **`Authorization`**, scheme **`Bearer`**. You enter the key yourself.
+
+- The egress proxy injects it into requests to that host. It never appears as an environment variable or file, so neither commands nor Claude can read it.
+- Matching credential hosts are reachable even outside the network allowlist, so no network change is needed for `api.minimax.io`.
+- It applies in a new session (or when the VM is restored/rebuilt).
+- **The app gate is unchanged:** `minimaxConfig` requires `MINIMAX_API_KEY`, so the app in a cloud session stays in Manual mode. Verification uses `pnpm verify:minimax` (`src/ai/minimax.live.test.ts`), which calls the adapter directly, strips its placeholder `Authorization` header and lets the proxy add the real one. It is excluded from `pnpm test` and CI.
+- Do not use a plain environment variable for the key in the cloud: those are readable by commands and by Claude.
+
+### Local (Mac)
+
+In the root of your local clone (the folder with `package.json`, branch `claude/dazzling-mayer-ytyahw`), put `MINIMAX_API_KEY=…` in `.env.local` (gitignored by `.env.*`). Next.js uses it on the server only. Either run `pnpm verify:minimax` (the test then sends the local key itself) or run the app flow below.
+
+### Vercel
+
+Not yet: enabling real AI for beta users is a separate decision.
 
 ## Minimal steps to verify for real
 
 On a machine with network access to `api.minimax.io` (e.g. the Mac), from the repo:
 
+**Entitlement check (cloud or local):** `pnpm verify:minimax` (optionally `KEEPLY_LABEL_PHOTO=path/to/label.jpg`). Pass: it prints a parsed identity (any image works for the entitlement question; a real label tests accuracy). A MiniMax error about image input or model access answers question 1. In a cloud session without the API credential, the proxy itself returns 403.
+
+**App flow (local only):** with `.env.local` holding `MINIMAX_API_KEY` and `NEXT_PUBLIC_KEEPLY_SCAN=1`:
+
 ```bash
-# 1. Key in the environment, never in the repo or chat
-export MINIMAX_API_KEY=…      # sk-cp-… from Billing → Token Plan
-export MINIMAX_MODEL=MiniMax-M3
-export NEXT_PUBLIC_KEEPLY_SCAN=1
-
-# 2. Build and start
 pnpm build && pnpm start -p 3000 &
-
-# 3. Send a real dishwasher label photo
-scripts/verify-identify.sh path/to/label.jpg
+scripts/verify-identify.sh path/to/label.jpg   # prints the proposal from /api/identify
 ```
 
-Pass: a JSON `identification` with the label's manufacturer/model. A 401/403 or a MiniMax error about image input answers question 1 (logged by the server as `[identify] minimax failed: …`). Then try the phone flow: Scan → photo → Confirm / Edit / Rescan.
-
-To use it from this cloud session instead: add `MINIMAX_API_KEY` as an environment variable in the cloud environment settings and allow `api.minimax.io` (and `platform.minimax.io` for docs) in its network access, then start a new session.
+Then the phone flow: Scan → photo → Confirm / Edit / Rescan. Server errors are logged as `[identify] minimax failed: …`.
