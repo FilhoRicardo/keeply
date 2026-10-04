@@ -42,6 +42,7 @@ describe('ScanFlow without recognition (v0.1)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/manufacturer/)
 
     fireEvent.change(screen.getByLabelText('Manufacturer'), { target: { value: 'Bosch' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText(/Model number/), { target: { value: 'SMS6ZCI49E' } })
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm' })))
 

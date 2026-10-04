@@ -12,6 +12,12 @@ Code: `src/ai/minimax.ts` (all MiniMax request/response handling), `src/ai/ident
   - Synthetic rendered label with an invented brand (NORDVIK, Type DW-4821X, S/N 7731004215K; generated in the session, not committed): `{"applianceType":"dishwasher","manufacturer":"NORDVIK","model":"DW-4821X","serialNumber":"7731004215K","confidence":0.98}`. All three fields exactly match the printed text, so the image is actually read.
   - **Answers open question 1:** this Token Plan key may send image input to MiniMax-M3 on `/v1/chat/completions`.
   - **Not established:** accuracy on real photographed labels (glare, angle, wear, small print). No real photo was supplied. Next: `KEEPLY_LABEL_PHOTO=… pnpm verify:minimax` locally with a few real labels.
+- 2026-10-04 17:18–17:22 UTC, cloud session, **app flow end to end with live MiniMax** (browser upload on a Pixel 7 viewport → `/api/identify` → `src/ai/minimax.ts` → test relay → proxy → MiniMax HTTP 200 → Confirm / Edit / Rescan → saved appliance). Wiring is described under "Cloud app-flow check" below. **Every image was a SYNTHETIC fixture rendered in the session; no real photograph has been run through the app yet.**
+  - Synthetic rendered label (invented NORDVIK / DW-4821X / 7731004215K): proposal `{manufacturer: "NORDVIK", model: "DW-4821X", serialNumber: "7731004215K", confidence: 0.95}`. The confirm screen showed Dishwasher / NORDVIK / DW-4821X; Edit opened prefilled fields; Rescan returned to capture; Confirm saved the appliance with the photo and the model's confidence.
+  - Synthetic flat drawing of a dishwasher front (no plate, no text): MiniMax answered `other` on one call and `unknown` on the next. Manufacturer, model and serial were null both times, so nothing was invented. The app showed "does not look like a dishwasher's" or "could not read the label" respectively, with the manual form.
+  - Server without `MINIMAX_API_KEY`: Manual mode, no relay call, manual form; Confirm saved the owner-typed manufacturer with confidence null.
+  - Defect found and fixed: the "Enter the manufacturer" error stayed visible after the owner typed one. It now clears on any field edit (`scan-flow.tsx`, covered in `scan-flow.test.tsx`).
+  - **Pending:** the requested real public photo, [Dishwasher with dishes.JPG](https://commons.wikimedia.org/wiki/File:Dishwasher_with_dishes.JPG) (Piotrus, Wikimedia Commons). This session's network policy blocks `commons.wikimedia.org` and `upload.wikimedia.org`, and the photo is to be attached by the owner. Expected result for a whole-appliance photo without a readable plate: type at most, manufacturer/model/serial null. The app then falls back to the manual form, because a proposal without a manufacturer is dropped by design.
 
 ## Account
 
@@ -53,6 +59,20 @@ Per [cloud environments](https://code.claude.com/docs/en/cloud-environments) (Pr
 - It applies in a new session (or when the VM is restored/rebuilt).
 - **The app gate is unchanged:** `minimaxConfig` requires `MINIMAX_API_KEY`, so the app in a cloud session stays in Manual mode. Verification uses `pnpm verify:minimax` (`src/ai/minimax.live.test.ts`), which calls the adapter directly, strips its placeholder `Authorization` header and lets the proxy add the real one. It is excluded from `pnpm test` and CI.
 - Do not use a plain environment variable for the key in the cloud: those are readable by commands and by Claude.
+
+### Cloud app-flow check (verification only)
+
+Runs the real app against live MiniMax without a real key reaching the app or any command. Everything binds to 127.0.0.1; nothing is deployed.
+
+```bash
+NEXT_PUBLIC_KEEPLY_SCAN=1 pnpm build
+NODE_USE_ENV_PROXY=1 node scripts/minimax-proxy-relay.mjs 8787 replies.jsonl &   # drops the placeholder key; proxy adds the real one
+env -u HTTPS_PROXY -u https_proxy NEXT_PUBLIC_KEEPLY_SCAN=1 MINIMAX_API_KEY=placeholder-not-a-key \
+  MINIMAX_BASE_URL=http://127.0.0.1:8787/v1 pnpm exec next start -H 127.0.0.1 -p 3200 &
+PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium node scripts/live-scan-check.mjs http://127.0.0.1:3200 photo.jpg out/ run1
+```
+
+The app code and its `MINIMAX_API_KEY` gate are unchanged. The placeholder only satisfies the gate locally, and the relay strips it. `live-scan-check.mjs` uploads the photo under a neutral filename (`photo.jpg`), so the filename never hints at the answer. It saves screenshots, the `/api/identify` response and the saved record.
 
 ### Local (Mac)
 

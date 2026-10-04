@@ -93,8 +93,11 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
   }
 
   const { identification, recognised, editing, notice } = step
-  const set = (change: Partial<Pick<ApplianceIdentification, 'manufacturer' | 'model' | 'serialNumber'>>) =>
+  // Typing answers any earlier "enter the manufacturer" error, so it no longer applies.
+  const set = (change: Partial<Pick<ApplianceIdentification, 'manufacturer' | 'model' | 'serialNumber'>>) => {
+    setError(null)
     setStep({ ...step, identification: editIdentification(identification, change) })
+  }
 
   async function confirm() {
     const problem = validateIdentification(identification)
