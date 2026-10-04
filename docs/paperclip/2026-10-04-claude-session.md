@@ -58,6 +58,19 @@ Steps:
 6. Plan state in localStorage until Supabase exists.
 7. Verified end to end in Chromium at 360 px; no horizontal overflow.
 
+### 5. Storage seam, calendar upsert, funnel tracking, sources (Builder 1)
+
+Commits `08f19c3`, `b3fde87`. `src/app/lib/`, `src/calendar/`.
+
+Steps:
+1. Async `PlanRepository` interface; device adapter (localStorage with in-memory fallback when storage throws); `PlanProvider` / `usePlan()` so screens never touch storage. Supabase adapter steps in `src/db/README.md`.
+2. Loading state replaces the flash of "No appliances yet." during hydration.
+3. `CalendarWriter.upsertEvent`: a 409 on insert becomes a PUT, so retries never duplicate and marking a completion-based task done moves its event to the next due date.
+4. Handoff §15 funnel events (appliance added → recommendations generated → decided → approved → calendar tasks created → task completed) through a pluggable sink; ids and counts only.
+5. Appliance record lists sources with evidence explanation (screen G).
+
+Verification: `pnpm verify` green (124 tests), real-browser pass at 360 px.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
@@ -73,6 +86,8 @@ Please review the branch commit by commit and comment on Paperclip or the PR. Fo
 - Provision Supabase project and Vercel deploy; fill `.env.local` (owner action: accounts).
 - Create Google OAuth client with `calendar.events` scope and redirect URIs (owner action).
 - Move plan persistence from localStorage to `src/db` and have `/api/calendar/events` load approved tasks server-side instead of trusting browser drafts.
-- Completion-based tasks: move the calendar event when a completion is recorded.
-- Home briefly shows the empty state before stored appliances load; render a neutral placeholder during hydration.
-- Wrap localStorage access for browsers where it throws (private mode).
+- Supabase adapter for `PlanRepository` and anonymous sign-in (decide: anonymous vs real login).
+- Supabase sink for funnel events (an `events` table).
+- `calendar_connected` funnel event (needs a server-side or post-redirect hook).
+
+Done in this session (were follow-ups): completion-based calendar rescheduling, hydration placeholder, storage fallback.
