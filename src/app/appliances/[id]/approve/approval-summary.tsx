@@ -7,6 +7,7 @@ import { applianceName } from '@/domain/calendar-event'
 import { isLocalDate } from '@/domain/dates'
 import { formatInterval } from '@/domain/format-interval'
 import { canApprove } from '@/domain/plan'
+import { CalendarReturnNotice } from '../../../components/calendar-return-notice'
 import { EvidenceBadge } from '../../../components/evidence-badge'
 import { LoadingPanel, NotFoundPanel } from '../../../components/screen'
 import { connectUrl, fetchCalendarStatus, writeApprovedTasks, type CalendarStatus } from '../../../lib/calendar-client'
@@ -123,6 +124,7 @@ export function ApprovalSummary({ applianceId }: { applianceId: string }) {
         </label>
       )}
 
+      <CalendarReturnNotice />
       <section className="calendar-panel aster-inner" aria-label="Google Calendar">
         {calendar === null && <p>Checking Google Calendar…</p>}
         {calendar?.connected && <p className="calendar-ok">Google Calendar connected.</p>}

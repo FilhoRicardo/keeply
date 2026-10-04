@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { applianceName } from '@/domain/calendar-event'
 import { formatInterval } from '@/domain/format-interval'
 import { isOverdue, nextDue } from '@/domain/schedule'
+import { CalendarReturnNotice } from '../../components/calendar-return-notice'
 import { CustomiseForm } from '../../components/customise-form'
 import { DeleteAppliance } from '../../components/delete-appliance'
 import { EvidenceBadge } from '../../components/evidence-badge'
@@ -231,6 +232,7 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
         ))}
       </ul>
 
+      <CalendarReturnNotice />
       {pending.length > 0 && (
         <section className="calendar-panel aster-inner" aria-label="Google Calendar">
           <p>

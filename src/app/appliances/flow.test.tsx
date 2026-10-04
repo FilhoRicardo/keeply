@@ -11,9 +11,10 @@ import { PlanReview } from './[id]/plan/plan-review'
 import { NewApplianceForm } from './new/new-appliance-form'
 
 const push = vi.fn()
+let search = new URLSearchParams()
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => search,
 }))
 
 type Calls = { url: string; body?: unknown }[]
@@ -38,6 +39,7 @@ let repo: PlanRepository
 beforeEach(() => {
   repo = testRepository()
   push.mockReset()
+  search = new URLSearchParams()
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -368,5 +370,23 @@ describe('disconnecting Google Calendar', () => {
     expect(calls.some((c) => c.url === '/api/calendar/disconnect')).toBe(true)
     expect(await screen.findByText(/Events already added stay in your calendar/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument()
+  })
+})
+
+describe('calendar permission denied', () => {
+  it('explains that nothing was added and still allows approval', async () => {
+    const calls: Calls = []
+    mockFetch({ configured: true, connected: false }, calls)
+    await addDishwasher()
+    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
+    search = new URLSearchParams('calendar=denied')
+
+    renderWithPlan(<ApprovalSummary applianceId="app-1" />, repo)
+    expect(await screen.findByText(/Google Calendar was not connected, so nothing was added/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Connect Google Calendar' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve maintenance plan' })).toBeEnabled())
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Approve maintenance plan' })))
+    expect(push).toHaveBeenCalledWith('/appliances/app-1?approved=saved')
+    expect(calls.some((c) => c.url === '/api/calendar/events')).toBe(false)
   })
 })

@@ -202,6 +202,12 @@ Steps:
 2. "Disconnect" next to "Google Calendar connected" on the record screen: revokes the token at Google (best effort), clears the cookie, and says events already added stay in the calendar.
 3. Tests: revoke call, component flow. 146 unit/component, 3 e2e pass.
 
+### 20. Calendar permission denied is explained (Builder 2; reviewer Builder 4)
+
+`src/app/components/calendar-return-notice.tsx`, approval and record screens.
+
+Handoff Phase 5 lists "calendar permission denial". Before this, declining Google consent returned the owner to the approval page with no explanation. Now `?calendar=denied` / `?calendar=error` show what happened ("nothing was added"), the connect button stays, and approval still works (saves without writing). Component test covers it. 147 unit/component, 3 e2e pass.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

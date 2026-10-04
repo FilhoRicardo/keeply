@@ -760,3 +760,8 @@ a {
   color: var(--aster-ink-2);
   font-size: 13px;
 }
+
+.notice--warning {
+  color: #6b4404;
+  background: rgba(234, 179, 8, 0.16);
+}
