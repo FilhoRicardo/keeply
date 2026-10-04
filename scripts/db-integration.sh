@@ -10,10 +10,7 @@ DB=keeply_integration
 SECRET=${KEEPLY_JWT_SECRET:-keeply-local-integration-secret-0123456789}
 PORT=${KEEPLY_POSTGREST_PORT:-3901}
 
-psql "$PGURL" -q -c "drop database if exists $DB" -c "create database $DB"
-DBURL="${PGURL%/*}/$DB"
-psql "$DBURL" -q -v ON_ERROR_STOP=1 -f supabase/tests/local-supabase-stub.sql
-for f in supabase/migrations/*.sql; do psql "$DBURL" -q -v ON_ERROR_STOP=1 -f "$f"; done
+DBURL=$(scripts/db-reset.sh "$DB")
 
 AUTH_URL=$(echo "$DBURL" | sed -E 's#://[^@/]+@#://authenticator:authpass@#')
 PGRST_DB_URI="$AUTH_URL" PGRST_DB_SCHEMAS=public PGRST_DB_ANON_ROLE=anon PGRST_JWT_SECRET="$SECRET" \

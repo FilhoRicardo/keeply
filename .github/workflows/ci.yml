@@ -20,3 +20,34 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
+
+  database:
+    # Schema rules (pgTAP) and the Supabase adapter end to end (supabase-js → PostgREST → Postgres).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGURL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install psql, pgTAP and PostgREST
+        run: |
+          sudo apt-get update -q && sudo apt-get install -yq postgresql-client
+          curl -sSL https://github.com/PostgREST/postgrest/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz | tar -xJ -C /usr/local/bin
+          docker exec ${{ job.services.postgres.id }} bash -c "apt-get update -q && apt-get install -yq postgresql-16-pgtap"
+      - name: Adapter integration test
+        run: scripts/db-integration.sh
+      - name: pgTAP schema tests
+        run: scripts/db-test.sh

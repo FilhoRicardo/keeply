@@ -87,7 +87,7 @@ Owner actions this needs: `supabase db push`, enable Anonymous sign-ins, set the
 
 ### 7. Calendar writes load approved tasks server-side (Builder 1; reviewer Builder 3)
 
-Commit: see the "server-side calendar" commit after `38e8be9`. `src/app/api/calendar/events/route.ts`, `src/app/lib/calendar-drafts.ts`, `src/app/lib/calendar-session.ts`.
+Commit `ed8f96a`. `src/app/api/calendar/events/route.ts`, `src/app/lib/calendar-drafts.ts`, `src/app/lib/calendar-session.ts`.
 
 Steps:
 1. With Supabase configured, `POST /api/calendar/events` accepts only `{applianceId, taskIds}` plus the user's Supabase bearer token, loads the plan under that session (RLS) and builds the drafts itself. Browser-supplied drafts are rejected (400). Device mode keeps the validated-drafts path.
@@ -95,6 +95,16 @@ Steps:
 3. Integration test through the real route + PostgREST: owner's 2 approved tasks written, skipped task never written, other user 404, no session 401, drafts 400.
 
 Closes the follow-up "load approved tasks server-side instead of trusting browser drafts".
+
+### 8. CI runs database tests (Builder 2; reviewer Builder 4)
+
+`.github/workflows/ci.yml` (new `database` job), `scripts/db-reset.sh`, `scripts/db-test.sh`, `scripts/db-integration.sh`.
+
+Steps:
+1. CI job with a Postgres 16 service, PostgREST 12 and pgTAP: runs the adapter integration test, then the pgTAP schema tests on a fresh database.
+2. Scripts work locally the same way (`PGURL=… scripts/db-test.sh`, `scripts/db-integration.sh`); both pass here (3/3 integration, 19/19 pgTAP).
+
+Risk for the reviewer: the job has not run on GitHub yet (no Actions access from the cloud session). The pgTAP install via `docker exec` into the service container is the step most likely to need a tweak.
 
 ## Review requests for Builders 3–4 (Codex)
 
