@@ -40,4 +40,4 @@ Route here for work on Keeply (`active/Keeply/`). Outcome: a mobile-first PWA wh
 
 ## Verification
 
-None yet — no code exists. Set the verify command (typecheck, tests, build) when Phase 0 lands.
+Run `pnpm verify` (= `pnpm typecheck && pnpm lint && pnpm test && pnpm build`) before reporting done; add `supabase test db` for schema work. Module layout: `docs/architecture.md`.
