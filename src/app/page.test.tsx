@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import Home from './page'
+import { renderWithPlan } from './test-utils'
 
 describe('Home', () => {
-  it('shows the empty Appliance state and manual entry without gated controls', () => {
-    render(<Home />)
+  it('shows the empty Appliance state and manual entry without gated controls', async () => {
+    renderWithPlan(<Home />)
 
     expect(screen.getByRole('heading', { name: 'My appliances' })).toBeInTheDocument()
-    expect(screen.getByText('No appliances yet.')).toBeInTheDocument()
+    expect(await screen.findByText('No appliances yet.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Add manually' })).toHaveAttribute(
       'href',
       '/appliances/new',

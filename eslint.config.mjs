@@ -10,7 +10,7 @@ export const domainBoundary = {
       'error',
       {
         patterns: [
-          { regex: '(^|/)(db|calendar|app)(/|$)|^@/(db|calendar|app)', message: 'src/domain must not import from src/db, src/calendar or src/app.' },
+          { regex: '(^|/)(db|calendar|app|ai)(/|$)|^@/(db|calendar|app|ai)', message: 'src/domain must not import from src/db, src/calendar, src/ai or src/app.' },
           { regex: '^next(/|$)', message: 'src/domain must not import from next.' },
           { regex: '^@supabase/', message: 'src/domain must not import from @supabase/*.' },
         ],

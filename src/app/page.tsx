@@ -1,4 +1,7 @@
 import Link from 'next/link'
+import { ApplianceCount, ApplianceList } from './appliance-list'
+import { AccountPanel } from './components/account-panel'
+import { scanEnabled } from './lib/features'
 
 export default function Home() {
   return (
@@ -14,31 +17,28 @@ export default function Home() {
       </header>
 
       <main className="home-content">
+        <AccountPanel />
         <section className="appliances-panel aster-glass" aria-labelledby="appliances-title">
           <div className="section-heading">
             <div>
               <p className="aster-eyebrow">Your home</p>
               <h2 id="appliances-title">My appliances</h2>
             </div>
-            <span className="appliance-count" aria-hidden="true">
-              0
-            </span>
+            <ApplianceCount />
           </div>
 
-          <div className="empty-state aster-inner">
-            <span className="appliance-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" role="img">
-                <rect x="5" y="2.75" width="14" height="18.5" rx="2" />
-                <path d="M5 8h14M8 5.5h.01M11 5.5h5M8.5 12.25a4.5 4.5 0 1 0 7 0" />
-              </svg>
-            </span>
-            <div>
-              <h3>No appliances yet.</h3>
-              <p>Add your dishwasher to start building its maintenance plan.</p>
-            </div>
-          </div>
+          <ApplianceList />
 
-          <Link className="aster-btn aster-btn--primary add-appliance" href="/appliances/new">
+          {scanEnabled() && (
+            <Link className="aster-btn aster-btn--primary add-appliance" href="/appliances/scan">
+              <span aria-hidden="true">◎</span>
+              Scan appliance
+            </Link>
+          )}
+          <Link
+            className={`aster-btn ${scanEnabled() ? 'aster-btn--ghost' : 'aster-btn--primary'} add-appliance`}
+            href="/appliances/new"
+          >
             <span aria-hidden="true">＋</span>
             Add manually
           </Link>
