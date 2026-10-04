@@ -133,3 +133,13 @@ describe('Google OAuth', () => {
     await expect(exchangeGoogleCode(config, 'code', fetchMock)).rejects.toThrow(/not granted/)
   })
 })
+
+describe('revokeGoogleToken', () => {
+  it('posts the token to Google’s revoke endpoint', async () => {
+    const fetchMock = respond(200)
+    const { revokeGoogleToken } = await import('./google')
+    await revokeGoogleToken('tok', fetchMock)
+    expect(fetchMock.mock.calls[0][0]).toBe('https://oauth2.googleapis.com/revoke')
+    expect(String(fetchMock.mock.calls[0][1]?.body)).toBe('token=tok')
+  })
+})

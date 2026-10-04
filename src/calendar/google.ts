@@ -119,3 +119,12 @@ export async function exchangeGoogleCode(
   }
   return { accessToken: token.access_token, expiresIn: token.expires_in }
 }
+
+// Best effort: Google returns 400 for tokens that are already invalid.
+export async function revokeGoogleToken(token: string, fetchImpl: Fetch = fetch): Promise<void> {
+  await fetchImpl('https://oauth2.googleapis.com/revoke', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token }),
+  })
+}

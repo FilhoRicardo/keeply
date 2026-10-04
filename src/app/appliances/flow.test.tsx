@@ -24,6 +24,7 @@ function mockFetch(status: { configured: boolean; connected: boolean }, calls: C
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, body: init?.body ? JSON.parse(init.body as string) : undefined })
       if (url === '/api/calendar/status') return Response.json(status)
+      if (url === '/api/calendar/disconnect') return Response.json({ connected: false })
       if (url === '/api/calendar/events') {
         const { drafts } = JSON.parse(init!.body as string) as { drafts: { taskId: string }[] }
         return Response.json({ results: drafts.map((d) => ({ taskId: d.taskId, ok: true, eventId: `evt-${d.taskId}` })) })
@@ -350,5 +351,22 @@ describe('overlapping saves', () => {
     await act(() => new Promise((resolve) => setTimeout(resolve, 80)))
     expect(within(arms).getByRole('button', { name: 'Skip' })).toHaveAttribute('aria-pressed', 'true')
     expect(within(filter).getByRole('button', { name: 'Include' })).toHaveAttribute('aria-pressed', 'true')
+  })
+})
+
+describe('disconnecting Google Calendar', () => {
+  it('revokes access from the record screen and says events stay', async () => {
+    const calls: Calls = []
+    mockFetch({ configured: true, connected: true }, calls)
+    await addDishwasher()
+    await decideAll({ 'Clean the filter': 'Include', 'Run a cleaning cycle': 'Skip', 'Check the spray arms': 'Skip' })
+    await approveWith()
+
+    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
+    await screen.findByRole('heading', { name: 'Clean the filter' })
+    await act(async () => fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' })))
+    expect(calls.some((c) => c.url === '/api/calendar/disconnect')).toBe(true)
+    expect(await screen.findByText(/Events already added stay in your calendar/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument()
   })
 })

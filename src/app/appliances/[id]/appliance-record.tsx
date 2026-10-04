@@ -12,6 +12,7 @@ import { EvidenceBadge } from '../../components/evidence-badge'
 import { LoadingPanel, NotFoundPanel } from '../../components/screen'
 import {
   connectUrl,
+  disconnectCalendar,
   fetchCalendarStatus,
   needsReschedule,
   pendingCalendarTasks,
@@ -254,6 +255,24 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
           {message}
         </p>
       )}
+      {calendar?.connected && (
+        <p className="calendar-status">
+          Google Calendar connected.{' '}
+          <button
+            type="button"
+            className="link-button"
+            onClick={async () => {
+              if (await disconnectCalendar()) {
+                setCalendar((c) => (c ? { ...c, connected: false } : c))
+                setMessage('Google Calendar disconnected. Events already added stay in your calendar.')
+              }
+            }}
+          >
+            Disconnect
+          </button>
+        </p>
+      )}
+
       <DeleteAppliance
         applianceId={applianceId}
         name={applianceName(record.appliance)}

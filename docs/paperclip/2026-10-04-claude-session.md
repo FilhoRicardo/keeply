@@ -193,6 +193,15 @@ Steps:
 
 Found in self-review: with a network store, two quick taps (e.g. Include on one card, Skip on another) ran concurrently; if the first response arrived last, its older snapshot overwrote the newer state and a saved decision looked missing. Mutations now run one at a time through a queue. Regression test fails without the fix and passes with it.
 
+### 19. Funnel summary view; disconnect Google Calendar (Builder 2; reviewer Builder 4)
+
+`supabase/migrations/20261004180000_funnel_summary.sql`, `src/app/api/calendar/disconnect/route.ts`, `revokeGoogleToken`, record screen.
+
+Steps:
+1. `funnel_summary` view (security invoker): distinct visitors and events per §15 step, first/last seen. Team reads it with the service role / SQL editor; visitors are refused (pgTAP, 25 total pass).
+2. "Disconnect" next to "Google Calendar connected" on the record screen: revokes the token at Google (best effort), clears the cookie, and says events already added stay in the calendar.
+3. Tests: revoke call, component flow. 146 unit/component, 3 e2e pass.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

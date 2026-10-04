@@ -68,3 +68,11 @@ export async function writeTasks(
     return { kind: 'failed' }
   }
 }
+
+export async function disconnectCalendar(): Promise<boolean> {
+  try {
+    return (await fetch('/api/calendar/disconnect', { method: 'POST' })).ok
+  } catch {
+    return false
+  }
+}

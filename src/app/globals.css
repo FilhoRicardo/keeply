@@ -755,3 +755,8 @@ a {
   background: #a3271b;
   cursor: pointer;
 }
+
+.calendar-status {
+  color: var(--aster-ink-2);
+  font-size: 13px;
+}

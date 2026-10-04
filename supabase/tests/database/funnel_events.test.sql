@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(4);
+select plan(6);
 
 insert into auth.users (id, email) values ('00000000-0000-0000-0000-00000000000a', 'owner@example.com');
 
@@ -29,6 +29,18 @@ select throws_ok(
 select throws_ok(
   $$ select count(*) from public.funnel_events $$,
   '42501', null, 'visitors cannot read events'
+);
+
+select throws_ok(
+  $$ select * from public.funnel_summary $$,
+  '42501', null, 'visitors cannot read the funnel summary'
+);
+
+reset role;
+select results_eq(
+  $$ select step, visitors::int, events::int from public.funnel_summary $$,
+  $$ values ('plan_approved'::text, 1, 1) $$,
+  'the team sees distinct visitors and events per step'
 );
 
 select * from finish();
