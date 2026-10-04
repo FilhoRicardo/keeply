@@ -76,3 +76,33 @@ describe('toCalendarEvent', () => {
     expect(applianceName({ manufacturer: 'Miele', model: null })).toBe('Miele dishwasher')
   })
 })
+
+describe('toRRule month-end starts', () => {
+  it.each([
+    [{ count: 1, unit: 'month' as const }, '2026-01-31', 'RRULE:FREQ=MONTHLY;BYMONTHDAY=28,29,30,31;BYSETPOS=-1'],
+    [{ count: 3, unit: 'month' as const }, '2026-01-30', 'RRULE:FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=28,29,30;BYSETPOS=-1'],
+    [{ count: 1, unit: 'month' as const }, '2026-01-29', 'RRULE:FREQ=MONTHLY;BYMONTHDAY=28,29;BYSETPOS=-1'],
+    [{ count: 1, unit: 'month' as const }, '2026-01-28', 'RRULE:FREQ=MONTHLY'],
+    [{ count: 1, unit: 'year' as const }, '2028-02-29', 'RRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=28,29;BYSETPOS=-1'],
+    [{ count: 2, unit: 'week' as const }, '2026-01-31', 'RRULE:FREQ=WEEKLY;INTERVAL=2'],
+  ])('%o from %s → %s', (interval, start, rule) => {
+    expect(toRRule(interval, start)).toBe(rule)
+  })
+
+  // Expand the rule with a real RFC 5545 engine and compare with Keeply's own grid.
+  it.each([
+    ['2026-01-31', { count: 1, unit: 'month' as const }],
+    ['2026-01-30', { count: 1, unit: 'month' as const }],
+    ['2027-12-29', { count: 2, unit: 'month' as const }],
+    ['2026-03-31', { count: 3, unit: 'month' as const }],
+    ['2028-02-29', { count: 1, unit: 'year' as const }],
+  ])('calendar dates from %s every %o match Keeply', async (start, interval) => {
+    const { rrulestr } = await import('rrule')
+    const { addInterval } = await import('./dates')
+    const [y, m, d] = start.split('-').map(Number)
+    const rule = rrulestr(toRRule(interval, start).replace('RRULE:', ''), { dtstart: new Date(Date.UTC(y, m - 1, d)) })
+    const calendar = rule.all((_, i) => i < 24).map((date) => date.toISOString().slice(0, 10))
+    const keeply = Array.from({ length: 24 }, (_, n) => addInterval(start, interval, n))
+    expect(calendar).toEqual(keeply)
+  })
+})

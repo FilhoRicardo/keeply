@@ -70,13 +70,17 @@ export function createDevicePlanRepository({
 } = {}): PlanRepository {
   // Mirrors storage so the session still works when storage refuses reads or writes.
   let memory: string | null = null
+  // True once a write failed: storage then holds an older plan than memory and must not win.
+  let storageBehind = false
 
   function read(): PlanState {
-    try {
-      const raw = storage?.getItem(DEVICE_STORAGE_KEY)
-      if (raw !== undefined) memory = raw
-    } catch {
-      // Fall back to the in-memory copy.
+    if (!storageBehind) {
+      try {
+        const raw = storage?.getItem(DEVICE_STORAGE_KEY)
+        if (raw !== undefined) memory = raw
+      } catch {
+        // Fall back to the in-memory copy.
+      }
     }
     return parseState(memory)
   }
@@ -85,8 +89,10 @@ export function createDevicePlanRepository({
     memory = JSON.stringify(state)
     try {
       storage?.setItem(DEVICE_STORAGE_KEY, memory)
+      storageBehind = false
     } catch {
       // Kept in memory for this session only.
+      storageBehind = true
     }
     return state
   }

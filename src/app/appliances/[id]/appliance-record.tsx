@@ -69,15 +69,20 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
 
   async function retry() {
     setBusy(true)
-    const result = await writeApprovedTasks(record!, await accessToken())
-    if (result.kind === 'written') {
-      await recordCalendarResults(applianceId, result.results)
-      setMessage(result.results.every((r) => r.ok) ? 'Added to Google Calendar.' : 'Some tasks still failed. Try again later.')
-    } else {
-      setMessage(result.kind === 'not_connected' ? 'Connect Google Calendar first.' : 'Google Calendar could not be reached.')
-      if (result.kind === 'not_connected') setCalendar((c) => (c ? { ...c, connected: false } : c))
+    try {
+      const result = await writeApprovedTasks(record!, await accessToken())
+      if (result.kind === 'written') {
+        await recordCalendarResults(applianceId, result.results)
+        setMessage(result.results.every((r) => r.ok) ? 'Added to Google Calendar.' : 'Some tasks still failed. Try again later.')
+      } else {
+        setMessage(result.kind === 'not_connected' ? 'Connect Google Calendar first.' : 'Google Calendar could not be reached.')
+        if (result.kind === 'not_connected') setCalendar((c) => (c ? { ...c, connected: false } : c))
+      }
+    } catch {
+      // Storage failures surface in the provider's banner; writes are idempotent, so retrying is safe.
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   async function changeSchedule(taskId: string, schedule: Parameters<typeof updateTaskSchedule>[2]) {

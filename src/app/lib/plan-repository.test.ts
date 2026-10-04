@@ -35,6 +35,17 @@ describe('device plan repository', () => {
     expect(record.completions).toHaveLength(1)
   })
 
+  it('keeps an unsaved change when storage reads work but writes fail (quota)', async () => {
+    const backing = memoryStorage()
+    const full = { getItem: backing.getItem, setItem: () => { throw new Error('QuotaExceededError') } }
+    const repo = createDevicePlanRepository({ storage: full, newId: ids(), now: () => 'now' })
+    const { applianceId, state } = await repo.addAppliance(input)
+    const rec = findRecord(state, applianceId)!.recommendations[0]
+
+    const next = await repo.setDecision(applianceId, rec.id, { kind: 'include' })
+    expect(findRecord(next, applianceId)?.decisions[rec.id]).toEqual({ kind: 'include' })
+  })
+
   it('keeps working in memory when storage throws', async () => {
     const broken = {
       getItem: () => {

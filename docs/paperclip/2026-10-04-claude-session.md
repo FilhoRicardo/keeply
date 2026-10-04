@@ -241,6 +241,15 @@ Rule (same in TypeScript and a database trigger, so any future pipeline, includi
 
 Tests: 4 domain (incl. all mock recommendations stay valid), 5 pgTAP (exact model accepted; other model, general source, similar-model from general all rejected). 167 unit/component, 35 pgTAP, 5 integration pass.
 
+### 24. Code review of the whole branch, fixes (Builder 1; reviewer Builder 3)
+
+Ran a structured code review over `origin/main...HEAD` (medium effort). Three findings, all fixed:
+1. Device storage full → newest plan lost: a failed localStorage write let the next change reload the older saved plan. The device repository now keeps the in-memory plan authoritative until a write succeeds (regression test).
+2. Month-end calendar mismatch: Keeply clamps 31 Jan → 28 Feb, but a plain `FREQ=MONTHLY` rule makes Google skip short months (31 Jan, 31 Mar, 31 May…), so ~5 reminders a year never appeared. `toRRule` now adds `BYMONTHDAY=28..d;BYSETPOS=-1` for start days 29–31 (and Feb 29 yearly), giving exactly Keeply's dates. Verified with the `rrule` RFC 5545 engine for 5 start dates × 24 occurrences; the events route accepts only these rule shapes.
+3. "Add to Google Calendar" could stay disabled after an error: retry now always re-enables.
+
+177 unit/component tests pass.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

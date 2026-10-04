@@ -18,6 +18,10 @@ export function withQuery(path: string, key: string, value: string): string {
   return `${url.pathname}${url.search}`
 }
 
+// Only the rules toRRule produces: a frequency, an interval, and the month-end clamp.
+const RRULE =
+  /^RRULE:FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;INTERVAL=\d{1,3})?(;BYMONTH=2)?(;BYMONTHDAY=28(,29(,30(,31)?)?)?;BYSETPOS=-1)?$/
+
 function isDraft(value: unknown): value is CalendarEventDraft {
   if (!value || typeof value !== 'object') return false
   const d = value as Record<string, unknown>
@@ -34,7 +38,7 @@ function isDraft(value: unknown): value is CalendarEventDraft {
     d.endDate > d.date &&
     Array.isArray(d.recurrence) &&
     d.recurrence.length <= 1 &&
-    d.recurrence.every((r) => typeof r === 'string' && /^RRULE:FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)(;INTERVAL=\d{1,3})?$/.test(r))
+    d.recurrence.every((r) => typeof r === 'string' && RRULE.test(r))
   )
 }
 

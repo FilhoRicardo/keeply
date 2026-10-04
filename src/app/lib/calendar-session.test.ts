@@ -29,6 +29,11 @@ describe('withQuery', () => {
 })
 
 describe('parseDrafts', () => {
+  it('accepts the month-end clamp rule', () => {
+    const rule = 'RRULE:FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=28,29,30,31;BYSETPOS=-1'
+    expect(parseDrafts({ drafts: [{ ...draft, recurrence: [rule] }] })?.[0].recurrence).toEqual([rule])
+  })
+
   it('accepts well-formed drafts and drops unknown fields', () => {
     expect(parseDrafts({ drafts: [{ ...draft, attendees: ['x@example.com'] }] })).toEqual([draft])
   })
@@ -39,6 +44,7 @@ describe('parseDrafts', () => {
     ['bad date', { drafts: [{ ...draft, date: '2026-13-01' }] }],
     ['end before start', { drafts: [{ ...draft, endDate: '2026-10-05' }] }],
     ['foreign recurrence', { drafts: [{ ...draft, recurrence: ['RRULE:FREQ=SECONDLY'] }] }],
+    ['unknown rule part', { drafts: [{ ...draft, recurrence: ['RRULE:FREQ=MONTHLY;COUNT=999'] }] }],
     ['too many', { drafts: Array.from({ length: 21 }, () => draft) }],
   ])('rejects %s', (_name, body) => {
     expect(parseDrafts(body)).toBeNull()

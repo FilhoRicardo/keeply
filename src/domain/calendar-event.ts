@@ -49,6 +49,6 @@ export function toCalendarEvent(
     description,
     date,
     endDate: addInterval(date, { count: 1, unit: 'day' }),
-    recurrence: task.schedulingMode === 'fixed_calendar' ? [toRRule(task.userInterval)] : [],
+    recurrence: task.schedulingMode === 'fixed_calendar' ? [toRRule(task.userInterval, task.startDate)] : [],
   }
 }
