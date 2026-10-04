@@ -7,10 +7,10 @@ How the owner tests photo → AI proposal → Confirm / Edit / Rescan with a rea
 | Part | State |
 |---|---|
 | Scan UI, `/api/identify`, MiniMax adapter, Manual fallback | Real. Verified live with MiniMax-M3 (see `docs/ai/minimax.md`). Scanning is off unless `NEXT_PUBLIC_KEEPLY_SCAN=1` is set at build time; AI is off unless `MINIMAX_API_KEY` is set on the server. |
-| Storage | Device (browser `localStorage`) unless `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set. The Supabase adapter, migrations and anonymous sign-in are built and tested against local Postgres in CI, but the hosted project has not had `supabase db push` and is not configured in any deployment. |
+| Storage | Supabase on the Vercel deployments (MVP schema applied, anonymous sign-ins on); device `localStorage` locally unless `.env.local` sets the Supabase values. Live status: `docs/live-gates.md`. |
 | Accounts | Anonymous Supabase sign-in when Supabase is configured; optional Google sign-in needs the provider enabled. With device storage there is no account. |
-| Google Calendar | Built; needs a Google OAuth client (`GOOGLE_*`). Without it, approval saves on the device only. |
-| Vercel | No deployment configuration in the repo and no recorded deployment. This work lives on branch `claude/dazzling-mayer-ytyahw`, which is not merged into `main`. |
+| Google Calendar | Configured for Vercel Preview and verified live (`docs/live-gates.md` G2). Locally it needs `GOOGLE_*` in `.env.local`. |
+| Vercel | Project `keeply` builds every push; the branch preview is the live test target until PR #4 is merged. |
 | Claude cloud sessions | Can reach MiniMax through the proxy-injected credential (test relay `scripts/minimax-proxy-relay.mjs`), but cannot give the owner a URL to open. They are for automated checks only. |
 
 ## Option A (recommended): private test on your Mac

@@ -392,6 +392,10 @@ Ricardo, 2026-10-04 evening: finish line is the full magic minute; Brave Search 
 3. Retest on the preview: manual Bosch add reaches the three-task plan; `appliances` has the Bosch row, `maintenance_tasks` exactly 3 linked rows (general guidance, proposed); survives reload. Sign in with Google button visible (provider not configured yet).
 4. Next: Google Cloud project "Keeply" for Calendar (`calendar.events`, Testing, test users), then `GOOGLE_*` in Vercel Preview and a live Calendar write. PR #4 stays unmerged and scanning off until then.
 
+### 39. Live Calendar gate passed (Ricardo, with Codex in his browser)
+
+Google Cloud project "Keeply": Calendar API on, consent External/Testing, `calendar.events`, owner as sole test user, Web client "Keeply preview". `GOOGLE_*` in Vercel Preview only (secret values never in chat). On the redeployed preview the owner connected Google and approved Bosch (`09e14405…`) with the filter task accepted and two rejected: one monthly all-day event in Google Calendar with instructions, source and approval line; the accepted task's `calendar_event_id` is Keeply's deterministic `kp…` id; rejected tasks NULL. Remaining live gates (isolation, usage counts, Google sign-in, production, testers) and their exact steps: `docs/live-gates.md`.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
