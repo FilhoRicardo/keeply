@@ -8,7 +8,7 @@ Route here for work on Keeply (`active/Keeply/`). Outcome: a mobile-first PWA wh
 
 - GitHub repo: https://github.com/FilhoRicardo/keeply
 - Linear project: Create/link required (Linear connector not authorised in this session)
-- Current Linear issue: Create/link required
+- Current Linear issue: Create/link required (Paperclip issue KEE-1: Phase 0 + 1 skeleton)
 - Paperclip company: Keeply (`7a57a3ab-b378-4d66-9ae3-34d68a114981`, issue prefix `KEE`) manages the agent team and day-to-day tasks. Org: CEO → CTO + CFO; CTO → Builders 1–4.
 - Planning source: `docs/HANDOFF.md` is the authoritative plan (equivalent of `PLAN.md`). Do not expand scope beyond it without a clear reason.
 - Claude may implement authorised work directly; the separate critic-only planning role and mandatory review log are retired workspace-wide.
