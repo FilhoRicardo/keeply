@@ -1,12 +1,13 @@
 import { NOTHING_RECOGNISED, type ApplianceRecognizer, type RecognitionResult } from '@/domain/identification'
 
-export const MAX_PHOTO_BYTES = 5_000_000
+// Under Vercel's 4.5 MB request-body limit for functions.
+export const MAX_PHOTO_BYTES = 4_000_000
 export const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 export function checkPhoto(photo: { size: number; type: string } | null): string | null {
   if (!photo) return 'Attach a photo.'
   if (!PHOTO_TYPES.includes(photo.type)) return 'Use a JPEG, PNG or WebP photo.'
-  if (photo.size === 0 || photo.size > MAX_PHOTO_BYTES) return 'The photo must be under 5 MB.'
+  if (photo.size === 0 || photo.size > MAX_PHOTO_BYTES) return 'The photo must be under 4 MB.'
   return null
 }
 

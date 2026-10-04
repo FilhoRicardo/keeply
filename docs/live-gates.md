@@ -48,6 +48,18 @@ Not configured yet: the button is visible but fails until these owner steps are 
 - Decline the calendar permission on Google's screen → Keeply says nothing was added and still allows Approval.
 - After about an hour the Google token expires: the app asks to reconnect; **Add N tasks to Google Calendar** on the dishwasher page retries without duplicating.
 
+### G8 AI label reading, owner-only on the hosted preview
+
+Verified in a cloud session (not hosted) on 2026-10-04: MiniMax-M3 with this Token Plan key reads the owner's real BUSH plate exactly through the full app path after the JPEG-quality fix (`docs/ai/minimax.md`). Hosted scanning is off. To test it on the preview, owner only:
+
+1. Vercel → Settings → **Deployment Protection**: confirm Vercel Authentication covers Preview deployments, so only the owner's Vercel login can reach the preview (and its `/api/identify`).
+2. MiniMax → Billing: confirm no purchased Credits or auto top-up, so usage stops at the Token Plan quota (5-hour and weekly windows) instead of spending money.
+3. Vercel → Environment Variables, **Preview only**: `MINIMAX_API_KEY` (Secret; the Token Plan `sk-cp-…` key, entered by the owner), `MINIMAX_MODEL=MiniMax-M3`, `NEXT_PUBLIC_KEEPLY_SCAN=1`. Redeploy (the scan flag is read at build time).
+4. Test on the phone: Home → **Scan appliance** → photograph the BUSH plate → expect BUSH / WV9-6S / 150804092 → Confirm → plan. Also a photo of the whole dishwasher → "could not read" + manual form.
+5. Turn it off again by removing `NEXT_PUBLIC_KEEPLY_SCAN` (and the key) and redeploying, unless the owner keeps it for private use.
+
+Before invited users: the owner reviews MiniMax's terms for serving other people with a Token Plan key (the official docs found describe quota and coverage, not end-user use), and the §23 invite code plus 5-per-tester / 100-per-day caps are built; none of that exists yet.
+
 ### G7 Production and testers (owner decisions)
 
 - Merge PR #4 → production deploys from `main`. Then: add `https://<production-domain>/auth/google/callback` to the Google client, set the three `GOOGLE_*` for **Production** with that redirect URI, add the production URL to Supabase redirect URLs, and repeat G1–G2 there.

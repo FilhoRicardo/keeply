@@ -151,7 +151,10 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
               </div>
             )}
           </dl>
-          <p className="form-intro">Read from your photo. Check it against the label: is this correct?</p>
+          <p className="form-intro">
+            Read from your photo. Check it against the label: is this correct? Compare the model number
+            character by character; look-alikes such as V and Y or 0 and O are the most common misreads.
+          </p>
         </>
       ) : (
         <>

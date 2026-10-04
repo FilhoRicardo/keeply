@@ -5,6 +5,9 @@ import { selectProvider } from '@/ai/provider'
 import { checkPhoto } from '../../lib/identify'
 import { scanEnabled } from '../../lib/features'
 
+// The MiniMax adapter waits up to 25 s; give the function room on Vercel.
+export const maxDuration = 30
+
 export type IdentifyResponse = {
   // Proposal for the Confirm / Edit / Rescan screen; never saved without the owner confirming.
   identification: ApplianceIdentification | null
@@ -29,7 +32,7 @@ export function toProposal(identity: ApplianceIdentity | null): IdentifyResponse
 }
 
 // Reads an appliance label photo with the server's AI provider (Manual unless one is configured).
-// The photo is not stored here; the owner's confirmed photo is saved with the appliance.
+// The photo is never stored: it goes to the provider and is discarded.
 export async function POST(request: NextRequest) {
   if (!scanEnabled()) return NextResponse.json({ error: 'not_enabled' }, { status: 404 })
   const form = await request.formData().catch(() => null)

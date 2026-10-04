@@ -71,6 +71,7 @@ describe('ScanFlow with a recogniser', () => {
     renderWithPlan(<ScanFlow recognizer={recognizer} />, repo)
     await takePhoto()
     expect(screen.getByText(/is this correct\?/)).toBeInTheDocument()
+    expect(screen.getByText(/look-alikes such as V and Y/)).toBeInTheDocument()
     expect(screen.getByText('SMS6ZCI49E')).toBeInTheDocument()
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm' })))
     expect(findRecord(await repo.load(), 'app-1')!.appliance.identificationConfidence).toBe(0.82)

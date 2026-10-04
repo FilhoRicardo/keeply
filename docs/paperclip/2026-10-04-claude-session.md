@@ -396,6 +396,10 @@ Ricardo, 2026-10-04 evening: finish line is the full magic minute; Brave Search 
 
 Google Cloud project "Keeply": Calendar API on, consent External/Testing, `calendar.events`, owner as sole test user, Web client "Keeply preview". `GOOGLE_*` in Vercel Preview only (secret values never in chat). On the redeployed preview the owner connected Google and approved Bosch (`09e14405…`) with the filter task accepted and two rejected: one monthly all-day event in Google Calendar with instructions, source and approval line; the accepted task's `calendar_event_id` is Keeply's deterministic `kp…` id; rejected tasks NULL. Remaining live gates (isolation, usage counts, Google sign-in, production, testers) and their exact steps: `docs/live-gates.md`.
 
+### 40. AI label reading verified on the owner's real BUSH plate; JPEG-quality fix (Builder 1)
+
+Owner priority: prove photo → MiniMax → identity → Confirm / Edit / Rescan end to end. Official docs (search excerpts; the docs host is blocked here): MiniMax-M3 and M3.1-Flash-Preview accept `image_url` input on Chat Completions; the Token Plan shares one quota across text and image; `sk-cp-` keys. Real calls in this session: before the fix the app misread WV9-6S as WY9-6S on 2/6 calls; controlled comparison traced it to the browser's JPEG quality 0.8 (q0.8 1/4 correct vs q0.92, PNG and 2× all 4/4). Fix: quality 0.92, plus a look-alike-character reminder on the confirm screen, a 4 MB upload cap under Vercel's 4.5 MB body limit, and `maxDuration = 30` on `/api/identify`. After the fix: 6/6 exact through the app. Whole-dishwasher, blurred and non-label images returned nulls (manual form); unreachable provider and no key both fell back to Manual. Hosted scanning stays off; owner-only hosted test steps and pre-invite blockers: `docs/live-gates.md` G8. The test photo was never committed.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
