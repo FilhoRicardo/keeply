@@ -23,6 +23,10 @@ Code: `src/ai/minimax.ts` (all MiniMax request/response handling), `src/ai/ident
   - App: no proposal in every case (by design, there was no manufacturer). For a `dishwasher` reply it showed "Keeply could not read the label…" with the manual form. For the `other` reply it showed "This label does not look like a dishwasher's…", which is **wrong wording for a photo of a dishwasher**, though the owner can still rescan or type. Empty Confirm showed the manufacturer error; Rescan returned to capture; typing a manufacturer then Confirm saved the appliance with the photo and confidence null.
   - Fixed afterwards (no new live calls): both uncertain outcomes (`other`, and unknown or nothing read) now show "Keeply could not read a dishwasher label in this photo. Try a clearer photo of the label, or enter the details below." Rescan and manual entry are unchanged.
   - Limitations: one photo, four calls; a classification wobble (`other` vs `dishwasher`) on identical input; no rating-plate photo yet, so real label-reading accuracy is still untested.
+- 2026-10-04 17:35 UTC, cloud session, **real rating-plate photo (owner-supplied, not stored in the repo)**, same live wiring: browser upload → `/api/identify` → MiniMax (2 calls: initial + one rescan, both HTTP 200). Only image bytes and the standard prompt were sent.
+  - Type, manufacturer and serial were read correctly on both calls. The model number was correct on call 1 (confidence 0.95). Call 2 misread one letter as a visually similar one (V read as Y) at a *higher* confidence (0.97). Model confidence therefore does not show when a character is misread; the owner's check against the plate is what catches it.
+  - Nothing was saved before Confirm (device storage stayed empty through the proposal, Edit and Rescan). After an Edit, Confirm saved with `identificationConfidence: null`.
+  - Defect fixed: the proposal screen did not show the serial number, although Confirm saved it. It now shows any serial that was read, so the owner sees everything they approve.
 
 ## Account
 

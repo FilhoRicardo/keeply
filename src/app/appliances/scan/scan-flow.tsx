@@ -139,6 +139,13 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
               <dt>Model</dt>
               <dd>{identification.model || 'Not read'}</dd>
             </div>
+            {/* Confirm saves the serial too, so the owner must see it before approving. */}
+            {identification.serialNumber && (
+              <div>
+                <dt>Serial number</dt>
+                <dd>{identification.serialNumber}</dd>
+              </div>
+            )}
           </dl>
           <p className="form-intro">Read from your photo. Check it against the label: is this correct?</p>
         </>

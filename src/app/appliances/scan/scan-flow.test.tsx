@@ -86,6 +86,20 @@ describe('ScanFlow with a recogniser', () => {
     expect(findRecord(await repo.load(), 'app-1')!.appliance).toMatchObject({ model: 'SMS6ZCI49F', identificationConfidence: null })
   })
 
+  it('shows a read serial number before the owner confirms it', async () => {
+    const withSerial: ApplianceRecognizer = {
+      recognise: async (blob) => {
+        const result = await recognizer.recognise(blob)
+        return { ...result, identification: { ...result.identification!, serialNumber: 'FD9901' } }
+      },
+    }
+    renderWithPlan(<ScanFlow recognizer={withSerial} />, repo)
+    await takePhoto()
+    expect(screen.getByText('Serial number')).toBeInTheDocument()
+    expect(screen.getByText('FD9901')).toBeInTheDocument()
+    expect(await repo.load()).toMatchObject({ records: [] })
+  })
+
   it('goes back to the camera on Rescan', async () => {
     renderWithPlan(<ScanFlow recognizer={recognizer} />, repo)
     await takePhoto()
