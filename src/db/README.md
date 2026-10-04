@@ -4,11 +4,17 @@ Supabase client and queries. The only module that talks to Postgres.
 
 - Schema: `supabase/migrations/`. Tests: `supabase/tests/database/` (`supabase test db`).
 - `rows.ts` maps database rows to domain types and back. The Recommendation mapper is read-only by design: the table rejects updates.
-- The app has no Supabase project yet, so plans live on the device via `createDevicePlanRepository` (`src/app/lib/plan-repository.ts`).
+- `plan-queries.ts` holds every plan read and write. `add_appliance_with_recommendations` (an RPC) creates an appliance, its source and its recommendations in one transaction; approval inserts all Tasks in one statement.
+- The app's `createSupabasePlanRepository` (`src/app/lib/supabase-plan-repository.ts`) implements `PlanRepository` on these queries. `createPlanRepository` picks it when `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set, signing visitors in anonymously; otherwise plans stay on the device.
 
-## Adding Supabase
+## Testing
 
-1. Implement `PlanRepository` (same file) as `createSupabasePlanRepository` here, using `rows.ts` to map rows. Every method resolves to the full `PlanState`; `approve` must insert `maintenance_tasks` with `approved_at` set (use `fromTask`).
-2. Insert the mock recommendations with a `source_documents` row (`source_type = 'general_guidance'`), since provenance is required.
-3. Pass it to `<PlanProvider repository={…}>` in `src/app/layout.tsx`. No screen changes.
-4. Have `POST /api/calendar/events` accept task ids and load approved tasks server-side instead of drafts from the browser.
+- Schema rules: `supabase test db` (pgTAP files in `supabase/tests/database/`).
+- Adapter end to end (supabase-js → PostgREST → Postgres, RLS on): `PGURL=postgres://postgres:…@localhost/postgres scripts/db-integration.sh`. Needs `psql` and a `postgrest` binary on PATH.
+
+## Going live
+
+1. `supabase link --project-ref xmilbvzbptmozwjphvsx && supabase db push`.
+2. Enable anonymous sign-ins (Authentication → Sign In / Providers).
+3. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in Vercel.
+4. Still open: `/api/calendar/events` should load approved tasks server-side (with the user's session) instead of trusting drafts from the browser.

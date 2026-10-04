@@ -239,3 +239,31 @@ describe('validation funnel', () => {
     expect(events.find((e) => e.name === 'plan_approved')).toMatchObject({ approved: 1, skipped: 2 })
   })
 })
+
+describe('storage failures', () => {
+  it('shows a banner and keeps the user on the form when saving fails', async () => {
+    const failing: PlanRepository = {
+      ...testRepository(),
+      addAppliance: () => Promise.reject(new Error('network down')),
+    }
+    renderWithPlan(<NewApplianceForm />, failing)
+    fireEvent.change(screen.getByLabelText('Manufacturer'), { target: { value: 'Bosch' } })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue to maintenance plan' })))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/could not reach your plan\. network down/)
+    expect(push).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Continue to maintenance plan' })).toBeEnabled()
+  })
+
+  it('offers a retry when loading fails', async () => {
+    let calls = 0
+    const flaky: PlanRepository = {
+      ...testRepository(),
+      load: () => (++calls === 1 ? Promise.reject(new Error('timeout')) : Promise.resolve({ version: 1, records: [] })),
+    }
+    renderWithPlan(<Home />, flaky)
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('No appliances yet.')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})

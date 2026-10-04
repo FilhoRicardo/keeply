@@ -43,7 +43,7 @@ export function NotFoundPanel() {
     <div className="empty-state aster-inner">
       <div>
         <h3>We could not find that dishwasher.</h3>
-        <p>It may have been added on another device. Keeply stores your plan on this device for now.</p>
+        <p>Check the link, or go back to your appliances.</p>
       </div>
     </div>
   )

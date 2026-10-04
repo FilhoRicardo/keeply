@@ -4,13 +4,17 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
 import type { Decision } from '@/domain/plan'
-import { createDevicePlanRepository, type PlanRepository } from './plan-repository'
+import type { PlanRepository } from './plan-repository'
+import { createPlanRepository } from './repository'
 import { findRecord, type NewApplianceInput, type PlanState } from './plan-state'
 import { defaultSink, safeTrack, type EventSink } from './track'
 
 type PlanContextValue = {
   // null until the repository has loaded (server render, hydration, network).
   state: PlanState | null
+  // Last storage failure, shown in a banner with a retry.
+  error: string | null
+  retry(): void
   storageKind: PlanRepository['kind']
   addAppliance(input: NewApplianceInput): Promise<string>
   setDecision(applianceId: string, recommendationId: string, decision: Decision | null): Promise<PlanState>
@@ -30,33 +34,59 @@ export function PlanProvider({
   sink?: EventSink
   children: ReactNode
 }) {
-  const [repo] = useState(() => repository ?? createDevicePlanRepository())
+  const [repo] = useState(() => repository ?? createPlanRepository())
   const [track] = useState(() => sink ?? defaultSink())
   const [state, setState] = useState<PlanState | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let live = true
-    const reload = () => repo.load().then((s) => live && setState(s))
+    const reload = () =>
+      repo.load().then(
+        (s) => {
+          if (!live) return
+          setState(s)
+          setError(null)
+        },
+        (e: unknown) => live && setError(e instanceof Error ? e.message : String(e)),
+      )
     reload()
     const unsubscribe = repo.subscribe?.(reload)
     return () => {
       live = false
       unsubscribe?.()
     }
-  }, [repo])
+  }, [repo, attempt])
 
   const value = useMemo<PlanContextValue>(() => {
     const apply = async (pending: Promise<PlanState>) => {
-      const next = await pending
-      setState(next)
-      return next
+      try {
+        const next = await pending
+        setState(next)
+        setError(null)
+        return next
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+        throw e
+      }
     }
     return {
       state,
+      error,
+      retry: () => setAttempt((n) => n + 1),
       storageKind: repo.kind,
       async addAppliance(input) {
-        const { state: next, applianceId } = await repo.addAppliance(input)
+        let added: Awaited<ReturnType<PlanRepository['addAppliance']>>
+        try {
+          added = await repo.addAppliance(input)
+        } catch (e) {
+          setError(e instanceof Error ? e.message : String(e))
+          throw e
+        }
+        const { state: next, applianceId } = added
         setState(next)
+        setError(null)
         safeTrack(track, { name: 'appliance_added', applianceId })
         const count = findRecord(next, applianceId)?.recommendations.length ?? 0
         safeTrack(track, { name: 'recommendations_generated', applianceId, count })
@@ -86,9 +116,21 @@ export function PlanProvider({
         return next
       },
     }
-  }, [repo, state, track])
+  }, [repo, state, error, track])
 
-  return <PlanContext.Provider value={value}>{children}</PlanContext.Provider>
+  return (
+    <PlanContext.Provider value={value}>
+      {error && (
+        <div className="error-banner" role="alert">
+          <span>Keeply could not reach your plan. {error}</span>
+          <button type="button" className="link-button" onClick={value.retry}>
+            Try again
+          </button>
+        </div>
+      )}
+      {children}
+    </PlanContext.Provider>
+  )
 }
 
 export function usePlan(): PlanContextValue {

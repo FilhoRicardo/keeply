@@ -18,8 +18,13 @@ export function NewApplianceForm() {
     const problem = validateNewAppliance(input)
     if (problem) return setError(problem)
     setBusy(true)
-    const id = await addAppliance(input)
-    router.push(`/appliances/${id}/plan`)
+    try {
+      const id = await addAppliance(input)
+      router.push(`/appliances/${id}/plan`)
+    } catch {
+      // The provider's banner shows the failure.
+      setBusy(false)
+    }
   }
 
   const field = (key: keyof NewApplianceInput) => ({

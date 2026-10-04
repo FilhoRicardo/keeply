@@ -76,7 +76,13 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
   }
 
   async function markDone(taskId: string) {
-    const next = findRecord(await addCompletion(applianceId, taskId, now), applianceId)!
+    let state
+    try {
+      state = await addCompletion(applianceId, taskId, now)
+    } catch {
+      return
+    }
+    const next = findRecord(state, applianceId)!
     const task = next.tasks.find((t) => t.id === taskId)!
     if (!needsReschedule(task)) return
     const moved = formatDate(nextDue(task, next.completions))

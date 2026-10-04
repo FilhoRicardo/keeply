@@ -55,7 +55,7 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
             recommendation={rec}
             decision={record.decisions[rec.id]}
             today={today()}
-            onDecide={(decision) => setDecision(applianceId, rec.id, decision)}
+            onDecide={(decision) => void setDecision(applianceId, rec.id, decision).catch(() => {})}
           />
         ))}
       </div>

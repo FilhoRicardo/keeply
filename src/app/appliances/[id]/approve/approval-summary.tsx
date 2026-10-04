@@ -51,7 +51,14 @@ export function ApprovalSummary({ applianceId }: { applianceId: string }) {
   async function onApprove() {
     setBusy(true)
     // Approval: the only place Tasks are created.
-    const approved = await approve(applianceId, startDate)
+    let approved
+    try {
+      approved = await approve(applianceId, startDate)
+    } catch {
+      // Nothing was approved and nothing was written; the provider's banner shows why.
+      setBusy(false)
+      return
+    }
     let outcome = 'saved'
     if (calendar?.connected) {
       const result = await writeApprovedTasks(findRecord(approved, applianceId)!)
