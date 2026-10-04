@@ -4,6 +4,10 @@ Status (2026-10-04): **adapter implemented; live verification pending.** All tes
 
 Code: `src/ai/minimax.ts` (all MiniMax request/response handling), `src/ai/identity.ts` (Keeply's neutral schema `applianceType, manufacturer, model, serialNumber, confidence`), `src/ai/provider.ts` (selection; Manual always last). Workflow: photo → `/api/identify` → provider → neutral identity → Confirm / Edit / Rescan. Nothing is saved without the owner confirming; any edit drops the AI confidence. Only photos the browser re-encoded (EXIF/GPS dropped) are sent.
 
+## Verification log
+
+- 2026-10-04 17:00 UTC, cloud session started before the API credential was saved: `pnpm verify:minimax` → HTTP 403 from the session's egress proxy ("Host not in allowlist: api.minimax.io"). The request never reached MiniMax; image-input acceptance is **not yet tested**. Next: run again in a new session (the credential applies to sessions started after it was saved).
+
 ## Account
 
 Ricardo: **MiniMax Token Plan, model MiniMax-M3** (non-secret account info; the key itself is never pasted into chat).

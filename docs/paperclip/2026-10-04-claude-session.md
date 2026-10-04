@@ -373,7 +373,7 @@ Correction from Ricardo (official cloud-environments docs): on Pro/Max, cloud AP
 
 1. `docs/ai/minimax.md` rewritten: cloud = API credential for `api.minimax.io` (Authorization, Bearer), entered by Ricardo, new session or VM rebuild to apply; local = `.env.local` (gitignored); Vercel not yet.
 2. The app gate is unchanged (`minimaxConfig` still needs `MINIMAX_API_KEY`), so the cloud-session app stays Manual. Verification-only `pnpm verify:minimax` (`src/ai/minimax.live.test.ts`, excluded from `pnpm test`/CI) calls the adapter directly and strips its placeholder Authorization header so the proxy injects the real one; it logs only the parsed identity.
-3. Ran it here without a credential: proxy 403, as expected. Live verification still pending.
+3. Ran it here without a credential: proxy 403, as expected. After Ricardo saved the `api.minimax.io` API credential, ran again in this (older) session: still proxy 403 "Host not in allowlist"; the request never reached MiniMax. Needs a new session. Live verification still pending.
 
 ## Review requests for Builders 3–4 (Codex)
 
