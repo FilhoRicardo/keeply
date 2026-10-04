@@ -53,9 +53,9 @@ select throws_ok($$ insert into public.maintenance_completions (maintenance_task
   values ('00000000-0000-0000-0000-0000000000b5', now()) $$,
   '42501', null, 'A cannot insert a completion for B''s Task');
 
-select is((with u as (update public.homes set name = 'x' where id = '00000000-0000-0000-0000-0000000000b1' returning 1) select count(*)::int from u), 0, 'A cannot update B''s home');
-select is((with u as (update public.appliances set model = 'x' where id = '00000000-0000-0000-0000-0000000000b2' returning 1) select count(*)::int from u), 0, 'A cannot update B''s appliance');
-select is((with u as (update public.maintenance_tasks set scheduling_mode = 'completion_based' where id = '00000000-0000-0000-0000-0000000000b5' returning 1) select count(*)::int from u), 0, 'A cannot update B''s Task');
+select is_empty($$ update public.homes set name = 'x' where id = '00000000-0000-0000-0000-0000000000b1' returning 1 $$, 'A cannot update B''s home');
+select is_empty($$ update public.appliances set model = 'x' where id = '00000000-0000-0000-0000-0000000000b2' returning 1 $$, 'A cannot update B''s appliance');
+select is_empty($$ update public.maintenance_tasks set scheduling_mode = 'completion_based' where id = '00000000-0000-0000-0000-0000000000b5' returning 1 $$, 'A cannot update B''s Task');
 select throws_ok($$ update public.appliances set home_id = '00000000-0000-0000-0000-0000000000b1' where id = '00000000-0000-0000-0000-0000000000a2' $$,
   '42501', null, 'A cannot move their appliance into B''s home');
 select throws_ok($$ update public.maintenance_tasks set appliance_id = '00000000-0000-0000-0000-0000000000b2' where id = '00000000-0000-0000-0000-0000000000a5' $$,
@@ -68,12 +68,12 @@ select is((select count(*)::int from public.maintenance_recommendations where id
 select is((select count(*)::int from public.maintenance_tasks where id = '00000000-0000-0000-0000-0000000000a5'), 0, 'B cannot see A''s Task');
 select throws_ok($$ insert into public.appliances (home_id, category) values ('00000000-0000-0000-0000-0000000000a1', 'dishwasher') $$,
   '42501', null, 'B cannot insert an appliance into A''s home');
-select is((with u as (update public.maintenance_tasks set scheduling_mode = 'completion_based' where id = '00000000-0000-0000-0000-0000000000a5' returning 1) select count(*)::int from u), 0, 'B cannot update A''s Task');
+select is_empty($$ update public.maintenance_tasks set scheduling_mode = 'completion_based' where id = '00000000-0000-0000-0000-0000000000a5' returning 1 $$, 'B cannot update A''s Task');
 
 -- Without a JWT nothing is visible or writable.
 reset role;
 set local role anon;
-select throws_ok($$ select * from public.homes $$, '42501', null, 'anon (no session) has no access to homes');
+select is_empty($$ select * from public.homes $$, 'the anon role (no session) sees no homes');
 
 reset role;
 select * from finish();

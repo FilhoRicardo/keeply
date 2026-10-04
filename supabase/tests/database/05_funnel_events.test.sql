@@ -41,8 +41,8 @@ select throws_ok($$ insert into public.funnel_events (user_id, appliance_id, nam
 select throws_ok($$ insert into public.funnel_events (user_id, name) values ('00000000-0000-0000-0000-00000000000a', 'made_up_event') $$,
   '23514', null, 'an event name outside the funnel list is rejected');
 select is_empty($$ select * from public.funnel_events $$, 'select returns nothing to clients');
-select is((with u as (update public.funnel_events set name = 'task_completed' returning 1) select count(*)::int from u), 0, 'clients cannot update events');
-select is((with d as (delete from public.funnel_events returning 1) select count(*)::int from d), 0, 'clients cannot delete events');
+select is_empty($$ update public.funnel_events set name = 'task_completed' returning 1 $$, 'clients cannot update events');
+select is_empty($$ delete from public.funnel_events returning 1 $$, 'clients cannot delete events');
 
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000b","role":"authenticated","is_anonymous":false}', true); set local role authenticated;
 select is_empty($$ select * from public.funnel_events $$, 'B also sees nothing');
