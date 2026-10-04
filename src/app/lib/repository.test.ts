@@ -11,3 +11,12 @@ describe('createPlanRepository', () => {
     expect(createPlanRepository({ url: 'https://example.supabase.co', anonKey: 'anon' }).kind).toBe('supabase')
   })
 })
+
+describe('createPlanBackend', () => {
+  it('pairs Supabase storage with the Supabase event sink', async () => {
+    const { createPlanBackend } = await import('./repository')
+    const backend = createPlanBackend({ url: 'https://example.supabase.co', anonKey: 'anon' })
+    expect(backend.repository.kind).toBe('supabase')
+    expect(typeof backend.sink).toBe('function')
+  })
+})

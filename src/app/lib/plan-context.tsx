@@ -5,7 +5,7 @@ import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
 import type { Decision } from '@/domain/plan'
 import type { PlanRepository } from './plan-repository'
-import { createPlanRepository } from './repository'
+import { createPlanBackend } from './repository'
 import { findRecord, type NewApplianceInput, type PlanState } from './plan-state'
 import { defaultSink, safeTrack, type EventSink } from './track'
 
@@ -36,11 +36,21 @@ export function PlanProvider({
   sink?: EventSink
   children: ReactNode
 }) {
-  const [repo] = useState(() => repository ?? createPlanRepository())
-  const [track] = useState(() => sink ?? defaultSink())
+  const [backend] = useState(() => (repository ? { repository, sink: sink ?? defaultSink() } : createPlanBackend()))
+  const repo = backend.repository
+  const track = sink ?? backend.sink
   const [state, setState] = useState<PlanState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+
+  // Google OAuth returns with ?calendar=connected: record it once and tidy the URL.
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('calendar') !== 'connected') return
+    safeTrack(track, { name: 'calendar_connected' })
+    url.searchParams.delete('calendar')
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+  }, [track])
 
   useEffect(() => {
     let live = true

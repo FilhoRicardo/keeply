@@ -267,3 +267,14 @@ describe('storage failures', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
+
+describe('calendar_connected', () => {
+  it('is tracked once when Google returns and the query is removed', async () => {
+    window.history.replaceState(null, '', '/appliances/app-1/approve?calendar=connected')
+    const events: { name: string }[] = []
+    renderWithPlan(<Home />, repo, (e) => void events.push(e))
+    await screen.findByText('No appliances yet.')
+    expect(events.map((e) => e.name)).toEqual(['calendar_connected'])
+    expect(window.location.search).toBe('')
+  })
+})

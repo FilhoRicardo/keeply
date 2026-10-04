@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { POST } from '../api/calendar/events/route'
 import { findRecord } from './plan-state'
 import { createSupabasePlanRepository } from './supabase-plan-repository'
+import { supabaseSink } from './track'
 
 // Real supabase-js → PostgREST → Postgres with the Keeply migrations and RLS.
 // Run via scripts/db-integration.sh, which provides these variables.
@@ -167,5 +168,20 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('POST /api/calendar/events with Supabase'
       vi.unstubAllGlobals()
       vi.unstubAllEnvs()
     }
+  })
+})
+
+describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase funnel sink', () => {
+  it('appends events under the visitor’s own id', async () => {
+    const db = createClient(supabaseUrl, jwt(OWNER), { auth: { persistSession: false, autoRefreshToken: false } })
+    const sink = supabaseSink(db, async () => {})
+    sink({ name: 'plan_approved', applianceId: '11111111-1111-4111-8111-111111111111', approved: 2, skipped: 1, at: new Date().toISOString() })
+    sink({ name: 'calendar_connected', at: new Date().toISOString() })
+    const count = () =>
+      execFileSync('psql', [KEEPLY_INTEGRATION_DB!, '-tAc', `select count(*) from funnel_events where user_id = '${OWNER}'`]).toString().trim()
+    for (let i = 0; i < 50 && count() !== '2'; i++) await new Promise((r) => setTimeout(r, 50))
+    expect(count()).toBe('2')
+    const props = execFileSync('psql', [KEEPLY_INTEGRATION_DB!, '-tAc', "select props from funnel_events where name = 'plan_approved'"]).toString().trim()
+    expect(JSON.parse(props)).toEqual({ approved: 2, skipped: 1 })
   })
 })

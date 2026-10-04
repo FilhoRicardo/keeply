@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Decision } from '@/domain/plan'
 
 // Validation funnel from docs/HANDOFF.md §15. Ids and counts only: no names, models or dates.
@@ -7,6 +8,7 @@ export type FunnelEvent =
   | { name: 'recommendations_generated'; applianceId: string; count: number }
   | { name: 'recommendation_decided'; applianceId: string; decision: Decision['kind'] }
   | { name: 'plan_approved'; applianceId: string; approved: number; skipped: number }
+  | { name: 'calendar_connected' }
   | { name: 'calendar_tasks_created'; applianceId: string; count: number }
   | { name: 'task_completed'; applianceId: string }
 
@@ -18,6 +20,17 @@ export type EventSink = (event: TrackedEvent) => void
 export const noopSink: EventSink = () => {}
 
 export const devConsoleSink: EventSink = (event) => console.debug('[keeply:event]', event)
+
+// Appends to public.funnel_events (insert-only for visitors). `ready` waits for the session.
+export function supabaseSink(db: SupabaseClient, ready: () => Promise<unknown>): EventSink {
+  return (event) => {
+    const { name, at, ...rest } = event
+    const { applianceId, ...props } = rest as { applianceId?: string } & Record<string, unknown>
+    void ready()
+      .then(() => db.from('funnel_events').insert({ name, appliance_id: applianceId ?? null, props, occurred_at: at }))
+      .catch(() => {})
+  }
+}
 
 export function defaultSink(): EventSink {
   return process.env.NODE_ENV === 'development' ? devConsoleSink : noopSink

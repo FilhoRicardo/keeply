@@ -117,6 +117,17 @@ Steps:
 
 Known limit: scripts still need `'unsafe-inline'` (no nonce setup yet).
 
+### 10. Funnel events stored in Supabase; calendar_connected tracked (Builder 2; reviewer Builder 4)
+
+`supabase/migrations/20261004170000_funnel_events.sql`, `supabase/tests/database/funnel_events.test.sql`, `src/app/lib/track.ts`, `src/app/lib/repository.ts`, `src/app/lib/plan-context.tsx`.
+
+Steps:
+1. `funnel_events` table: known event names only, small props object, append-only for visitors (insert own rows; no select/update/delete). Analysis via the service role.
+2. pgTAP: 4 tests (23 total pass).
+3. `supabaseSink` writes events after the session is ready; `createPlanBackend` pairs it with the Supabase repository. Device mode keeps the console/no-op sink.
+4. `calendar_connected` recorded once when Google redirects back with `?calendar=connected`; the query is removed from the URL.
+5. Integration test: events land under the visitor's own id (4/4 integration tests pass).
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
@@ -133,7 +144,5 @@ Please review the branch commit by commit and comment on Paperclip or the PR. Fo
 - Create Google OAuth client with `calendar.events` scope and redirect URIs (owner action).
 - Decide whether v0.1 keeps anonymous sign-in or adds a real login (anonymous plans are lost if the browser's session is cleared).
 - Migrate a device-stored plan into Supabase on first sign-in (currently not migrated).
-- Supabase sink for funnel events (an `events` table).
-- `calendar_connected` funnel event (needs a server-side or post-redirect hook).
 
 Done in this session (were follow-ups): completion-based calendar rescheduling, hydration placeholder, storage fallback, Supabase adapter, server-side calendar task loading.
