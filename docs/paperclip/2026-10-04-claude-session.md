@@ -299,6 +299,22 @@ Steps:
 
 `docs/pr/KEE-1-phase1.md`: what the branch does, how each non-negotiable is enforced, modules, migrations, verification, owner actions and open decisions, ready for the CTO to paste when opening the PR from `claude/dazzling-mayer-ytyahw`.
 
+### 30. Whole-branch deep review (high effort) and fixes (Builder 1 + Builder 2; reviewers Builder 3 + Builder 4)
+
+A high-effort code review across `origin/main...HEAD` found 10 issues; all fixed:
+1. Approval page: a failure after approval in the calendar step left the page stuck with an unhandled error; now reports "failed" and navigates (retry is idempotent).
+2. Plans with >20 tasks could never be written (route limit); writes are now batched by 20 (test with a 25-task fixture catalog).
+3. Reloads were not queued with mutations, so a slow reload could restore a pre-approval state; reloads now share the mutation queue.
+4. Unticking calendar access at Google showed "sign-in did not finish"; now reported as "denied" (`CalendarScopeNotGrantedError`; callback tests).
+5. "Saved on this device" copy shown in Supabase mode; now depends on storage kind.
+6. `db-test.sh` passed when pgTAP only printed "# Looks like you planned N but ran M"; now fails.
+7. Service worker static cache grew forever across deploys; capped at 150 entries, writes awaited.
+8. Supabase repository loaded every appliance and re-signed every photo to check one; now loads one appliance tree; calendar result updates run in parallel.
+9. Google calls ran one by one with duplicated loops; now concurrent via one helper, results in order.
+10. Model normaliser was duplicated between evidence and catalog matching; now shared.
+
+Verified: 207 unit/component, 7 integration, 3 e2e, 43 pgTAP, build.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

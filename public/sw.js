@@ -35,9 +35,18 @@ self.addEventListener('fetch', (event) => {
         const hit = await cache.match(request)
         if (hit) return hit
         const response = await fetch(request)
-        if (response.ok) cache.put(request, response.clone())
+        if (response.ok) event.waitUntil(cache.put(request, response.clone()).then(() => trim(cache)))
         return response
       }),
     )
   }
 })
+
+// Every deploy adds new hashed files under the same cache name; keep only the newest entries
+// so old builds do not pile up on the phone.
+const MAX_STATIC_ENTRIES = 150
+
+async function trim(cache) {
+  const keys = await cache.keys()
+  await Promise.all(keys.slice(0, Math.max(0, keys.length - MAX_STATIC_ENTRIES)).map((k) => cache.delete(k)))
+}

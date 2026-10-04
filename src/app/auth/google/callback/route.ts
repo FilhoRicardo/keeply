@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { exchangeGoogleCode, googleOAuthConfig } from '@/calendar/google'
+import { CalendarScopeNotGrantedError, exchangeGoogleCode, googleOAuthConfig } from '@/calendar/google'
 import { RETURN_COOKIE, safeReturnTo, STATE_COOKIE, TOKEN_COOKIE, withQuery } from '../../../lib/calendar-session'
 
 export async function GET(request: NextRequest) {
@@ -30,7 +30,8 @@ export async function GET(request: NextRequest) {
       maxAge: Math.max(60, expiresIn - 60),
     })
     return response
-  } catch {
-    return redirect('error')
+  } catch (error) {
+    // Declining calendar access is a "no", not a failed sign-in.
+    return redirect(error instanceof CalendarScopeNotGrantedError ? 'denied' : 'error')
   }
 }

@@ -1,4 +1,4 @@
-import { unsupportedEvidence, type EvidenceLevel } from './evidence'
+import { normaliseModel, unsupportedEvidence, type EvidenceLevel } from './evidence'
 import type { Interval } from './format-interval'
 import { mockRecommendations } from './mock-recommendations'
 import type { Appliance, Recommendation, SourceDocument } from './model'
@@ -17,7 +17,7 @@ export type CatalogEntry = {
   interval: Interval
 }
 
-const norm = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+const norm = normaliseModel
 
 function matches(entry: CatalogEntry, appliance: Pick<Appliance, 'manufacturer' | 'model'>): 'exact' | 'family' | null {
   if (norm(entry.manufacturer) !== norm(appliance.manufacturer) || !appliance.model) return null

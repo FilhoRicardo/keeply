@@ -20,6 +20,14 @@ export class GoogleCalendarError extends Error {
   }
 }
 
+// The owner finished consent but unticked calendar access (granular consent).
+export class CalendarScopeNotGrantedError extends GoogleCalendarError {
+  constructor() {
+    super('Calendar access was not granted', 403)
+    this.name = 'CalendarScopeNotGrantedError'
+  }
+}
+
 // Google event ids use base32hex (0-9, a-v), 5–1024 chars. A deterministic id per Task makes
 // writes idempotent: a second insert returns 409 and becomes an update instead of a duplicate.
 export function googleEventId(taskId: string): string {
@@ -125,7 +133,7 @@ export async function exchangeGoogleCode(
   if (!response.ok) throw new GoogleCalendarError(`Google sign-in failed (${response.status})`, response.status)
   const token = (await response.json()) as { access_token: string; expires_in: number; scope?: string }
   if (token.scope && !token.scope.split(' ').includes(GOOGLE_CALENDAR_SCOPE)) {
-    throw new GoogleCalendarError('Calendar access was not granted', 403)
+    throw new CalendarScopeNotGrantedError()
   }
   return { accessToken: token.access_token, expiresIn: token.expires_in }
 }

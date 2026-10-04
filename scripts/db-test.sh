@@ -8,6 +8,7 @@ failed=0
 for t in supabase/tests/database/*.sql; do
   out=$(psql "$DBURL" -q -t -v ON_ERROR_STOP=1 -f "$t")
   echo "$out" | grep -E "ok|#" || true
-  if echo "$out" | grep -q "not ok"; then failed=1; fi
+  # finish() reports a planned/ran mismatch or failures only as "# Looks like ..." diagnostics.
+  if echo "$out" | grep -qE "not ok|# Looks like"; then failed=1; fi
 done
 exit $failed

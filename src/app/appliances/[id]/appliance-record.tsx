@@ -32,14 +32,22 @@ import { today } from '../../lib/today'
 const OUTCOME_COPY: Record<string, string> = {
   calendar: 'Plan approved. Your tasks are in Google Calendar.',
   partial: 'Plan approved. Some tasks could not be added to Google Calendar; try again below.',
-  saved: 'Plan approved and saved on this device.',
+  saved: 'Plan approved and saved.',
   not_connected: 'Plan approved. Reconnect Google Calendar to add your tasks.',
   failed: 'Plan approved, but Google Calendar could not be reached. Try again below.',
 }
 
 export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
-  const { state, addCompletion, recordCalendarResults, accessToken, updateTaskSchedule, setTaskPaused, clearCalendarEvents } =
-    usePlan()
+  const {
+    state,
+    storageKind,
+    addCompletion,
+    recordCalendarResults,
+    accessToken,
+    updateTaskSchedule,
+    setTaskPaused,
+    clearCalendarEvents,
+  } = usePlan()
   const outcome = useSearchParams().get('approved')
   const [calendar, setCalendar] = useState<CalendarStatus | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -195,7 +203,7 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
     <>
       {outcome && OUTCOME_COPY[outcome] && (
         <p className="notice" role="status">
-          {OUTCOME_COPY[outcome]}
+          {outcome === 'saved' && storageKind === 'device' ? 'Plan approved and saved on this device.' : OUTCOME_COPY[outcome]}
         </p>
       )}
 

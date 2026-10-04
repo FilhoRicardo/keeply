@@ -18,7 +18,7 @@ import { today } from '../../../lib/today'
 
 export function ApprovalSummary({ applianceId }: { applianceId: string }) {
   const router = useRouter()
-  const { state, approve, recordCalendarResults, accessToken } = usePlan()
+  const { state, approve, recordCalendarResults, accessToken, storageKind } = usePlan()
   const [calendar, setCalendar] = useState<CalendarStatus | null>(null)
   const [startDate, setStartDate] = useState(today)
   const [busy, setBusy] = useState(false)
@@ -62,12 +62,17 @@ export function ApprovalSummary({ applianceId }: { applianceId: string }) {
     }
     let outcome = 'saved'
     if (calendar?.connected) {
-      const result = await writeApprovedTasks(findRecord(approved, applianceId)!, await accessToken())
-      if (result.kind === 'written') {
-        const after = findRecord(await recordCalendarResults(applianceId, result.results), applianceId)!
-        outcome = after.tasks.every((t) => t.status !== 'approved' || t.calendarEventId) ? 'calendar' : 'partial'
-      } else {
-        outcome = result.kind
+      try {
+        const result = await writeApprovedTasks(findRecord(approved, applianceId)!, await accessToken())
+        if (result.kind === 'written') {
+          const after = findRecord(await recordCalendarResults(applianceId, result.results), applianceId)!
+          outcome = after.tasks.every((t) => t.status !== 'approved' || t.calendarEventId) ? 'calendar' : 'partial'
+        } else {
+          outcome = result.kind
+        }
+      } catch {
+        // The plan is approved either way; writes are idempotent, so the record page can retry.
+        outcome = 'failed'
       }
     }
     router.push(`/appliances/${applianceId}?approved=${outcome}`)
@@ -137,7 +142,9 @@ export function ApprovalSummary({ applianceId }: { applianceId: string }) {
           </>
         )}
         {calendar && !calendar.configured && (
-          <p>Google Calendar is not set up on this server yet. Your approved plan will be saved on this device.</p>
+          <p>
+            {`Google Calendar is not set up on this server yet. Your approved plan will be saved${storageKind === 'device' ? ' on this device' : ''}.`}
+          </p>
         )}
       </section>
 

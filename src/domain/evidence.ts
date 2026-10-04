@@ -43,7 +43,8 @@ export function isManufacturerVerified(level: EvidenceLevel): boolean {
 
 type SourceForEvidence = { sourceType: string; modelScope: string | null }
 
-const normaliseModel = (model: string) => model.toUpperCase().replace(/[^A-Z0-9]/g, '')
+// Letters and digits only, upper case: "SMS 6ZCI-49E" and "sms6zci49e" are the same model.
+export const normaliseModel = (model: string) => model.toUpperCase().replace(/[^A-Z0-9]/g, '')
 
 // Why a claimed evidence level is not backed by its source, or null when it is.
 // Manufacturer verified needs a manufacturer source scoped to this exact model; similar-model

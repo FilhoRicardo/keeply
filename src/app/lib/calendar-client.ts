@@ -3,6 +3,7 @@ import { calendarBound } from '@/domain/plan'
 import type { CalendarStatus } from '../api/calendar/status/route'
 import type { Task } from '@/domain/model'
 import { draftsForTasks } from './calendar-drafts'
+import { MAX_EVENTS_PER_REQUEST } from './calendar-session'
 import type { ApplianceRecord } from './plan-state'
 
 export type { CalendarStatus }
@@ -47,26 +48,33 @@ export async function writeTasks(
   accessToken: string | null = null,
 ): Promise<CalendarWriteOutcome> {
   const drafts = draftsForTasks(record, tasks)
-  if (drafts.length === 0) return { kind: 'written', results: [] }
-  const body = accessToken
-    ? { applianceId: record.appliance.id, taskIds: drafts.map((d) => d.taskId) }
-    : { drafts }
-  try {
-    const response = await fetch('/api/calendar/events', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      },
-      body: JSON.stringify(body),
-    })
-    if (response.status === 401) return { kind: 'not_connected' }
-    if (!response.ok) return { kind: 'failed' }
-    const { results } = (await response.json()) as { results: WriteResult[] }
-    return { kind: 'written', results }
-  } catch {
-    return { kind: 'failed' }
+  const results: WriteResult[] = []
+  // The route accepts at most MAX_EVENTS_PER_REQUEST events per call.
+  for (let i = 0; i < drafts.length; i += MAX_EVENTS_PER_REQUEST) {
+    const batch = drafts.slice(i, i + MAX_EVENTS_PER_REQUEST)
+    const body = accessToken
+      ? { applianceId: record.appliance.id, taskIds: batch.map((d) => d.taskId) }
+      : { drafts: batch }
+    let outcome: CalendarWriteOutcome
+    try {
+      const response = await fetch('/api/calendar/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(body),
+      })
+      if (response.status === 401) outcome = { kind: 'not_connected' }
+      else if (!response.ok) outcome = { kind: 'failed' }
+      else outcome = { kind: 'written', results: ((await response.json()) as { results: WriteResult[] }).results }
+    } catch {
+      outcome = { kind: 'failed' }
+    }
+    if (outcome.kind !== 'written') return results.length > 0 ? { kind: 'written', results } : outcome
+    results.push(...outcome.results)
   }
+  return { kind: 'written', results }
 }
 
 export async function disconnectCalendar(): Promise<boolean> {

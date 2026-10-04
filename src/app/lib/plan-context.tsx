@@ -31,6 +31,13 @@ type PlanContextValue = {
 
 const PlanContext = createContext<PlanContextValue | null>(null)
 
+// Runs `op` after everything already queued, whether that succeeded or failed.
+function enqueue<T>(queue: { current: Promise<unknown> }, op: () => Promise<T>): Promise<T> {
+  const run = queue.current.then(op, op)
+  queue.current = run.catch(() => {})
+  return run
+}
+
 export function PlanProvider({
   repository,
   sink,
@@ -60,8 +67,9 @@ export function PlanProvider({
 
   useEffect(() => {
     let live = true
+    // Queued with mutations, so a load that started before a mutation cannot land after it.
     const reload = () =>
-      repo.load().then(
+      enqueue(queue, () => repo.load()).then(
         (s) => {
           if (!live) return
           setState(s)
@@ -78,11 +86,7 @@ export function PlanProvider({
   }, [repo, attempt])
 
   const value = useMemo<PlanContextValue>(() => {
-    const serial = <T,>(op: () => Promise<T>): Promise<T> => {
-      const run = queue.current.then(op, op)
-      queue.current = run.catch(() => {})
-      return run
-    }
+    const serial = <T,>(op: () => Promise<T>): Promise<T> => enqueue(queue, op)
     const apply = async (op: () => Promise<PlanState>) => {
       try {
         const next = await serial(op)

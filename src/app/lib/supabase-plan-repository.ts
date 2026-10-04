@@ -10,6 +10,7 @@ import {
   insertApprovedTasks,
   insertCompletion,
   loadCatalog,
+  loadApplianceTree,
   loadApplianceTrees,
   saveDecision,
   setCalendarEventId,
@@ -21,7 +22,7 @@ import { proposeRecommendations } from '@/domain/guidance'
 import { GENERAL_DISHWASHER_GUIDANCE } from '@/domain/mock-recommendations'
 import { approvePlan, rescheduleTask, type Decisions } from '@/domain/plan'
 import type { PlanRepository } from './plan-repository'
-import { findRecord, validateNewAppliance, type ApplianceRecord, type PlanState } from './plan-state'
+import { validateNewAppliance, type ApplianceRecord, type PlanState } from './plan-state'
 
 export function toApplianceRecord(tree: ApplianceTree): ApplianceRecord {
   const sources = new Map(tree.source_documents.map((s) => [s.id, s]))
@@ -69,10 +70,12 @@ export function createSupabasePlanRepository({
     return { version: 1, records }
   }
 
+  // One appliance for validating a mutation: no other appliances, no photo signing.
   async function record(applianceId: string): Promise<ApplianceRecord> {
-    const found = findRecord(await load(), applianceId)
-    if (!found) throw new Error(`Unknown appliance ${applianceId}`)
-    return found
+    await ready()
+    const tree = await loadApplianceTree(db, applianceId)
+    if (!tree) throw new Error(`Unknown appliance ${applianceId}`)
+    return toApplianceRecord(tree)
   }
 
   return {
@@ -123,7 +126,7 @@ export function createSupabasePlanRepository({
     },
     async recordCalendarResults(applianceId, results) {
       await ready()
-      for (const result of results) if (result.ok) await setCalendarEventId(db, result.taskId, result.eventId)
+      await Promise.all(results.flatMap((r) => (r.ok ? [setCalendarEventId(db, r.taskId, r.eventId)] : [])))
       return load()
     },
     async updateTaskSchedule(applianceId, taskId, schedule) {
