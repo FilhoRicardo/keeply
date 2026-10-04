@@ -147,6 +147,12 @@ Steps:
 
 Known limit for a human check: axe cannot compute colour contrast over the translucent "glass" panels, so small grey text (eyebrow labels, `--aster-ink-3`) needs a manual contrast review.
 
+### 13. README and go-live notes (Builder 1)
+
+`README.md`: run, checks (verify, e2e, pgTAP, integration), go-live steps, enforced rules.
+
+Note for the CEO/CTO on KEE-23: the app connects to Google Calendar itself with `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` in Vercel (redirect `https://<domain>/auth/google/callback`). The **Supabase Google auth provider is not needed** unless Google sign-in is added later. The service-role key is not used by the app.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

@@ -2,4 +2,37 @@
 
 PPM for your home: scan what you own, understand how to maintain it, and keep it working for longer.
 
-Status: pre-code. See `docs/HANDOFF.md` for the product plan and `AGENTS.md` for how work is run.
+Status: Phase 0 + 1 built (manual dishwasher → proposed plan → Include / Customise / Skip → approval → Google Calendar). No AI recognition yet. Plan: `docs/HANDOFF.md`. How work is run: `AGENTS.md`. Module layout: `docs/architecture.md`.
+
+## Run it
+
+```bash
+pnpm install
+pnpm dev            # http://localhost:3000; plans are stored in the browser until Supabase is configured
+```
+
+Copy `.env.example` to `.env.local` to turn on Supabase and Google Calendar. Without them the full flow works on the device and approval saves the plan locally.
+
+## Checks
+
+| Command | What it covers |
+|---|---|
+| `pnpm verify` | typecheck, lint, unit and component tests, production build |
+| `pnpm build && pnpm e2e` | Phase 1 walkthrough on a phone viewport, with axe accessibility checks |
+| `PGURL=… scripts/db-test.sh` | pgTAP schema rules on a fresh Postgres (same files as `supabase test db`) |
+| `PGURL=… scripts/db-integration.sh` | supabase-js → PostgREST → Postgres with RLS, plus the calendar route |
+
+CI runs all four on every pull request.
+
+## Go live
+
+1. Supabase (`xmilbvzbptmozwjphvsx`): `supabase link --project-ref xmilbvzbptmozwjphvsx && supabase db push`, then enable **Anonymous sign-ins**.
+2. Google Cloud: enable the Calendar API, configure the consent screen, create a Web OAuth client with redirect URI `https://<your-domain>/auth/google/callback`. Scope used: `calendar.events` only. Keeply talks to Google directly; the Supabase Google auth provider is not needed.
+3. Vercel: set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`. The service-role key is not used by the app.
+
+## Rules that the code enforces
+
+- Nothing reaches a calendar before Approval; skipped tasks never do.
+- A Recommendation is never rewritten (database trigger); the owner's schedule lives on the Task.
+- General and similar-model guidance never reads as manufacturer verified.
+- Every Recommendation has a source; every row is scoped to its owner by RLS.
