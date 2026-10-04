@@ -7,6 +7,7 @@ import {
   updateTaskSchedule,
   insertApprovedTasks,
   insertCompletion,
+  loadCatalog,
   loadApplianceTrees,
   saveDecision,
   setCalendarEventId,
@@ -14,7 +15,8 @@ import {
   type ApplianceTree,
 } from '@/db/plan-queries'
 import { toAppliance, toCompletion, toRecommendation, toTask } from '@/db/rows'
-import { GENERAL_DISHWASHER_GUIDANCE, mockRecommendations } from '@/domain/mock-recommendations'
+import { proposeRecommendations } from '@/domain/guidance'
+import { GENERAL_DISHWASHER_GUIDANCE } from '@/domain/mock-recommendations'
 import { approvePlan, rescheduleTask, type Decisions } from '@/domain/plan'
 import type { PlanRepository } from './plan-repository'
 import { findRecord, validateNewAppliance, type ApplianceRecord, type PlanState } from './plan-state'
@@ -83,11 +85,13 @@ export function createSupabasePlanRepository({
       const error = validateNewAppliance(input)
       if (error) throw new Error(error)
       await ready()
+      const catalog = await loadCatalog(db, input.manufacturer)
+      const proposed = proposeRecommendations({ id: 'new', manufacturer: input.manufacturer, model: input.model.trim() || null }, catalog)
       const applianceId = await addApplianceWithRecommendations(
         db,
         input,
         GENERAL_DISHWASHER_GUIDANCE,
-        mockRecommendations({ id: 'new' }),
+        proposed,
         input.confidence ?? null,
       )
       if (input.photo) {

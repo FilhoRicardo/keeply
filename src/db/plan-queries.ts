@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { CatalogEntry } from '@/domain/guidance'
 import type { Recommendation, SourceDocument, Task } from '@/domain/model'
 import type { Customisation, Decision } from '@/domain/plan'
 import { fromTask, type ApplianceRow, type CompletionRow, type RecommendationRow, type SourceDocumentRow, type TaskRow } from './rows'
@@ -39,7 +40,10 @@ export async function loadApplianceTree(db: SupabaseClient, applianceId: string)
   return check(await db.from('appliances').select(TREE).eq('id', applianceId).maybeSingle()) as ApplianceTree | null
 }
 
-export type NewRecommendation = Pick<Recommendation, 'taskName' | 'description' | 'recommendedInterval' | 'evidenceLevel' | 'sourceLocation'>
+export type NewRecommendation = Pick<
+  Recommendation,
+  'taskName' | 'description' | 'recommendedInterval' | 'evidenceLevel' | 'sourceLocation' | 'source'
+>
 
 export async function addApplianceWithRecommendations(
   db: SupabaseClient,
@@ -61,6 +65,13 @@ export async function addApplianceWithRecommendations(
       model_scope: source.modelScope,
     },
     p_recommendations: recommendations.map((r) => ({
+      source: {
+        source_type: r.source.sourceType,
+        title: r.source.title,
+        reference: r.source.reference,
+        manufacturer: r.source.manufacturer,
+        model_scope: r.source.modelScope,
+      },
       task_name: r.taskName,
       description: r.description,
       interval_count: r.recommendedInterval.count,
@@ -70,6 +81,39 @@ export async function addApplianceWithRecommendations(
     })),
   })
   return check(result) as string
+}
+
+type CatalogRow = {
+  manufacturer: string
+  model_scope: string
+  source_type: CatalogEntry['sourceType']
+  title: string
+  reference: string
+  source_location: string | null
+  task_name: string
+  description: string
+  interval_count: number
+  interval_unit: CatalogEntry['interval']['unit']
+}
+
+// Curated entries for one manufacturer (exact matching happens in the domain). The pattern keeps
+// only letters and digits, like the domain's normalisation, so "Fisher&Paykel" still finds
+// "Fisher & Paykel" and typed LIKE metacharacters (%, _, \) can never break the query.
+export async function loadCatalog(db: SupabaseClient, manufacturer: string): Promise<CatalogEntry[]> {
+  const letters = manufacturer.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const pattern = `%${letters.split('').join('%')}%`
+  const rows = check(await db.from('guidance_catalog').select('*').ilike('manufacturer', pattern)) as CatalogRow[]
+  return rows.map((r) => ({
+    manufacturer: r.manufacturer,
+    modelScope: r.model_scope,
+    sourceType: r.source_type,
+    title: r.title,
+    reference: r.reference,
+    sourceLocation: r.source_location,
+    taskName: r.task_name,
+    description: r.description,
+    interval: { count: r.interval_count, unit: r.interval_unit },
+  }))
 }
 
 export function toDecisionRow(applianceId: string, recommendationId: string, decision: Decision): DecisionRow {

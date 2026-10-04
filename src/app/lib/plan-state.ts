@@ -1,7 +1,7 @@
 import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
 import type { Appliance, Completion, Recommendation, Task } from '@/domain/model'
-import { mockRecommendations } from '@/domain/mock-recommendations'
+import { proposeRecommendations, type CatalogEntry } from '@/domain/guidance'
 import { approvePlan, rescheduleTask, type Customisation, type Decision, type Decisions } from '@/domain/plan'
 
 // Everything Keeply knows about one appliance. Pure transitions only: persistence lives in plan-store.ts.
@@ -51,6 +51,7 @@ export function addAppliance(
   id: string,
   now: string,
   imageUrl: string | null = null,
+  catalog: readonly CatalogEntry[] = [],
 ): PlanState {
   const error = validateNewAppliance(input)
   if (error) throw new Error(error)
@@ -66,7 +67,7 @@ export function addAppliance(
   }
   const record: ApplianceRecord = {
     appliance,
-    recommendations: mockRecommendations(appliance),
+    recommendations: proposeRecommendations(appliance, catalog),
     decisions: {},
     tasks: [],
     completions: [],

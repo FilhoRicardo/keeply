@@ -44,8 +44,10 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
         <p className="aster-eyebrow">Proposed for</p>
         <h2>{applianceName(record.appliance)}</h2>
         <p>
-          Keeply proposes; you decide. Nothing reaches your calendar until you approve the plan. These are general
-          dishwasher tasks: we have not looked up your exact model yet.
+          Keeply proposes; you decide. Nothing reaches your calendar until you approve the plan.{' '}
+          {record.recommendations.every((r) => r.evidenceLevel === 'general_guidance')
+            ? 'These are general dishwasher tasks: we have no checked guidance for your exact model yet.'
+            : 'Each task shows where its guidance comes from and how closely it matches your model.'}
         </p>
       </section>
 

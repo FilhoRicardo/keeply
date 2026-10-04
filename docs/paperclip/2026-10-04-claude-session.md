@@ -250,6 +250,20 @@ Ran a structured code review over `origin/main...HEAD` (medium effort). Three fi
 
 177 unit/component tests pass.
 
+### 25. Curated guidance catalog: evidence without AI (Builder 1 + Builder 2; reviewers Builder 3 + Builder 4)
+
+Phase 3 groundwork, no AI. `src/domain/guidance.ts`, `supabase/migrations/20261004210000_guidance_catalog.sql`, `loadCatalog` in `src/db/plan-queries.ts`, both repositories, `docs/guidance-catalog.md`.
+
+Steps:
+1. `guidance_catalog` table: one task per row, checked by a named person against a manufacturer document (https reference, page, verified_by/on). Signed-in visitors read; only the team writes. Ships empty: never invent intervals.
+2. `proposeRecommendations`: exact model → Manufacturer verified; family prefix (`SMS6*`) → Similar-model guidance; otherwise the three General guidance tasks. Each result passes the evidence guard.
+3. Add-appliance RPC stores a source per recommendation (identical sources once).
+4. Plan screen intro says "general tasks" only when all are general; otherwise "each task shows where its guidance comes from".
+5. Review pass (code-review skill) found one bug: the manufacturer lookup used `ilike` on raw input, so `\`, `%`, `_` could break it or miss "Fisher & Paykel". Fixed by matching letters/digits only, with exact matching in the domain.
+6. Tests: 5 domain, 6 pgTAP, 1 component, 1 integration (exact / family / none). Totals: 187 unit/component, 6 integration, 3 e2e, 41 pgTAP.
+
+Team action: fill the catalog from real manuals using `docs/guidance-catalog.md`.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

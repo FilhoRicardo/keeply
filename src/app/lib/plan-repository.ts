@@ -1,5 +1,6 @@
 import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
+import type { CatalogEntry } from '@/domain/guidance'
 import type { Customisation, Decision } from '@/domain/plan'
 import {
   addAppliance,
@@ -63,10 +64,13 @@ export function createDevicePlanRepository({
   storage = browserStorage(),
   newId = () => crypto.randomUUID(),
   now = () => new Date().toISOString(),
+  catalog = [],
 }: {
   storage?: KeyValueStorage | null
   newId?: () => string
   now?: () => string
+  // Curated guidance available offline; empty unless the team ships verified entries.
+  catalog?: readonly CatalogEntry[]
 } = {}): PlanRepository {
   // Mirrors storage so the session still works when storage refuses reads or writes.
   let memory: string | null = null
@@ -105,7 +109,7 @@ export function createDevicePlanRepository({
     async addAppliance(input) {
       const applianceId = newId()
       const photo = input.photo && input.photo.size <= DEVICE_PHOTO_LIMIT ? await blobToDataUrl(input.photo) : null
-      return { state: write(addAppliance(read(), input, applianceId, now(), photo)), applianceId }
+      return { state: write(addAppliance(read(), input, applianceId, now(), photo, catalog)), applianceId }
     },
     setDecision: (applianceId, recommendationId, decision) =>
       mutate((s) => setDecision(s, applianceId, recommendationId, decision)),

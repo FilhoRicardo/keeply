@@ -390,3 +390,35 @@ describe('calendar permission denied', () => {
     expect(calls.some((c) => c.url === '/api/calendar/events')).toBe(false)
   })
 })
+
+describe('curated guidance on the plan screen', () => {
+  it('shows Manufacturer verified with its source when the catalog has the exact model', async () => {
+    const { createDevicePlanRepository, memoryStorage } = await import('../lib/plan-repository')
+    const catalogRepo = createDevicePlanRepository({
+      storage: memoryStorage(),
+      newId: () => 'app-1',
+      // Fixture entry, not real manufacturer guidance.
+      catalog: [
+        {
+          manufacturer: 'Bosch',
+          modelScope: 'SMS6ZCI49E',
+          sourceType: 'manufacturer_manual',
+          title: 'Fixture manual',
+          reference: 'https://example.com/manual.pdf',
+          sourceLocation: 'p. 40',
+          taskName: 'Clean the filters',
+          description: 'Fixture.',
+          interval: { count: 1, unit: 'month' },
+        },
+      ],
+    })
+    await catalogRepo.addAppliance({ manufacturer: 'Bosch', model: 'SMS6ZCI49E', serialNumber: '' })
+    renderWithPlan(<PlanReview applianceId="app-1" />, catalogRepo)
+
+    const card = await screen.findByRole('article', { name: 'Clean the filters' })
+    expect(within(card).getByText('Manufacturer verified')).toBeInTheDocument()
+    expect(screen.getByText(/shows where its guidance comes from/)).toBeInTheDocument()
+    fireEvent.click(within(card).getByRole('button', { name: 'Why? / View source' }))
+    expect(within(card).getByText(/Fixture manual, p\. 40/)).toBeInTheDocument()
+  })
+})

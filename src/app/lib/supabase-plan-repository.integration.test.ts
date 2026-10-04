@@ -209,3 +209,31 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase funnel sink', () => {
     expect(JSON.parse(props)).toEqual({ approved: 2, skipped: 1 })
   })
 })
+
+describe.skipIf(!KEEPLY_POSTGREST_URL)('Curated guidance catalog', () => {
+  it('proposes verified, similar-model or general guidance from catalog rows', async () => {
+    // Fixture rows only; the real catalog is filled by the team from manufacturer documents.
+    execFileSync('psql', [KEEPLY_INTEGRATION_DB!, '-q', '-c', `
+      insert into guidance_catalog (manufacturer, model_scope, source_type, title, reference, source_location, task_name,
+        description, interval_count, interval_unit, verified_by, verified_on) values
+      ('Fixturebrand', 'FB-100', 'manufacturer_manual', 'FB-100 manual', 'https://example.com/fb100.pdf', 'p. 12',
+       'Clean the fine filter', 'Fixture', 2, 'week', 'test', '2026-10-04'),
+      ('Fixturebrand', 'FB*', 'manufacturer_website', 'FB range care page', 'https://example.com/fb', null,
+       'Descale', 'Fixture', 6, 'month', 'test', '2026-10-04')`])
+    const repo = repoFor(OWNER)
+
+    const exact = await repo.addAppliance({ manufacturer: 'fixturebrand', model: 'fb100', serialNumber: '' })
+    const exactRecs = findRecord(exact.state, exact.applianceId)!.recommendations
+    expect(exactRecs.map((r) => [r.taskName, r.evidenceLevel, r.source.title, r.sourceLocation])).toEqual([
+      ['Clean the fine filter', 'manufacturer_verified', 'FB-100 manual', 'p. 12'],
+    ])
+
+    const family = await repo.addAppliance({ manufacturer: 'Fixturebrand', model: 'FB-250', serialNumber: '' })
+    expect(findRecord(family.state, family.applianceId)!.recommendations.map((r) => [r.taskName, r.evidenceLevel])).toEqual([
+      ['Descale', 'similar_model'],
+    ])
+
+    const other = await repo.addAppliance({ manufacturer: 'Fixturebrand', model: 'ZZ-1', serialNumber: '' })
+    expect(findRecord(other.state, other.applianceId)!.recommendations.every((r) => r.evidenceLevel === 'general_guidance')).toBe(true)
+  })
+})
