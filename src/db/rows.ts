@@ -68,6 +68,9 @@ export function toAppliance(row: ApplianceRow): Appliance {
     manufacturer: row.manufacturer,
     model: row.model,
     serialNumber: row.serial_number,
+    // Storage paths are turned into signed URLs by the repository.
+    imageUrl: null,
+    identificationConfidence: row.identification_confidence,
     createdAt: row.created_at,
   }
 }

@@ -18,7 +18,14 @@ export type PlanState = { version: 1; records: ApplianceRecord[] }
 
 export const EMPTY_STATE: PlanState = { version: 1, records: [] }
 
-export type NewApplianceInput = { manufacturer: string; model: string; serialNumber: string }
+export type NewApplianceInput = {
+  manufacturer: string
+  model: string
+  serialNumber: string
+  // Phase 2: photo of the label and the recogniser's confidence if the owner kept its proposal.
+  photo?: Blob | null
+  confidence?: number | null
+}
 
 function clean(value: string): string | null {
   const trimmed = value.trim()
@@ -38,7 +45,13 @@ export function findRecord(state: PlanState, applianceId: string): ApplianceReco
   return state.records.find((r) => r.appliance.id === applianceId)
 }
 
-export function addAppliance(state: PlanState, input: NewApplianceInput, id: string, now: string): PlanState {
+export function addAppliance(
+  state: PlanState,
+  input: NewApplianceInput,
+  id: string,
+  now: string,
+  imageUrl: string | null = null,
+): PlanState {
   const error = validateNewAppliance(input)
   if (error) throw new Error(error)
   const appliance: Appliance = {
@@ -47,6 +60,8 @@ export function addAppliance(state: PlanState, input: NewApplianceInput, id: str
     manufacturer: clean(input.manufacturer)!,
     model: clean(input.model),
     serialNumber: clean(input.serialNumber),
+    imageUrl,
+    identificationConfidence: input.confidence ?? null,
     createdAt: now,
   }
   const record: ApplianceRecord = {

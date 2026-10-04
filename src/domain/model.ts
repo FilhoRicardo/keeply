@@ -11,6 +11,10 @@ export type Appliance = {
   readonly manufacturer: string
   readonly model: string | null
   readonly serialNumber: string | null
+  // Photo of the appliance or its label, as a displayable URL (data: on device, signed URL from storage).
+  readonly imageUrl: string | null
+  // 0..1 when a recogniser proposed the identity and the owner kept it unchanged; null when typed.
+  readonly identificationConfidence: number | null
   readonly createdAt: string
 }
 

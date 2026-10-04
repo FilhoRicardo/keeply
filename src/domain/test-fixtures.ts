@@ -6,6 +6,8 @@ export const appliance: Appliance = {
   manufacturer: 'Bosch',
   model: 'SMS6ZCI49E',
   serialNumber: null,
+  imageUrl: null,
+  identificationConfidence: null,
   createdAt: '2026-10-04T10:00:00Z',
 }
 

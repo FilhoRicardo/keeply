@@ -71,3 +71,15 @@ describe('deleteAppliance', () => {
     await expect(repo.deleteAppliance(a)).rejects.toThrow(/Unknown appliance/)
   })
 })
+
+describe('device photos', () => {
+  it('keeps small photos and skips ones that would fill device storage', async () => {
+    const { DEVICE_PHOTO_LIMIT } = await import('./plan-repository')
+    const repo = createDevicePlanRepository({ storage: memoryStorage(), newId: ids() })
+    const small = await repo.addAppliance({ ...input, photo: new Blob([new Uint8Array(10)], { type: 'image/jpeg' }) })
+    const big = await repo.addAppliance({ ...input, photo: new Blob([new Uint8Array(DEVICE_PHOTO_LIMIT + 1)], { type: 'image/jpeg' }) })
+    const state = await repo.load()
+    expect(state.records.find((r) => r.appliance.id === small.applianceId)!.appliance.imageUrl).toMatch(/^data:image\/jpeg;base64,/)
+    expect(state.records.find((r) => r.appliance.id === big.applianceId)!.appliance.imageUrl).toBeNull()
+  })
+})

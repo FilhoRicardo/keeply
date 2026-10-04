@@ -208,6 +208,22 @@ Steps:
 
 Handoff Phase 5 lists "calendar permission denial". Before this, declining Google consent returned the owner to the approval page with no explanation. Now `?calendar=denied` / `?calendar=error` show what happened ("nothing was added"), the connect button stays, and approval still works (saves without writing). Component test covers it. 147 unit/component, 3 e2e pass.
 
+### 21. Phase 2 groundwork, no AI, behind a flag (Builder 2 + Builder 1; reviewers Builder 4 + Builder 3)
+
+Decided by Ricardo on 2026-10-04: use spare credits for Phase 2 groundwork without AI recognition. Off unless `NEXT_PUBLIC_KEEPLY_SCAN=1`, so the Phase 1 milestone is unchanged for users.
+
+Files: `src/domain/identification.ts`, `src/app/appliances/scan/*`, `src/app/lib/photo.ts`, `src/app/lib/features.ts`, `supabase/migrations/20261004190000_appliance_photos.sql`, `supabase/tests/database/appliance_photos.test.sql`, repositories, record screen.
+
+Steps:
+1. Domain: `ApplianceIdentification`, `ApplianceRecognizer` interface with `noRecognizer` (v0.1), `editIdentification` (any owner edit drops the recogniser's confidence), `validateIdentification`, `fitWithin`.
+2. Scan screen (handoff screen B): guidance to photograph the label; camera/file input; photo downscaled to ≤1280 px JPEG in the browser (also strips EXIF/GPS).
+3. Confirm screen (handoff screen C): photo preview; with a proposal: "Is this correct?" + Confirm / Edit / Rescan; without (v0.1): says plainly that labels cannot be read yet and asks the owner to type.
+4. Storage: private bucket `appliance-photos`, one folder per owner (RLS on `storage.objects`); `image_url` holds the path and the app shows 1-hour signed URLs. Device mode keeps photos ≤300 KB inline. Add-appliance RPC now stores `identification_confidence`.
+5. Record screen shows the label photo; Home shows "Scan appliance" only when the flag is on. CSP allows `*.supabase.co` images.
+6. Tests: domain, scan flow (no recogniser; fake recogniser confirm keeps confidence 0.82; edit drops it; rescan), device photo size limit, pgTAP 5 (bucket private, own folder only). Real-browser check with the flag on: PNG re-encoded to JPEG, blob preview allowed by CSP, no console errors. Screenshots `docs/screenshots/kee-1-scan-360.png`, `kee-1-confirm-360.png`. Totals: 159 unit/component, 5 integration, 3 e2e, 30 pgTAP.
+
+Owner action when enabling: none beyond `supabase db push` (the migration creates the bucket).
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

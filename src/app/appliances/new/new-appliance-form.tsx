@@ -27,7 +27,7 @@ export function NewApplianceForm() {
     }
   }
 
-  const field = (key: keyof NewApplianceInput) => ({
+  const field = (key: 'manufacturer' | 'model' | 'serialNumber') => ({
     value: input[key],
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => setInput((i) => ({ ...i, [key]: e.target.value })),
   })

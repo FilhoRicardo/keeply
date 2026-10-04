@@ -38,6 +38,16 @@ export interface PlanRepository {
 
 export const DEVICE_STORAGE_KEY = 'keeply.plan.v1'
 
+// Photos above this are not kept in device storage (localStorage is ~5 MB in total).
+export const DEVICE_PHOTO_LIMIT = 300_000
+
+export async function blobToDataUrl(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return `data:${blob.type || 'application/octet-stream'};base64,${btoa(binary)}`
+}
+
 type KeyValueStorage = Pick<Storage, 'getItem' | 'setItem'>
 
 // Browser storage can be missing or throw (private mode, quota, disabled cookies).
@@ -88,7 +98,8 @@ export function createDevicePlanRepository({
     load: async () => read(),
     async addAppliance(input) {
       const applianceId = newId()
-      return { state: write(addAppliance(read(), input, applianceId, now())), applianceId }
+      const photo = input.photo && input.photo.size <= DEVICE_PHOTO_LIMIT ? await blobToDataUrl(input.photo) : null
+      return { state: write(addAppliance(read(), input, applianceId, now(), photo)), applianceId }
     },
     setDecision: (applianceId, recommendationId, decision) =>
       mutate((s) => setDecision(s, applianceId, recommendationId, decision)),

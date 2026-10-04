@@ -2,7 +2,7 @@
 
 PPM for your home: scan what you own, understand how to maintain it, and keep it working for longer.
 
-Status: Phase 0 + 1 built (manual dishwasher → proposed plan → Include / Customise / Skip → approval → Google Calendar). No AI recognition yet. Plan: `docs/HANDOFF.md`. How work is run: `AGENTS.md`. Module layout: `docs/architecture.md`.
+Status: Phase 0 + 1 built (manual dishwasher → proposed plan → Include / Customise / Skip → approval → Google Calendar). Phase 2 groundwork (label photo and confirm screen) sits behind `NEXT_PUBLIC_KEEPLY_SCAN=1`. No AI recognition yet. Plan: `docs/HANDOFF.md`. How work is run: `AGENTS.md`. Module layout: `docs/architecture.md`.
 
 ## Run it
 

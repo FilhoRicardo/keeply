@@ -46,11 +46,13 @@ export async function addApplianceWithRecommendations(
   input: { manufacturer: string; model: string; serialNumber: string },
   source: Omit<SourceDocument, 'id'>,
   recommendations: readonly NewRecommendation[],
+  confidence: number | null = null,
 ): Promise<string> {
   const result = await db.rpc('add_appliance_with_recommendations', {
     p_manufacturer: input.manufacturer.trim(),
     p_model: input.model,
     p_serial_number: input.serialNumber,
+    p_identification_confidence: confidence,
     p_source: {
       source_type: source.sourceType,
       title: source.title,
@@ -122,6 +124,27 @@ export async function updateTaskSchedule(db: SupabaseClient, task: Task) {
       .eq('id', task.id)
       .eq('status', 'approved'),
   )
+}
+
+export const PHOTO_BUCKET = 'appliance-photos'
+
+// Uploads the label photo to the owner's folder (RLS on storage.objects) and links it.
+export async function attachPhoto(db: SupabaseClient, userId: string, applianceId: string, photo: Blob): Promise<string> {
+  const path = `${userId}/${applianceId}.jpg`
+  const upload = await db.storage.from(PHOTO_BUCKET).upload(path, photo, { contentType: photo.type || 'image/jpeg', upsert: true })
+  if (upload.error) throw new Error(`Supabase storage: ${upload.error.message}`)
+  check(await db.from('appliances').update({ image_url: path }).eq('id', applianceId))
+  return path
+}
+
+// Short-lived URLs for private photos, keyed by storage path.
+export async function signPhotoUrls(db: SupabaseClient, paths: string[]): Promise<Map<string, string>> {
+  if (paths.length === 0) return new Map()
+  const { data, error } = await db.storage.from(PHOTO_BUCKET).createSignedUrls(paths, 3600)
+  if (error || !data) return new Map()
+  const urls = new Map<string, string>()
+  for (const d of data) if (d.path && d.signedUrl) urls.set(d.path, d.signedUrl)
+  return urls
 }
 
 // Cascades to sources, recommendations, decisions, tasks and completions.

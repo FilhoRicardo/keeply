@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ApplianceCount, ApplianceList } from './appliance-list'
+import { scanEnabled } from './lib/features'
 
 export default function Home() {
   return (
@@ -26,7 +27,16 @@ export default function Home() {
 
           <ApplianceList />
 
-          <Link className="aster-btn aster-btn--primary add-appliance" href="/appliances/new">
+          {scanEnabled() && (
+            <Link className="aster-btn aster-btn--primary add-appliance" href="/appliances/scan">
+              <span aria-hidden="true">◎</span>
+              Scan appliance
+            </Link>
+          )}
+          <Link
+            className={`aster-btn ${scanEnabled() ? 'aster-btn--ghost' : 'aster-btn--primary'} add-appliance`}
+            href="/appliances/new"
+          >
             <span aria-hidden="true">＋</span>
             Add manually
           </Link>

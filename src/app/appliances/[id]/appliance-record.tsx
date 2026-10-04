@@ -134,6 +134,11 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
       <section className="plan-intro aster-inner" aria-label="Appliance">
         <p className="aster-eyebrow">Dishwasher</p>
         <h2>{applianceName(record.appliance)}</h2>
+        {record.appliance.imageUrl && (
+          // data: or short-lived signed URL of a private photo; next/image cannot optimise it.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="label-photo" src={record.appliance.imageUrl} alt={`Label photo of the ${applianceName(record.appliance)}`} />
+        )}
         <dl className="identity">
           <div>
             <dt>Manufacturer</dt>

@@ -765,3 +765,21 @@ a {
   color: #6b4404;
   background: rgba(234, 179, 8, 0.16);
 }
+
+.label-photo {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  margin-top: 10px;
+  border-radius: 11px;
+  object-fit: cover;
+}
+
+.file-button {
+  cursor: pointer;
+}
+
+.file-button:focus-within {
+  outline: 3px solid rgba(19, 115, 63, 0.35);
+  outline-offset: 3px;
+}

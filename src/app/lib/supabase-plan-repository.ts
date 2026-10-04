@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   addApplianceWithRecommendations,
+  attachPhoto,
+  signPhotoUrls,
   deleteAppliance,
   updateTaskSchedule,
   insertApprovedTasks,
@@ -53,7 +55,14 @@ export function createSupabasePlanRepository({
 
   async function load(): Promise<PlanState> {
     await ready()
-    return { version: 1, records: (await loadApplianceTrees(db)).map(toApplianceRecord) }
+    const trees = await loadApplianceTrees(db)
+    const urls = await signPhotoUrls(db, trees.map((t) => t.image_url).filter((p): p is string => Boolean(p)))
+    const records = trees.map((tree) => {
+      const record = toApplianceRecord(tree)
+      const imageUrl = tree.image_url ? (urls.get(tree.image_url) ?? null) : null
+      return imageUrl ? { ...record, appliance: { ...record.appliance, imageUrl } } : record
+    })
+    return { version: 1, records }
   }
 
   async function record(applianceId: string): Promise<ApplianceRecord> {
@@ -79,7 +88,14 @@ export function createSupabasePlanRepository({
         input,
         GENERAL_DISHWASHER_GUIDANCE,
         mockRecommendations({ id: 'new' }),
+        input.confidence ?? null,
       )
+      if (input.photo) {
+        const { data } = await db.auth.getSession()
+        const userId = data.session?.user.id
+        // A failed photo upload does not lose the appliance; it simply has no photo.
+        if (userId) await attachPhoto(db, userId, applianceId, input.photo).catch(() => {})
+      }
       return { state: await load(), applianceId }
     },
     async setDecision(applianceId, recommendationId, decision) {
