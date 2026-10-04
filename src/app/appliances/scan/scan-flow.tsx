@@ -24,7 +24,6 @@ type Step =
       identification: ApplianceIdentification
       recognised: boolean
       editing: boolean
-      notice: RecognitionResult['notice']
     }
 
 // Defaults to the server's recogniser (/api/identify): the configured AI provider, or Manual.
@@ -48,16 +47,16 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
     // Only a photo re-encoded in the browser (EXIF/GPS dropped) may go to an AI service; if the
     // browser could not decode it, the owner types the details instead.
     const reencoded = prepared !== file
-    const { identification: proposal, notice } = reencoded
+    // An "other" or unreadable answer is too uncertain to claim anything; both get the same neutral message.
+    const { identification: proposal } = reencoded
       ? await recognizer.recognise(prepared).catch((): RecognitionResult => ({ identification: null, notice: null }))
-      : { identification: null, notice: null }
+      : { identification: null }
     setStep({
       kind: 'confirm',
       photo: prepared,
       preview,
       identification: proposal ?? emptyIdentification(),
       recognised: proposal !== null,
-      notice,
       editing: proposal === null,
     })
   }
@@ -92,7 +91,7 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
     )
   }
 
-  const { identification, recognised, editing, notice } = step
+  const { identification, recognised, editing } = step
   // Typing answers any earlier "enter the manufacturer" error, so it no longer applies.
   const set = (change: Partial<Pick<ApplianceIdentification, 'manufacturer' | 'model' | 'serialNumber'>>) => {
     setError(null)
@@ -147,9 +146,8 @@ export function ScanFlow({ recognizer = httpRecognizer }: { recognizer?: Applian
         <>
           {!recognised && (
             <p className="form-intro">
-              {notice === 'not_a_dishwasher'
-                ? 'This label does not look like a dishwasher’s. Rescan the dishwasher label, or type what it says.'
-                : 'Keeply could not read the label. Type what it says; the photo is kept with your dishwasher.'}
+              Keeply could not read a dishwasher label in this photo. Try a clearer photo of the label, or enter the
+              details below.
             </p>
           )}
           <label className="field">
