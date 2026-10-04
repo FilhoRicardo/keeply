@@ -2,6 +2,7 @@ import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { PlanProvider } from './lib/plan-context'
 import { createDevicePlanRepository, memoryStorage, type PlanRepository } from './lib/plan-repository'
+import { noopSink, type EventSink } from './lib/track'
 
 // A device repository on in-memory storage with readable ids: app-1, task-1, task-2, …
 export function testRepository(): PlanRepository {
@@ -20,6 +21,13 @@ export function testRepository(): PlanRepository {
   }
 }
 
-export function renderWithPlan(ui: ReactNode, repository: PlanRepository = testRepository()) {
-  return { repository, ...render(<PlanProvider repository={repository}>{ui}</PlanProvider>) }
+export function renderWithPlan(ui: ReactNode, repository: PlanRepository = testRepository(), sink: EventSink = noopSink) {
+  return {
+    repository,
+    ...render(
+      <PlanProvider repository={repository} sink={sink}>
+        {ui}
+      </PlanProvider>,
+    ),
+  }
 }

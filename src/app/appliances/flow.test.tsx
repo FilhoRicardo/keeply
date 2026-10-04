@@ -152,6 +152,9 @@ describe('manual dishwasher → approved plan', () => {
     expect(await screen.findByRole('heading', { name: 'Clean the filter' })).toBeInTheDocument()
     expect(screen.getByText('5 Oct 2026')).toBeInTheDocument()
     expect(screen.getByText('Not added yet')).toBeInTheDocument()
+    const sources = screen.getByRole('list', { name: 'Sources' })
+    expect(within(sources).getByText('Keeply general dishwasher maintenance guidance')).toBeInTheDocument()
+    expect(within(sources).getByText(/could not find model-specific guidance/)).toBeInTheDocument()
 
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Mark done today' })))
     expect((await record()).completions).toHaveLength(1)
@@ -197,5 +200,42 @@ describe('manual dishwasher → approved plan', () => {
       '/appliances/app-1/plan',
     )
     expect(screen.queryByText('No appliances yet.')).not.toBeInTheDocument()
+  })
+})
+
+describe('validation funnel', () => {
+  it('tracks the Phase 1 funnel with ids and counts only', async () => {
+    const calls: Calls = []
+    mockFetch({ configured: true, connected: true }, calls)
+    const events: { name: string }[] = []
+    const sink = (e: { name: string }) => void events.push(e)
+
+    renderWithPlan(<NewApplianceForm />, repo, sink)
+    fireEvent.change(screen.getByLabelText('Manufacturer'), { target: { value: 'Bosch' } })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue to maintenance plan' })))
+    cleanup()
+
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo, sink)
+    await decide('Clean the filter', 'Include')
+    await decide('Run a cleaning cycle', 'Skip')
+    await decide('Check the spray arms', 'Skip')
+    cleanup()
+
+    renderWithPlan(<ApprovalSummary applianceId="app-1" />, repo, sink)
+    await screen.findByText('Google Calendar connected.')
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Approve maintenance plan' })))
+    await waitFor(() => expect(push).toHaveBeenCalled())
+
+    expect(events.map((e) => e.name)).toEqual([
+      'appliance_added',
+      'recommendations_generated',
+      'recommendation_decided',
+      'recommendation_decided',
+      'recommendation_decided',
+      'plan_approved',
+      'calendar_tasks_created',
+    ])
+    expect(JSON.stringify(events)).not.toMatch(/Bosch/)
+    expect(events.find((e) => e.name === 'plan_approved')).toMatchObject({ approved: 1, skipped: 2 })
   })
 })

@@ -176,6 +176,22 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
         })}
       </ul>
 
+      <h2 className="section-title">Sources</h2>
+      <ul className="summary-list" aria-label="Sources">
+        {Array.from(new Map(record.recommendations.map((r) => [r.source.id, r])).values()).map((rec) => (
+          <li key={rec.source.id} className="summary-item aster-inner">
+            <h3>{rec.source.title}</h3>
+            {rec.source.modelScope && <p className="history">Applies to: {rec.source.modelScope}</p>}
+            <EvidenceBadge level={rec.evidenceLevel} explain />
+            {rec.source.reference && (
+              <a href={rec.source.reference} target="_blank" rel="noreferrer">
+                Open source
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+
       {pending.length > 0 && (
         <section className="calendar-panel aster-inner" aria-label="Google Calendar">
           <p>
