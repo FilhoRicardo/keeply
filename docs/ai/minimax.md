@@ -20,14 +20,24 @@ The cloud session could not open MiniMax's docs (network policy), so everything 
 | Thinking on by default; `thinking: {type: "disabled"}`; `reasoning_split` moves reasoning out of `content` (else `<think>` tags) | [Chat Completions API](https://platform.minimax.io/docs/api-reference/text-chat-openai) | general API |
 | Token Plan keys start `sk-cp-`; OpenAI-compatible base URL `https://api.minimax.io/v1`, model ID `MiniMax-M3` | [Token Plan quick start](https://platform.minimax.io/docs/token-plan/quickstart), [Other tools](https://platform.minimax.io/docs/token-plan/other-tools) | **Token Plan** |
 | Token Plan: one shared quota across capabilities; image understanding ("API-vlm") deducts from it; 5-hour rolling + weekly windows; RPM/TPM throttling | [Token Plan FAQ](https://platform.minimax.io/docs/token-plan/faq), [Token Plan overview](https://platform.minimax.io/docs/token-plan/intro) | **Token Plan** |
+| Token Plan "provides coverage for the full MiniMax lineup including M3, M2.7, image, and speech models" (a few special models excluded) | [Token Plan overview](https://platform.minimax.io/docs/token-plan/intro), [Token Plan FAQ](https://platform.minimax.io/docs/token-plan/faq) | **Token Plan** |
+| M3 also accepts images through the Anthropic-compatible endpoint (`/anthropic`) | [Anthropic SDK](https://platform.minimax.io/docs/api-reference/text-anthropic-api) | general API |
 | No documented JSON/structured-output mode found | — | adapter asks for JSON in the prompt and validates it |
 
 ## Open questions before enabling real calls
 
-1. **Entitlement:** does a Token Plan key accept `image_url` input to MiniMax-M3 on `/v1/chat/completions`, or is image understanding on Token Plan only via the separate VLM API / `understand_image` MCP tool? (General M3 capability ≠ this plan's entitlement.)
+1. **Entitlement:** the Token Plan covers MiniMax-M3, and M3 accepts images, but no excerpt states explicitly that a Token Plan (`sk-cp-`) key may send `image_url` input to M3 on `/v1/chat/completions` (image understanding is also described via the separate VLM API / `understand_image` tool). General M3 capability ≠ this plan's entitlement; one real call settles it.
 2. **Terms:** may a Token Plan key serve requests from a deployed app's users, or is it limited to the subscriber's own tools? Check the Token Plan terms before using it in production.
 3. **Limits:** whether the 5-hour/weekly windows suit a beta (each label read is one image request).
 4. **Region:** international (`api.minimax.io`) vs mainland (`api.minimaxi.com`) host for this account; set `MINIMAX_BASE_URL` if needed.
+
+## Entering the key safely
+
+Variable names read by the server: `MINIMAX_API_KEY` (required), `MINIMAX_MODEL` (default `MiniMax-M3`), `MINIMAX_BASE_URL` (default `https://api.minimax.io/v1`), plus `NEXT_PUBLIC_KEEPLY_SCAN=1` to show the scan screen. Never paste the key into chat, an issue or a commit.
+
+- **Local (recommended first):** in the root of your local clone of this repo (the folder with `package.json`, on branch `claude/dazzling-mayer-ytyahw`), create `.env.local`. It is gitignored (`.env.*` in `.gitignore`). Next.js loads it on the server only; variables without `NEXT_PUBLIC_` never reach the browser.
+- **Claude cloud session:** the cloud environment menu in the session's title bar → Edit → add `MINIMAX_API_KEY` under API credentials (or as an environment variable), and under Network access choose Custom and add `api.minimax.io` (and `platform.minimax.io` for the docs), keeping the default package managers. Network steps: https://code.claude.com/docs/en/cloud-environments#network-access. **A new session is needed** to pick up either change; until then `api.minimax.io` stays blocked here.
+- **Vercel:** do not add it there yet; enabling real AI for beta users is a separate decision.
 
 ## Minimal steps to verify for real
 
