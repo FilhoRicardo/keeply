@@ -179,6 +179,14 @@ Steps:
 2. If the task is already in Google Calendar, the event is updated in place (same event id, new date/recurrence); otherwise the owner is told to connect.
 3. Tests: domain, component flow (event rewritten with `RRULE:FREQ=WEEKLY;INTERVAL=6`), integration under RLS (skipped task refused). 143 unit/component, 5 integration, 2 e2e pass.
 
+### 17. Service worker caches static assets (Builder 2; reviewer Builder 4)
+
+`public/sw.js`, e2e "works offline after the first visit".
+
+Steps:
+1. Cache-first for `/_next/static/*` (content-hashed, immutable); old caches removed on activate. Pages stay network-first with the offline page as fallback; plan data is never cached by the worker.
+2. e2e: after one visit the worker controls the page, static files are cached, and an offline navigation shows the offline page. 3/3 e2e pass.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

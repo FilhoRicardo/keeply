@@ -81,3 +81,19 @@ test('Google connect without configuration returns safely', async ({ request }) 
   expect(response.headers().location).toMatch(/^http:\/\/localhost:3123\/\?calendar=unconfigured$/)
   expect((await request.post('/api/calendar/events', { data: { drafts: [] } })).status()).toBe(401)
 })
+
+test('works offline after the first visit', async ({ page, context }) => {
+  await page.goto('/')
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready
+  })
+  await page.reload()
+  await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true)
+  const cached = await page.evaluate(async () => (await caches.open('keeply-static-v1').then((c) => c.keys())).length)
+  expect(cached).toBeGreaterThan(0)
+
+  await context.setOffline(true)
+  await page.goto('/appliances/new').catch(() => {})
+  await expect(page.locator('body')).toContainText(/offline/i)
+  await context.setOffline(false)
+})

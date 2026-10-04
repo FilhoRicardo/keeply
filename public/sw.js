@@ -1,4 +1,5 @@
 const OFFLINE_CACHE = 'keeply-offline-v1'
+const STATIC_CACHE = 'keeply-static-v1'
 const OFFLINE_PAGE = '/offline.html'
 
 self.addEventListener('install', (event) => {
@@ -7,11 +8,36 @@ self.addEventListener('install', (event) => {
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim())
+  const keep = [OFFLINE_CACHE, STATIC_CACHE]
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => !keep.includes(k)).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
+  )
 })
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.mode !== 'navigate') return
+  const { request } = event
+  if (request.method !== 'GET') return
+  const url = new URL(request.url)
 
-  event.respondWith(fetch(event.request).catch(() => caches.match(OFFLINE_PAGE)))
+  // Pages: network first, offline page when there is no connection. Plans are never cached here.
+  if (request.mode === 'navigate') {
+    event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_PAGE)))
+    return
+  }
+
+  // Next's build output is content-hashed and immutable: cache first.
+  if (url.origin === self.location.origin && url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(
+      caches.open(STATIC_CACHE).then(async (cache) => {
+        const hit = await cache.match(request)
+        if (hit) return hit
+        const response = await fetch(request)
+        if (response.ok) cache.put(request, response.clone())
+        return response
+      }),
+    )
+  }
 })
