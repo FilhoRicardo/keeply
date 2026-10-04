@@ -385,6 +385,13 @@ Ricardo, 2026-10-04 evening: finish line is the full magic minute; Brave Search 
 4. Seam for Phase 3: `PlanProposer` (`src/app/lib/propose.ts`), general guidance today.
 5. Checks: `pnpm verify` 194 tests; pgTAP 22; integration 7 (PostgREST + RLS + calendar route); e2e 3 on a phone viewport with axe. Code review (medium): 3 findings (migration history, orphaned photo bucket, approval date in UTC), all fixed.
 
+### 38. Live database gate passed (Ricardo, with Codex in his browser)
+
+1. Supabase updated to the MVP schema (reset + migration via SQL Editor). Vercel Production + Preview hold `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`; preview of b25c5c2 redeployed.
+2. First live test failed with "Anonymous sign-ins are disabled"; Ricardo enabled anonymous sign-ins.
+3. Retest on the preview: manual Bosch add reaches the three-task plan; `appliances` has the Bosch row, `maintenance_tasks` exactly 3 linked rows (general guidance, proposed); survives reload. Sign in with Google button visible (provider not configured yet).
+4. Next: Google Cloud project "Keeply" for Calendar (`calendar.events`, Testing, test users), then `GOOGLE_*` in Vercel Preview and a live Calendar write. PR #4 stays unmerged and scanning off until then.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
