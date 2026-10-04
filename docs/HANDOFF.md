@@ -748,3 +748,93 @@ When continuing this project:
 7.  Keep the prototype deployable on Vercel + Supabase free tiers.
 8.  Treat manufacturer/source provenance as first-class data, not an
     afterthought.
+
+------------------------------------------------------------------------
+
+## 22. ChatGPT account integration and the AI provider layer
+
+Added 2026-10-04 by Ricardo. Read this before any AI work.
+
+### Intent
+
+We want to investigate and, where currently supported, implement
+OpenAI's new **Sign in with ChatGPT** capability.
+
+The intended experience is that an eligible ChatGPT user can authorize
+this app using their ChatGPT account and, where OpenAI permits it, allow
+the app to use AI compute/usage associated with the user's ChatGPT
+subscription, rather than requiring the user to provide an OpenAI API
+key or requiring us to fund every inference request.
+
+This is **not** the same as:
+
+-   standard OpenAI API-key authentication;
+-   asking users to paste an API key;
+-   ordinary social login only;
+-   assuming a ChatGPT Plus/Pro subscription automatically includes
+    arbitrary API credits.
+
+### Verify before building
+
+Before implementing this feature, check the current official OpenAI
+developer documentation for Sign in with ChatGPT and confirm:
+
+1.  whether third-party apps can currently access user-authorized
+    ChatGPT-plan usage;
+2.  eligibility requirements for our application and users;
+3.  whether an OpenAI-issued client ID or application approval is
+    required;
+4.  the OAuth/authorization flow;
+5.  available scopes and privacy restrictions;
+6.  usage limits and user controls;
+7.  which models/endpoints can be used through this mechanism;
+8.  whether it is suitable for our commercial/open-source architecture.
+
+Do not invent an implementation based on conventional OAuth
+assumptions. Use the current OpenAI documentation as the source of
+truth. This feature is new: an agent's pretrained knowledge may not
+contain it, so do not conclude "ChatGPT subscriptions cannot be used
+through third-party apps" from older knowledge either.
+
+**Instruction to any coding agent:** before writing any code for the
+ChatGPT integration, research the current official OpenAI documentation
+and return an implementation plan with links to the relevant OpenAI
+documentation. Do not code this portion until the capability and
+requirements have been verified.
+
+### Architecture
+
+The application must not depend on this capability. The AI provider
+layer supports four modes:
+
+-   **A. ChatGPT-authorized AI** --- preferred where available and
+    eligible.
+-   **B. BYO OpenAI API key** --- primarily for self-hosted/open-source
+    users (server configuration, never a key-paste UI for consumers).
+-   **C. App-funded OpenAI API** --- future hosted/premium tier.
+-   **D. Manual mode** --- no AI required (the v0.1 default).
+
+```
+Keeply account (Supabase)
+        ↓
+AI provider
+  → ChatGPT authorization
+  → BYO API
+  → Keeply-hosted API
+  → Manual / no AI
+```
+
+Keep the AI provider abstraction separate from Supabase authentication.
+A user being authenticated to our application does not necessarily mean
+they have authorized ChatGPT AI usage. (Sign in with Google, added
+2026-10-04, is account identity only; it grants no AI usage.)
+
+Never expose OpenAI credentials in client-side code. Store
+tokens/credentials securely and follow OpenAI's current security
+requirements. If OpenAI changes the feature, only provider A changes;
+Keeply is not redesigned.
+
+Code seam today: `serverRecognizer()` in `src/app/lib/identify.ts`
+(behind `/api/identify`) is where a provider's recogniser plugs in. Any
+AI output is still only a proposal the owner confirms, and evidence
+levels are still enforced by `unsupportedEvidence` and the database.

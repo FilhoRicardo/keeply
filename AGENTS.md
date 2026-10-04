@@ -28,6 +28,8 @@ Route here for work on Keeply (`active/Keeply/`). Outcome: a mobile-first PWA wh
 4. Model completion-based scheduling in the data model from day one.
 5. AI is never the authoritative source for maintenance intervals; provenance is first-class data.
 6. Dishwashers only. Mobile-first. Keep infrastructure near €0 (Vercel + Supabase free tiers).
+7. AI access goes through a provider layer (ChatGPT-authorized / BYO API key / Keeply-hosted / manual) that is separate from Keeply account authentication; Manual must always work. See `docs/HANDOFF.md` §22.
+8. **ChatGPT integration: research first.** Before writing any code for Sign in with ChatGPT, research the current official OpenAI documentation and return an implementation plan with links to it. Do not code that portion until the capability and requirements are verified. Never treat it as ordinary OAuth, a key-paste flow, or social login, and never expose OpenAI credentials client-side.
 
 ## Workflow
 
