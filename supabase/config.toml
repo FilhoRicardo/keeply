@@ -1,0 +1,5 @@
+# Supabase CLI config. Defaults apply to everything not set here.
+project_id = "keeply"
+
+[db]
+major_version = 16
