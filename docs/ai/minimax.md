@@ -27,6 +27,7 @@ Code: `src/ai/minimax.ts` (all MiniMax request/response handling), `src/ai/ident
   - Type, manufacturer and serial were read correctly on both calls. The model number was correct on call 1 (confidence 0.95). Call 2 misread one letter as a visually similar one (V read as Y) at a *higher* confidence (0.97). Model confidence therefore does not show when a character is misread; the owner's check against the plate is what catches it.
   - Nothing was saved before Confirm (device storage stayed empty through the proposal, Edit and Rescan). After an Edit, Confirm saved with `identificationConfidence: null`.
   - Defect fixed: the proposal screen did not show the serial number, although Confirm saved it. It now shows any serial that was read, so the owner sees everything they approve.
+- 2026-10-04 17:41–17:43 UTC, cloud session, same owner-supplied plate (not stored in the repo), three more live calls through the app. Type, manufacturer and serial were correct every time. The model number was misread at the same character (V read as Y) on all three, confidence 0.92–0.95: **4 of 5 calls on this plate misread it**. Confirming directly saved the misread value with the AI confidence; Edit → Confirm saved the corrected value with confidence null. Both records survived a reload (device storage). An undecodable file never reached `/api/identify`, and an unreachable provider fell back to the manual form with the neutral message. Conclusion: look-alike characters need the owner's check against the plate; the confidence score does not flag them.
 
 ## Account
 

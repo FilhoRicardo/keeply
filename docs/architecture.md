@@ -20,7 +20,7 @@ Next.js (App Router) + TypeScript `strict`, pnpm, ESLint, Vitest. Verify with `p
 
 ## Phase 2 groundwork (behind `NEXT_PUBLIC_KEEPLY_SCAN=1`)
 
-`/appliances/scan`: photograph the label → `prepareLabelPhoto` (≤1280 px JPEG, EXIF dropped) → `ApplianceRecognizer.recognise` (`noRecognizer` in v0.1) → Confirm / Edit / Rescan → `addAppliance` with the photo. A recogniser only proposes; any owner edit drops its confidence. Photos: private bucket `appliance-photos/<user>/<appliance>.jpg` (Supabase) or an inline thumbnail ≤300 KB (device).
+`/appliances/scan`: photograph the label → `prepareLabelPhoto` (≤1280 px JPEG, EXIF dropped) → `ApplianceRecognizer.recognise` (`httpRecognizer` → `/api/identify` → `selectProvider`: MiniMax when `MINIMAX_API_KEY` is set, else Manual) → Confirm / Edit / Rescan → `addAppliance` with the photo. A recogniser only proposes; any owner edit drops its confidence. Photos: private bucket `appliance-photos/<user>/<appliance>.jpg` (Supabase) or an inline thumbnail ≤300 KB (device).
 
 ## Rules
 
