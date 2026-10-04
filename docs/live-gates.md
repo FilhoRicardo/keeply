@@ -13,6 +13,7 @@ Environment under test: Vercel Preview of branch `claude/dazzling-mayer-ytyahw` 
 | G2 Approval → Google Calendar | 2026-10-04 | `GOOGLE_*` saved for Preview only (secret values never in chat); redeploy Ready; owner completed OAuth. Bosch appliance `09e14405-9f89-4ea9-b260-d246efde2661` approved with "Clean the filter" accepted, the other two rejected. Keeply showed "Plan approved" and the task as Added. Google Calendar shows one all-day event "Clean the filter · Bosch dishwasher" on 4 Oct 2026, monthly on day 4, with instructions, the general-guidance source and the approval line. In `maintenance_tasks` the accepted task has `calendar_event_id` `kp6163…3131` (Keeply's deterministic id); both rejected tasks are NULL. |
 
 | G8 AI label reading on the hosted preview (owner only) | 2026-10-04 | Preview of `e529dd4` rebuilt with branch-scoped Preview variables (`MINIMAX_API_KEY` Secret, `MINIMAX_MODEL=MiniMax-M3`, `NEXT_PUBLIC_KEEPLY_SCAN=1`); Deployment Protection: Standard, Require Log In, no exceptions. Exactly two uploads in the owner's browser: (1) the real BUSH plate → confirm screen Dishwasher / BUSH / WV9-6S / 150804092 with the look-alike reminder and Confirm / Edit / Rescan; nothing saved until the owner pressed Confirm; saved appliance `e8dd832b-5ff0-47d8-a6d5-eeeb4ed57927` and opened its plan with 3 undecided general-guidance tasks. (2) A real photo of a whole dishwasher with no readable label → the neutral "could not read a dishwasher label" message and a blank manual form; no identity invented; not saved. Production and invited-user scanning stay off. |
+| G4 Usage counts | 2026-10-04 | Supabase (owner's browser): 11 `funnel_events`: manual flow `appliance_added` (`scanned:false`), `plan_proposed` (3, verified 0), `calendar_connected`, `plan_approved` (accepted 1, rejected 2), `calendar_tasks_created` (1); hosted scans `scan_started`, `label_read` (`recognised:true`), `appliance_added` (`scanned:true`), `plan_proposed` (3, 0), `scan_started`, `label_read` (`recognised:false`). Props hold counts and booleans only. Events are fire-and-forget, so two sent together can land in either order. Same check also showed the confirmed BUSH row (`e8dd832b…`, BUSH / WV9-6S / 150804092, confidence 0.95, not approved) with its 3 tasks, owned by the same user as Bosch. |
 
 ## Open (not yet verified live)
 
@@ -26,11 +27,6 @@ RLS is tested in CI (pgTAP and PostgREST integration); this confirms it on the h
    `select user_id, manufacturer from public.appliances order by created_at;`
    The Bosch and "Isolation test" rows must have different `user_id`s.
 4. Back in the first browser, Home must still list only Bosch.
-
-### G4 Usage counts (owner, 1 minute)
-
-In the SQL Editor: `select name, props, occurred_at from public.funnel_events order by occurred_at;`
-Expected from G1–G2: `appliance_added`, `plan_proposed` (`tasks: 3, verified: 0`), `calendar_connected`, `plan_approved` (`accepted: 1, rejected: 2`), `calendar_tasks_created` (`count: 1`). No names, models or dates in `props`.
 
 ### G5 Sign in with Google (account identity; separate from Calendar)
 

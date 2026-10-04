@@ -408,6 +408,10 @@ Checked locally on a production build: with scanning off, `/appliances/scan` and
 
 Preview of `e529dd4` with `MINIMAX_API_KEY` (Secret), `MINIMAX_MODEL`, `NEXT_PUBLIC_KEEPLY_SCAN` scoped to Preview + this branch; Deployment Protection Standard with Require Log In. Two uploads: the real BUSH plate gave BUSH / WV9-6S / 150804092 on the confirm screen, saved only after Confirm (appliance `e8dd832b…`, plan with 3 tasks); a whole-dishwasher photo gave the neutral message and blank manual form. Google sign-in provider enabled in Supabase. Isolation (G3) and usage counts (G4) still need the owner's SQL Editor: Supabase is not reachable from this session.
 
+### 43. Usage-count gate passed (Ricardo, with Codex in his browser)
+
+Supabase: 11 `funnel_events` matching the manual, Calendar and hosted-scan steps, counts and booleans only; BUSH row stored as confirmed (confidence 0.95) with 3 tasks. Open: G3 isolation (second visitor), G5 Google sign-in, G6 optional failure paths, G7 production/testers.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:
