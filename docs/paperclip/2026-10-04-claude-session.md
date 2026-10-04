@@ -400,6 +400,10 @@ Google Cloud project "Keeply": Calendar API on, consent External/Testing, `calen
 
 Owner priority: prove photo → MiniMax → identity → Confirm / Edit / Rescan end to end. Official docs (search excerpts; the docs host is blocked here): MiniMax-M3 and M3.1-Flash-Preview accept `image_url` input on Chat Completions; the Token Plan shares one quota across text and image; `sk-cp-` keys. Real calls in this session: before the fix the app misread WV9-6S as WY9-6S on 2/6 calls; controlled comparison traced it to the browser's JPEG quality 0.8 (q0.8 1/4 correct vs q0.92, PNG and 2× all 4/4). Fix: quality 0.92, plus a look-alike-character reminder on the confirm screen, a 4 MB upload cap under Vercel's 4.5 MB body limit, and `maxDuration = 30` on `/api/identify`. After the fix: 6/6 exact through the app. Whole-dishwasher, blurred and non-label images returned nulls (manual form); unreachable provider and no key both fell back to Manual. Hosted scanning stays off; owner-only hosted test steps and pre-invite blockers: `docs/live-gates.md` G8. The test photo was never committed.
 
+### 41. Hosted AI readiness: gate, Token Plan use, exact Preview config (Builder 1)
+
+Checked locally on a production build: with scanning off, `/appliances/scan` and `/api/identify` return 404 and no provider call is made even with a key set (unit test added). The page reads the flag at build time and the API at runtime, so changes need a redeploy. MiniMax docs (search excerpts): the Token Plan is for individual, interactive developer use; production should use pay-as-you-go keys. Owner-only test behind Vercel login fits; invited testers need a pay-as-you-go key plus the §23 invite code and caps. Exact branch-scoped Preview variables and the two-call hosted test: `docs/live-gates.md` G8. No new MiniMax calls in this step beyond the local gate probe (which hit a local stand-in, not MiniMax).
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

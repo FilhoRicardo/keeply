@@ -50,15 +50,29 @@ Not configured yet: the button is visible but fails until these owner steps are 
 
 ### G8 AI label reading, owner-only on the hosted preview
 
-Verified in a cloud session (not hosted) on 2026-10-04: MiniMax-M3 with this Token Plan key reads the owner's real BUSH plate exactly through the full app path after the JPEG-quality fix (`docs/ai/minimax.md`). Hosted scanning is off. To test it on the preview, owner only:
+Verified in a cloud session on 2026-10-04 (not on Vercel): MiniMax-M3 with the owner's Token Plan key reads the real BUSH plate exactly through the full app path after the JPEG-quality fix (`docs/ai/minimax.md`). Hosted scanning is off.
 
-1. Vercel → Settings → **Deployment Protection**: confirm Vercel Authentication covers Preview deployments, so only the owner's Vercel login can reach the preview (and its `/api/identify`).
-2. MiniMax → Billing: confirm no purchased Credits or auto top-up, so usage stops at the Token Plan quota (5-hour and weekly windows) instead of spending money.
-3. Vercel → Environment Variables, **Preview only**: `MINIMAX_API_KEY` (Secret; the Token Plan `sk-cp-…` key, entered by the owner), `MINIMAX_MODEL=MiniMax-M3`, `NEXT_PUBLIC_KEEPLY_SCAN=1`. Redeploy (the scan flag is read at build time).
-4. Test on the phone: Home → **Scan appliance** → photograph the BUSH plate → expect BUSH / WV9-6S / 150804092 → Confirm → plan. Also a photo of the whole dishwasher → "could not read" + manual form.
-5. Turn it off again by removing `NEXT_PUBLIC_KEEPLY_SCAN` (and the key) and redeploying, unless the owner keeps it for private use.
+**Gate when scanning is off** (checked locally on a production build, 2026-10-04): `GET /appliances/scan` → 404, Home has no Scan button, `POST /api/identify` → 404 `not_enabled` even with `MINIMAX_API_KEY` set, and no provider call is made (also a unit test). The page reads the flag at build time and the API at runtime, so always **redeploy** after changing the flag: on Vercel both then see the same value.
 
-Before invited users: the owner reviews MiniMax's terms for serving other people with a Token Plan key (the official docs found describe quota and coverage, not end-user use), and the §23 invite code plus 5-per-tester / 100-per-day caps are built; none of that exists yet.
+**Token Plan for this use** (MiniMax's own docs, read through search excerpts because the docs host is blocked from the session): the Token Plan "is designed for individual, interactive developer use" and MiniMax recommends pay-as-you-go for production, switching by replacing the Subscription Key with a standard Open Platform API key ([Token Plan FAQ](https://platform.minimax.io/docs/token-plan/faq), [Token Plan overview](https://platform.minimax.io/docs/token-plan/intro)). Keys must not be shared or exposed client-side. So: an owner-only test behind Vercel's login fits the Token Plan; invited testers are production use and should run on a pay-as-you-go key (no code change: same endpoint, only the key differs), with the §23 invite code and caps in place.
+
+**Configuration, owner only:**
+
+1. Vercel → Settings → Deployment Protection: Vercel Authentication on for Preview. Check: open `https://keeply-git-claude-dazzling-mayer-ytyahw-filhoricardos-projects.vercel.app/api/identify` in a private window that is not signed in to Vercel. Expected: Vercel's login page. If it shows JSON instead, the preview is public: stop here.
+2. MiniMax → Billing: no purchased Credits and no auto top-up, so use stops at the Token Plan quota.
+3. Vercel → Settings → Environment Variables. For each: environment **Preview** only, Git branch **`claude/dazzling-mayer-ytyahw`** only:
+   - `MINIMAX_API_KEY` = the Token Plan key (`sk-cp-…`), marked **Sensitive**, typed or pasted by the owner;
+   - `MINIMAX_MODEL` = `MiniMax-M3`;
+   - `NEXT_PUBLIC_KEEPLY_SCAN` = `1`.
+   Do not set `MINIMAX_BASE_URL` (the default `https://api.minimax.io/v1` is right). Then redeploy the latest deployment of that branch.
+
+**Hosted test (exactly two MiniMax calls):**
+
+1. Phone, signed in to Vercel: Home shows **Scan appliance**. Photograph (or choose) the BUSH plate. Expected: Dishwasher / BUSH / WV9-6S / 150804092 with the look-alike reminder; compare with the plate; **Confirm**; the plan opens with 3 tasks.
+2. Scan again with a photo of the whole dishwasher (no plate). Expected: "Keeply could not read a dishwasher label in this photo…" and the manual form, nothing proposed. Go back without saving.
+3. Supabase: `select manufacturer, model, serial_number, identification_confidence from public.appliances order by created_at desc limit 1;` → BUSH / WV9-6S / 150804092 with a confidence; `select name, props from public.funnel_events order by occurred_at desc limit 6;` → `scan_started`, `label_read` (`recognised: true`, then `false`), `appliance_added` (`scanned: true`), `plan_proposed`.
+4. Production has no flag: its `/appliances/scan` stays 404.
+5. Afterwards, unless kept for private use: delete the three variables and redeploy.
 
 ### G7 Production and testers (owner decisions)
 

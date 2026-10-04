@@ -15,16 +15,21 @@ afterEach(() => {
 })
 
 describe('POST /api/identify', () => {
-  it('is off unless scanning is enabled', async () => {
+  it('is off unless scanning is enabled, even with a provider key, and calls nothing', async () => {
     vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '')
+    vi.stubEnv('MINIMAX_API_KEY', 'server-key')
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
     expect((await post(new Blob(['x'], { type: 'image/jpeg' }))).status).toBe(404)
+    expect(fetchSpy).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 
   it('validates the photo', async () => {
     vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
     expect((await post()).status).toBe(400)
     expect((await post(new Blob(['x'], { type: 'application/pdf' }))).status).toBe(400)
-    expect((await post(new Blob([new Uint8Array(5_000_001)], { type: 'image/jpeg' }))).status).toBe(400)
+    expect((await post(new Blob([new Uint8Array(4_000_001)], { type: 'image/jpeg' }))).status).toBe(400)
   })
 
   it('proposes nothing in Manual mode', async () => {
