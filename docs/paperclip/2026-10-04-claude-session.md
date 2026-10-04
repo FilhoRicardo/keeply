@@ -230,6 +230,17 @@ Owner action when enabling: none beyond `supabase db push` (the migration create
 
 Found in self-review of slice 21: database rows cascade on delete, but Supabase Storage does not, so a deleted dishwasher's private photo would stay in the bucket. `deleteAppliance` now removes the photo after the row and reports if it could not. 4 tests with a fake client (163 total pass; integration 5/5).
 
+### 23. Evidence levels must be backed by their source (Builder 1; reviewer Builder 3)
+
+Phase 3 checklist item "Prevent unsupported claims from being labelled verified", done without AI. `unsupportedEvidence` in `src/domain/evidence.ts`; `supabase/migrations/20261004200000_evidence_guard.sql`; `supabase/tests/database/evidence_guard.test.sql`.
+
+Rule (same in TypeScript and a database trigger, so any future pipeline, including AI, is bound by it):
+- Manufacturer verified: source must be a manufacturer manual or website whose model scope equals the appliance's model (case and punctuation ignored).
+- Similar-model guidance: manufacturer or similar-model source.
+- General guidance: any source (provenance is already required).
+
+Tests: 4 domain (incl. all mock recommendations stay valid), 5 pgTAP (exact model accepted; other model, general source, similar-model from general all rejected). 167 unit/component, 35 pgTAP, 5 integration pass.
+
 ## Review requests for Builders 3–4 (Codex)
 
 Please review the branch commit by commit and comment on Paperclip or the PR. Focus:

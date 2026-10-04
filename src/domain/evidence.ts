@@ -40,3 +40,29 @@ export function evidenceRank(level: EvidenceLevel): 1 | 2 | 3 {
 export function isManufacturerVerified(level: EvidenceLevel): boolean {
   return level === 'manufacturer_verified'
 }
+
+type SourceForEvidence = { sourceType: string; modelScope: string | null }
+
+const normaliseModel = (model: string) => model.toUpperCase().replace(/[^A-Z0-9]/g, '')
+
+// Why a claimed evidence level is not backed by its source, or null when it is.
+// Manufacturer verified needs a manufacturer source scoped to this exact model; similar-model
+// guidance needs a manufacturer or similar-model source. General guidance needs only a source.
+export function unsupportedEvidence(
+  level: EvidenceLevel,
+  source: SourceForEvidence,
+  applianceModel: string | null,
+): string | null {
+  const manufacturerSource = source.sourceType === 'manufacturer_manual' || source.sourceType === 'manufacturer_website'
+  if (level === 'manufacturer_verified') {
+    if (!manufacturerSource) return 'Manufacturer verified needs a manufacturer manual or website as its source.'
+    if (!applianceModel || !source.modelScope) return 'Manufacturer verified needs a known model on both the appliance and the source.'
+    if (normaliseModel(source.modelScope) !== normaliseModel(applianceModel)) {
+      return 'Manufacturer verified needs a source for this exact model.'
+    }
+  }
+  if (level === 'similar_model' && !manufacturerSource && source.sourceType !== 'similar_model_manual') {
+    return 'Similar-model guidance needs a manufacturer or similar-model source.'
+  }
+  return null
+}
