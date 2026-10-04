@@ -30,3 +30,15 @@ describe('POST /api/identify', () => {
     expect(await response.json()).toEqual({ identification: null })
   })
 })
+
+describe('wellFormed', () => {
+  it('drops proposals a recogniser could plausibly return malformed', async () => {
+    const { wellFormed } = await import('./route')
+    const good = { category: 'dishwasher', manufacturer: 'Bosch', model: '', serialNumber: '', confidence: 0.7, source: 'photo_recognition' }
+    expect(wellFormed(good)).toBe(true)
+    expect(wellFormed({ ...good, manufacturer: undefined })).toBe(false)
+    expect(wellFormed({ ...good, confidence: '0.7' })).toBe(false)
+    expect(wellFormed({ ...good, source: 'manual' })).toBe(false)
+    expect(wellFormed(null)).toBe(false)
+  })
+})

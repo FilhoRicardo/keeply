@@ -281,7 +281,8 @@ Steps:
 Steps:
 1. The scan screen posts the prepared photo to `/api/identify` (only when `NEXT_PUBLIC_KEEPLY_SCAN=1`, else 404). JPEG/PNG/WebP under 5 MB only. The photo is not stored by this route.
 2. `serverRecognizer()` returns `noRecognizer` in v0.1. The AI step later implements it on the server, so API keys never reach the browser; malformed proposals are dropped and any proposal is still only confirmed by the owner.
-3. Tests: route (off by default, photo validation, returns null). Real-browser check with the flag on: no errors. 199 unit/component pass.
+3. Tests: route (off by default, photo validation, returns null). Real-browser check with the flag on: no errors.
+4. Review pass found: a malformed proposal (e.g. AI JSON missing `manufacturer`) would crash the route with a 500 instead of being dropped. Added a `wellFormed` shape check before validation, with a test. 200 unit/component pass.
 
 ## Review requests for Builders 3–4 (Codex)
 
