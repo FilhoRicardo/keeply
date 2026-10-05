@@ -132,7 +132,7 @@ describe('searchManuals', () => {
     }
   })
 
-  it('builds the three search queries in order', async () => {
+  it('builds the three search queries in order, one asking for the PDF itself', async () => {
     process.env[ENV_KEY] = 'k'
     const urls: string[] = []
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -144,7 +144,7 @@ describe('searchManuals', () => {
       { manufacturer: 'Bosch', model: 'SMS6' },
       { fetchImpl: fakeFetch(fetchMock), now: () => fakeNow, sleep: fakeSleep },
     )
-    expect(urls).toEqual(['Bosch SMS6 user manual', 'Bosch SMS6 instruction manual', 'Bosch SMS6 maintenance'])
+    expect(urls).toEqual(['Bosch SMS6 user manual', 'Bosch SMS6 manual filetype:pdf', 'Bosch SMS6 maintenance'])
   })
 
   it('stops on rate-limit but keeps earlier results', async () => {

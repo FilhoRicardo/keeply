@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { rankCandidates, type RawCandidate } from './rank'
+import { buildDefaultManufacturerDomains, rankCandidates, type RawCandidate } from './rank'
 
 const manufacturerDomains = {
   bosch: ['bosch-home.com', 'bosch.com'],
@@ -42,6 +42,19 @@ describe('rankCandidates', () => {
     const out = rankCandidates(candidates, { manufacturer: 'bosch', model: 'SMS6', manufacturerDomains })
     expect(out).toHaveLength(2)
     expect(out.every((c) => c.manufacturerMatch)).toBe(true)
+  })
+
+  it("accepts Electrolux's media-library host, where its user-manual PDFs are served", () => {
+    const manufacturerDomains = buildDefaultManufacturerDomains()
+    const ranked = rankCandidates(
+      [
+        { url: 'https://api.electrolux-medialibrary.com/asset/abc/ORIGINAL/abc.pdf', title: 'User Manual KEQB7300L', snippet: '', host: 'api.electrolux-medialibrary.com' },
+        { url: 'https://example.com/electrolux-keqb7300l', title: 'Electrolux KEQB7300L', snippet: '', host: 'example.com' },
+      ],
+      { manufacturer: 'Electrolux', model: 'KEQB7300L', manufacturerDomains },
+    )
+    expect(ranked[0].host).toBe('api.electrolux-medialibrary.com')
+    expect(ranked[0].manufacturerMatch).toBe(true)
   })
 
   it('rejects manufacturer tokens that appear only in the path, not the host', () => {

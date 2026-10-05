@@ -66,7 +66,7 @@ export function buildDefaultManufacturerDomains(): ManufacturerDomainMap {
   return {
     bosch: ['bosch.com', 'bosch-home.com'],
     miele: ['miele.com'],
-    electrolux: ['electrolux.com'],
+    electrolux: ['electrolux.com', 'electrolux-medialibrary.com'],
     samsung: ['samsung.com'],
     lg: ['lg.com'],
     beko: ['beko.com'],

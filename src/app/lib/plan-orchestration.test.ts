@@ -90,6 +90,40 @@ describe('proposePlan', () => {
     expect(proposal.name).toBe('Clean the filter')
   })
 
+  // The route's resolver cannot know a document's models from its URL (it returns none), so the
+  // orchestration reads the cover pages: a manual whose first pages name the exact model covers it.
+  describe('document model coverage from the cover pages', () => {
+    const noModelsFromUrl = () => ({ documentModels: [] as string[], documentFamily: undefined })
+    const verifiedWith = (pages: { page: number; text: string }[]) =>
+      proposePlan({ manufacturer: BOSCH, model: MODEL }, makeDeps({
+        searchManuals: searchOkWith(PDF_URL),
+        fetchDocument: fetchOk(new TextEncoder().encode('x')),
+        extractPages: async () => ({ ok: true, pages }),
+        resolveSource: noModelsFromUrl,
+        extractTasks: extractedTasksOk([CANDIDATE]),
+      }))
+
+    it('is manufacturer verified when the model is named on the cover page', async () => {
+      const result = await verifiedWith([{ page: 1, text: `User Manual ${MODEL}\n${QUOTE}` }])
+      expect(result.fallback).toBe('exact')
+      expect(result.proposals[0].evidenceLevel).toBe('manufacturer_verified')
+    })
+
+    it('is not verified when the model only appears deep in the document', async () => {
+      const result = await verifiedWith([
+        { page: 1, text: `User Manual\n${QUOTE}` },
+        { page: 2, text: 'Contents' },
+        { page: 3, text: `Compatible with ${MODEL}` },
+      ])
+      expect(result.fallback).toBe('general')
+    })
+
+    it('is not verified when the model is only a prefix of a longer model number', async () => {
+      const result = await verifiedWith([{ page: 1, text: `User Manual ${MODEL}X\n${QUOTE}` }])
+      expect(result.fallback).toBe('general')
+    })
+  })
+
   it('labels only manufacturer_verified when P3-1 says so; otherwise similar_model', async () => {
     // The URL is on a non-manufacturer domain. classifyEvidence downgrades to similar_model only
     // when the document declares it covers our model and the family matches.
