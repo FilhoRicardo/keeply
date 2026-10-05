@@ -20,5 +20,7 @@ Durable decisions only. One or two sentences each. Not a task log.
 
 ## Durable Outcomes
 
+- 2026-10-05: owner authorised hosted BYO MiniMax API-key settings (KEE-47), overriding the earlier no-consumer-key-entry restriction. Keys are encrypted server-side per signed-in user; invite limits remain 5/user/day and 100/day. Appliance identification only; no silent fallback from a personal key to app-funded AI. See HANDOFF §25.
+
 - 2026-10-04: owner chose the full magic-minute flow as the finish line, with Brave Search + MiniMax manual reading and "verified only with a code-checked quote from the manufacturer's document". Invited testers get funded AI behind an invite code (5/tester/day, 100/day total). Details: `docs/HANDOFF.md` §23.
 - 2026-10-04: owner cut the build to the MVP: photo → identify → plan → Accept / Reject → Google Calendar, managed there. Supabase keeps only appliances, tasks and usage counts; Customise, completions, pause, catalog and photo storage were removed (`docs/HANDOFF.md` §24).

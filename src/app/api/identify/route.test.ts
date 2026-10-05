@@ -1,5 +1,8 @@
 import { NextRequest } from 'next/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const personalCredential = vi.hoisted(() => ({ value: null as string | null }))
+vi.mock('@/ai/credentials', () => ({ getUserAiKey: vi.fn(async () => personalCredential.value) }))
 import { POST } from './route'
 
 function post(photo?: Blob, headers: Record<string, string> = {}) {
@@ -9,6 +12,7 @@ function post(photo?: Blob, headers: Record<string, string> = {}) {
 }
 
 afterEach(() => {
+  personalCredential.value = null
   vi.unstubAllEnvs()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
@@ -64,7 +68,7 @@ describe('POST /api/identify', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(await (await post(new Blob(['x'], { type: 'image/jpeg' }))).json()).toEqual({ identification: null, notice: null })
-    expect(errors).toHaveBeenCalled()
+    expect(errors).not.toHaveBeenCalled()
   })
 })
 
@@ -72,6 +76,8 @@ describe('POST /api/identify for invited testers (default access mode)', () => {
   const MINIMAX_REPLY = '{"applianceType":"dishwasher","manufacturer":"BUSH","model":"WV9-6S","serialNumber":"150804092","confidence":0.95}'
   const photo = () => new Blob(['x'], { type: 'image/jpeg' })
   const session = { authorization: 'Bearer user-session-token' }
+  const signedInUser = { id: '11111111-1111-4111-8111-111111111111', aud: 'authenticated', role: 'authenticated', email: 'owner@example.test', is_anonymous: false }
+  const anonymousUser = { ...signedInUser, is_anonymous: true }
 
   // Supabase answers reserve_scan with `reservation`; MiniMax answers with a reading.
   function services(reservation: string | 'error') {
@@ -81,6 +87,7 @@ describe('POST /api/identify for invited testers (default access mode)', () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input instanceof Request ? input.url : input)
         calls.push(url)
+        if (url.includes('/auth/v1/user')) return Response.json(anonymousUser)
         if (url.includes('/rest/v1/rpc/reserve_scan')) {
           return reservation === 'error' ? new Response('{"message":"boom"}', { status: 500 }) : Response.json(reservation)
         }
@@ -108,6 +115,44 @@ describe('POST /api/identify for invited testers (default access mode)', () => {
     expect([counts.rpcCalls(), counts.minimaxCalls()]).toEqual([1, 1])
   })
 
+  it('uses a signed-in owner key ahead of the server key', async () => {
+    configure()
+    personalCredential.value = 'owners-private-key'
+    const seen: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes('/auth/v1/user')) return Response.json(signedInUser)
+      if (url.includes('/rest/v1/rpc/reserve_scan')) return Response.json('allowed')
+      if (url.includes('minimax')) {
+        seen.push(`${url}|${new Headers(init?.headers).get('authorization')}`)
+        return Response.json({ choices: [{ message: { content: MINIMAX_REPLY } }] })
+      }
+      throw new Error(`unexpected ${url}`)
+    }))
+    const response = await post(photo(), session)
+    expect(response.status).toBe(200)
+    expect(seen).toEqual(['https://api.minimax.io/v1/chat/completions|Bearer owners-private-key'])
+  })
+
+  it('does not retry a failing owner key with the server key or return provider details', async () => {
+    configure()
+    personalCredential.value = 'owners-private-key'
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input)
+      if (url.includes('/auth/v1/user')) return Response.json(signedInUser)
+      if (url.includes('/rest/v1/rpc/reserve_scan')) return Response.json('allowed')
+      if (url.includes('minimax')) {
+        calls.push(url)
+        return new Response('{"error":"owners-private-key is invalid"}', { status: 401 })
+      }
+      throw new Error(`unexpected ${url}`)
+    }))
+    const response = await post(photo(), session)
+    expect(calls).toHaveLength(1)
+    expect(await response.json()).toEqual({ identification: null, notice: null })
+  })
+
   it.each(['no_invite', 'tester_limit', 'daily_limit', 'signed_out'])('refuses %s without calling MiniMax', async (reason) => {
     configure()
     const counts = services(reason)
@@ -115,6 +160,33 @@ describe('POST /api/identify for invited testers (default access mode)', () => {
     expect(response.status).toBe(403)
     expect(await response.json()).toEqual({ error: 'scan_denied', reason })
     expect(counts.minimaxCalls()).toBe(0)
+  })
+
+  it('applies invite limits to BYO scans too', async () => {
+    configure()
+    personalCredential.value = 'owners-private-key'
+    const counts = services('daily_limit')
+    const response = await post(photo(), session)
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual({ error: 'scan_denied', reason: 'daily_limit' })
+    expect([counts.rpcCalls(), counts.minimaxCalls()]).toEqual([1, 0])
+  })
+
+  it('fails closed when account verification is unavailable instead of using the hosted key', async () => {
+    configure()
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input instanceof Request ? input.url : input)
+      calls.push(url)
+      if (url.includes('/auth/v1/user')) return new Response('{"message":"temporary outage"}', { status: 503 })
+      throw new Error(`unexpected ${url}`)
+    }))
+
+    const response = await post(photo(), session)
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ error: 'provider_unavailable' })
+    expect(calls.some((url) => url.includes('/rest/v1/rpc/reserve_scan'))).toBe(false)
+    expect(calls.some((url) => url.includes('minimax'))).toBe(false)
   })
 
   it('fails closed without a session, without Supabase, or when the reservation errors', async () => {

@@ -24,6 +24,9 @@ function configure(rpc: (name: string, body: unknown) => Response) {
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input instanceof Request ? input.url : input)
       calls.push(url)
+      if (url.includes('/auth/v1/user')) {
+        return Response.json({ id: '11111111-1111-4111-8111-111111111111', aud: 'authenticated', role: 'authenticated', is_anonymous: true })
+      }
       const name = /\/rpc\/(\w+)/.exec(url)?.[1] ?? ''
       return rpc(name, init?.body ? JSON.parse(String(init.body)) : null)
     }),
@@ -49,7 +52,7 @@ describe('GET /api/scan-access', () => {
     const calls = configure(() => Response.json({ status: 'no_invite', tester_left: 5, global_left: 100 }))
     expect(await (await get()).json()).toEqual({ ai: true, access: 'no_invite' })
     expect(await (await get({})).json()).toEqual({ ai: true, access: 'unavailable' })
-    expect(calls).toHaveLength(1)
+    expect(calls.filter((url) => url.includes('/rest/v1/rpc/'))).toHaveLength(1)
   })
 })
 

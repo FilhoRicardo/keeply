@@ -73,6 +73,24 @@ test('Google connect without configuration returns safely', async ({ request }) 
   expect((await request.post('/api/calendar/events', { data: { drafts: [] } })).status()).toBe(401)
 })
 
+test('AI settings require a signed-in Google account and leave manual entry available', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('link', { name: 'AI settings' }).click()
+  await expect(page).toHaveURL(/\/settings\/ai$/)
+  await expect(page.getByRole('heading', { name: 'Sign in to Keeply first' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible()
+  await expect(page.getByLabel('MiniMax API key')).toHaveCount(0)
+  await noHorizontalScroll(page)
+  await accessible(page)
+
+  await page.getByRole('link', { name: 'Home' }).click()
+  await page.getByRole('link', { name: 'Add manually' }).click()
+  await expect(page).toHaveURL(/\/appliances\/new$/)
+  await expect(page.getByLabel('Manufacturer')).toBeVisible()
+  await noHorizontalScroll(page)
+  await accessible(page)
+})
+
 test('invite page is accessible and scanning stays shut when it is off', async ({ page, request }) => {
   await page.goto('/invite?code=KP-1234-5678-9ABC-DEF0')
   await expect(page.getByLabel('Invite code')).toHaveValue('KP-1234-5678-9ABC-DEF0')

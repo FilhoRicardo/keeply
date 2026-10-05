@@ -148,6 +148,10 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
           manufacturer and model number. Keeply may send the photo to an AI service to suggest the details, and does not keep it; you
           always confirm them.
         </p>
+        <p className="settings-footnote">
+          AI scans require an invite and daily limits apply. You can manage your MiniMax key in{' '}
+          <Link href="/settings/ai">AI settings</Link>.
+        </p>
         <label className="aster-btn aster-btn--primary full-width file-button">
           Take or choose a photo
           <input

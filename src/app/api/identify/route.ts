@@ -4,7 +4,7 @@ import type { ApplianceIdentity } from '@/ai/identity'
 import { selectProvider } from '@/ai/provider'
 import { checkPhoto } from '../../lib/identify'
 import { scanEnabled } from '../../lib/features'
-import { admitScan, aiScanLive } from '../../lib/scan-gate'
+import { admitScan, aiScanLive, userMiniMaxKey } from '../../lib/scan-gate'
 
 // The MiniMax adapter waits up to 25 s; give the function room on Vercel.
 export const maxDuration = 30
@@ -42,9 +42,22 @@ export async function POST(request: NextRequest) {
   const problem = checkPhoto(file)
   if (problem) return NextResponse.json({ error: problem }, { status: 400 })
 
-  const provider = selectProvider({ env: process.env })
+  // A saved user key always takes priority. If reading it fails, fail closed instead of quietly
+  // charging the hosted key. User credentials are available only to verified Google accounts.
+  let userKey: string | null
+  try {
+    userKey = await userMiniMaxKey(request)
+  } catch {
+    return NextResponse.json({ error: 'provider_unavailable' }, { status: 503, headers: { 'Cache-Control': 'no-store' } })
+  }
+  const provider = userKey
+    ? selectProvider({ env: { MINIMAX_API_KEY: userKey, MINIMAX_MODEL: 'MiniMax-M3' } })
+    : selectProvider({ env: process.env })
+  if (userKey && provider.kind === 'manual') {
+    return NextResponse.json({ error: 'provider_unavailable' }, { status: 503, headers: { 'Cache-Control': 'no-store' } })
+  }
   // Billable providers only after an attempt is reserved for this caller; a refusal calls nothing.
-  if (aiScanLive()) {
+  if (aiScanLive(process.env, userKey !== null)) {
     const decision = await admitScan(request)
     if (decision !== 'allowed') {
       return NextResponse.json({ error: 'scan_denied', reason: decision }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
@@ -52,11 +65,7 @@ export async function POST(request: NextRequest) {
   }
   const identity = await provider
     .identifyAppliance({ bytes: new Uint8Array(await file!.arrayBuffer()), mimeType: file!.type })
-    .catch((error: unknown) => {
-      // The attempt still counts: the provider may have billed it.
-      console.error(`[identify] ${provider.kind} failed:`, error instanceof Error ? error.message : error)
-      return null
-    })
+    .catch(() => null)
   const body: IdentifyResponse = toProposal(identity)
   return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } })
 }

@@ -21,6 +21,7 @@ Next.js (App Router) + TypeScript `strict`, pnpm, ESLint, Vitest. Verify with `p
 - Each accepted task becomes one recurring all-day event from the start date. Event ids derive from task ids and writes are upserts, so retries never duplicate. After that the owner manages events in their calendar.
 - Invited testers: `/api/identify` reserves one billable attempt per scan in Supabase (`reserve_scan`, `src/db/scan-access.ts`, `src/app/lib/scan-gate.ts`) before calling a provider: 5 per tester and 100 in total per UTC day by default, locked against concurrency, never refunded, fail closed. `/invite?code=` redeems an invite; `/api/scan-access` reports what the visitor has left. Operator guide: `docs/testers.md`.
 - Label scanning: `prepareLabelPhoto` (≤1280 px JPEG, EXIF dropped) → `httpRecognizer` → `/api/identify` → `selectProvider` (MiniMax when `MINIMAX_API_KEY` is set, else Manual) → Confirm / Edit / Rescan. A recogniser only proposes; any owner edit drops its confidence. The photo is not stored.
+- Hosted BYO (HANDOFF §25): `/settings/ai` → bearer-authenticated `/api/ai-key` → `src/ai/credentials.ts` → service-only `src/db/ai-credentials.ts`. AES-256-GCM ciphertext is bound to a verified non-anonymous owner and provider. Status never returns the key. Personal MiniMax keys precede the server key, use a fixed endpoint/model, and never silently fall back to app funding on failure. Invitations and scan reservations still apply. Setup: `docs/ai/byo-minimax.md`.
 
 ## Rules
 
