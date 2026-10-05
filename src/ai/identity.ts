@@ -15,7 +15,7 @@ export type LabelPhoto = { bytes: Uint8Array; mimeType: string }
 export const IDENTITY_INSTRUCTIONS = `You read the rating label of a household appliance from a photo.
 Reply with only one JSON object, no other text:
 {"applianceType": "dishwasher" | "other" | "unknown", "manufacturer": string | null, "model": string | null, "serialNumber": string | null, "confidence": number}
-Rules: copy text exactly as printed on the label; use null for anything not clearly legible; never guess a model or serial number; confidence is 0 to 1 for how sure you are of manufacturer and model together.`
+Rules: the owner says this is a dishwasher, and a label alone rarely names the appliance, so use "dishwasher" unless the photo clearly shows a different appliance, "other" only then, and "unknown" if you cannot tell; copy text exactly as printed on the label; use null for anything not clearly legible; never guess a model or serial number; confidence is 0 to 1 for how sure you are of manufacturer and model together.`
 
 const text = (value: unknown, max = 80): string | null => {
   if (typeof value !== 'string') return null
