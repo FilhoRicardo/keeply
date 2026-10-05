@@ -1,5 +1,6 @@
+import { NextRequest } from 'next/server'
 import { describe, expect, it } from 'vitest'
-import { bearerToken, parseDrafts, parseTaskRequest, safeReturnTo, withQuery } from './calendar-session'
+import { bearerToken, enforceJsonContentType, enforceSameOrigin, parseDrafts, parseTaskRequest, safeReturnTo, withQuery } from './calendar-session'
 
 const draft = {
   taskId: 't1',
@@ -72,5 +73,50 @@ describe('bearerToken', () => {
     expect(bearerToken('Bearer abc.def')).toBe('abc.def')
     expect(bearerToken('Basic abc')).toBeNull()
     expect(bearerToken(null)).toBeNull()
+  })
+})
+
+describe('enforceSameOrigin', () => {
+  const own = 'http://keeply.local'
+
+  it('accepts a request whose Origin matches the request URL', () => {
+    const request = new NextRequest(`${own}/api/calendar/events`, { headers: { origin: own } })
+    expect(enforceSameOrigin(request)?.status ?? null).toBeNull()
+  })
+
+  it.each([
+    ['missing Origin header', new NextRequest(`${own}/api/calendar/events`)],
+    ['cross-origin request', new NextRequest(`${own}/api/calendar/events`, { headers: { origin: 'https://evil.example' } })],
+  ])('returns 403 for %s', (_label, request) => {
+    const response = enforceSameOrigin(request)
+    expect(response?.status).toBe(403)
+  })
+
+  it('treats different schemes or ports as cross-origin', () => {
+    const request = new NextRequest(`${own}/api/calendar/events`, { headers: { origin: 'http://keeply.local:8080' } })
+    expect(enforceSameOrigin(request)?.status).toBe(403)
+  })
+})
+
+describe('enforceJsonContentType', () => {
+  it('accepts application/json', () => {
+    const request = new NextRequest('http://keeply.local/api/calendar/events', { headers: { 'content-type': 'application/json' } })
+    expect(enforceJsonContentType(request)?.status ?? null).toBeNull()
+  })
+
+  it('accepts application/json with a charset', () => {
+    const request = new NextRequest('http://keeply.local/api/calendar/events', { headers: { 'content-type': 'application/json; charset=utf-8' } })
+    expect(enforceJsonContentType(request)?.status ?? null).toBeNull()
+  })
+
+  it('returns 415 for text/plain (which request.json() would otherwise still parse)', () => {
+    const request = new NextRequest('http://keeply.local/api/calendar/events', { headers: { 'content-type': 'text/plain' } })
+    const out = enforceJsonContentType(request)
+    expect(out?.status).toBe(415)
+  })
+
+  it('returns 415 when Content-Type is missing', () => {
+    const request = new NextRequest('http://keeply.local/api/calendar/events')
+    expect(enforceJsonContentType(request)?.status).toBe(415)
   })
 })
