@@ -45,10 +45,14 @@ Wave-2 verification of the post-KEE-43 plan search: photo or manual add → `/ap
 # MINIMAX_API_KEY / BRAVE_SEARCH_API_KEY either in the Preview env or local .env.local, and a Supabase
 # session for the owner (the harness reuses the same localStorage / Supabase adapter as the app):
 node scripts/live-plan-check.mjs <base-url> <out-dir> --case <name> \
-    --manufacturer "Electrolux" --model "KEQB7300L"
-# `--case` is one of: exact-manual, similar-only, no-manual, scanned-pdf, brave-fail, minimax-fail.
-# The harness writes <out-dir>/<case>-result.json (browser steps + /api/plan response + screenshots)
-# and <out-dir>/<case>-row.json (the single row to paste into the G10 table below).
+    --manufacturer "Electrolux" --model "KEQB7300L" \
+    [--defect KEE-XX] [--note "free-text note"]
+# `--case` is one of: exact-manual, similar-only, no-manual, scanned-pdf, brave-fail, minimax-fail,
+# calendar-write. The harness writes <out-dir>/<case>-result.json (browser steps + /api/plan
+# response + screenshots) and <out-dir>/<case>-row.json (the single row to paste into the G10
+# table below). When the runner observes a defect, they file a KEE-… issue, then re-run with
+# `--defect KEE-XX --note "what you saw"`. The harness writes the id and the note into both
+# result.json and row.json so the row's `defect` column fills the table.
 ```
 
 **Cases (the five the issue names plus the calendar-write case):**
@@ -72,6 +76,8 @@ node scripts/live-plan-check.mjs <base-url> <out-dir> --case <name> \
 - The CFO cost note (search calls per plan, AI calls per plan, estimated cost per plan from the plan's `BRAVE_FREE_QUOTA_PER_MONTH` + MiniMax Token Plan / pay-as-you-go rates) is filed in a sibling `KEE-…` issue or attached to this gate.
 
 **Filled table (filled by the harness after the CTO opens the Preview and the owner runs the script):**
+
+The rows below are the runner's deliverable, not this branch's. The branch (KEE-44, this gate) ships the spec, the harness (`scripts/live-plan-check.mjs`), the read-only `/api/g10/calendar-event` route, the row schema (`src/app/lib/live-plan-row.ts` mirrored in `scripts/g10-row.mjs`), the unit + cross-check tests, and the pass criteria. Filling the seven rows (including the calendar-write case) needs (a) a hosted Preview URL — the [Environment under test](#live-gates-for-the-mvp-docshandoffmd-24) paragraph names the branch that opens it — (b) the runner driving the harness on the owner's browser with a Supabase session, and (c) the runner re-pasting `<out-dir>/<case>-row.json` into the table. Ricardo's `test-photos/` directory plus a real phone run fill case 1 (the KEQB7300L photo) and the CFO note; cases 2–7 are the runner's and a follow-up PR's work.
 
 | # | Case | Manufacturer / model | chosen_source.title | chosen_source.url | extracted_tasks (name, level) | quote_check | fallback | search_outcome | time_to_plan_ms | calendar_event_id | defect |
 |---|---|---|---|---|---|---|---|---|---|---|---|
