@@ -304,29 +304,13 @@ describe('searchManuals', () => {
       // and the second iteration's in-loop check must fire and refuse the second and third
       // fetches. Counter must end exactly at the cap, not cap+2.
       process.env[ENV_KEY] = 'k'
-      const warmupFetch = vi.fn(async () => Response.json(goodResponse([])))
-      await searchManuals(
-        { manufacturer: 'Bosch', model: 'SMS6' },
-        { fetchImpl: fakeFetch(warmupFetch), freeQuotaCap: 100, now: () => fakeNow, sleep: fakeSleep },
-      )
-      expect(braveSearchCallCount()).toBe(3)
-      // Reset to counter=1 (cap-1) and run a fresh search with cap=2.
-      resetBraveSearchCallCount()
-      const warmupFetch2 = vi.fn(async () => Response.json(goodResponse([])))
-      await searchManuals(
-        { manufacturer: 'Bosch', model: 'SMS6' },
-        { fetchImpl: fakeFetch(warmupFetch2), freeQuotaCap: 100, now: () => fakeNow, sleep: fakeSleep },
-      )
-      expect(braveSearchCallCount()).toBe(3)
-      // Now bring the counter to exactly cap-1 by resetting and warming with cap=2 itself:
-      // counter=0, run with cap=2, entry gate 0<2 passes, first iteration counter 0->1,
-      // second iteration in-loop 1>=2 fires and returns quota_exhausted. So one run lands
-      // counter at 1, which is cap-1. Then the next call exercises the cap.
-      resetBraveSearchCallCount()
-      const warmToCapMinusOne = vi.fn(async () => Response.json(goodResponse([])))
+      // Warm the counter to exactly cap-1=1 using cap=1: a single call fetches once (iter 1,
+      // 0>=1 is false), advances counter 0->1, and on iter 2 the in-loop check 1>=1 fires
+      // and returns quota_exhausted. Counter ends at exactly 1.
+      const warmFetch = vi.fn(async () => Response.json(goodResponse([])))
       const warm = await searchManuals(
         { manufacturer: 'Bosch', model: 'SMS6' },
-        { fetchImpl: fakeFetch(warmToCapMinusOne), freeQuotaCap: 2, now: () => fakeNow, sleep: fakeSleep },
+        { fetchImpl: fakeFetch(warmFetch), freeQuotaCap: 1, now: () => fakeNow, sleep: fakeSleep },
       )
       expectEmpty(warm)
       expect(warm.reason).toBe('quota_exhausted')
