@@ -15,3 +15,6 @@ coverage/
 # Playwright
 test-results/
 playwright-report/
+
+# Personal test photos
+test-photos/
