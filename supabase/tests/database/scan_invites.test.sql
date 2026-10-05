@@ -6,9 +6,10 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
 
-select plan(35);
+select plan(42);
 
 insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000000d4', 'owner@example.com'),
   ('00000000-0000-0000-0000-0000000000a1', 'tester-a@example.com'),
   ('00000000-0000-0000-0000-0000000000b2', 'tester-b@example.com'),
   ('00000000-0000-0000-0000-0000000000c3', 'no-invite@example.com');
@@ -104,6 +105,27 @@ select pg_temp.as_owner();
 select is((select scans from scan_daily_totals), 4, 'the day''s total still counts every attempt (A 2, B 2)');
 select is((select count(*) from scan_usage where user_id = '00000000-0000-0000-0000-0000000000b2'), 1::bigint, 'one usage row per tester and day');
 select is((select scans from scan_usage where user_id = '00000000-0000-0000-0000-0000000000b2'), 2, 'tester B made exactly two attempts');
+
+-- The owner's own account can be made unlimited: no per-tester or daily ceiling, still counted.
+select pg_temp.as_owner();
+update scan_limits set per_tester_daily = 1, global_daily = 5;
+create temp table owner_code as select create_scan_invite('Owner') as code;
+grant select on owner_code to authenticated;
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d4');
+select throws_ok($$ update scan_invites set unlimited = true $$, '42501', null, 'visitors cannot make themselves unlimited');
+select is(redeem_scan_invite((select code from owner_code)), 'invited', 'the owner redeems their invite');
+select is(reserve_scan(), 'allowed', 'a normal invite is limited: 1 of 1 allowed');
+select is(reserve_scan(), 'tester_limit', 'and then stopped by the per-tester limit');
+select pg_temp.as_owner();
+update scan_invites set unlimited = true where note = 'Owner';
+select pg_temp.act_as('00000000-0000-0000-0000-0000000000d4');
+select is(
+  (select reserve_scan() || ',' || reserve_scan() || ',' || reserve_scan()),
+  'allowed,allowed,allowed', 'once unlimited, the owner is not stopped by the tester limit or the reached daily limit');
+select is((scan_allowance() ->> 'tester_left')::int, 999, 'the scan screen sees plenty left');
+select pg_temp.as_owner();
+select is((select scans from scan_usage where user_id = '00000000-0000-0000-0000-0000000000d4'), 4, 'every unlimited scan is still counted');
+update scan_limits set per_tester_daily = 2, global_daily = 3;
 
 select * from finish();
 rollback;
