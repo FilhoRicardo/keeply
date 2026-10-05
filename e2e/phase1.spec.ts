@@ -29,6 +29,7 @@ function watchConsole(page: Page) {
     // environment, and Next.js RSC prefetches can be aborted when a navigation wins.
     // A failure here is not a code error; the proposer's fallback handles the route.
     if (isIgnored(req.url(), req.url())) return
+    if (req.failure()?.errorText === 'net::ERR_ABORTED' && /[?&]_rsc=/.test(req.url())) return
     problems.push(`requestfailed: ${req.url()}`)
   })
   return problems
