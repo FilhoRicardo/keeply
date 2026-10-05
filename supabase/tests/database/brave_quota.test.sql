@@ -8,7 +8,7 @@ set search_path = public, extensions;
 -- The local CI stub omits service_role's access to the test extension schema.
 grant usage on schema extensions to service_role;
 
-select plan(14);
+select plan(15);
 
 -- The tables exist and are closed for visitors.
 select ok(has_table_privilege('service_role', 'public.brave_quota_caps', 'select,insert,update,delete'), 'service role can manage quota caps');
@@ -17,7 +17,7 @@ select ok(not has_table_privilege('authenticated', 'public.brave_quota_caps', 's
 select ok(not has_table_privilege('authenticated', 'public.brave_quota_usage', 'select'), 'authenticated cannot read usage');
 
 -- Default cap is in place: 2000 calls/month, one caps row, one usage row missing.
-select is((select free_quota from public.brave_quota_caps), 2000::bigint, 'default monthly cap is 2000');
+select is((select free_quota from public.brave_quota_caps), 2000::integer, 'default monthly cap is 2000');
 select ok(
   (select relrowsecurity from pg_class where oid = 'public.brave_quota_caps'::regclass),
   'RLS is enabled on caps'
@@ -29,7 +29,7 @@ select ok(
 
 -- status() reports 'ok' before any reservation.
 select is(
-  (select status from public.brave_quota_status()),
+  public.brave_quota_status() ->> 'status',
   'ok',
   'status is ok with no usage yet'
 );
@@ -43,20 +43,19 @@ select is(
 );
 select is((select searches from public.brave_quota_usage), 1::integer, 'counter incremented to 1 after one reservation');
 select is(
-  (select used from public.brave_quota_status()),
-  1::bigint,
+  (public.brave_quota_status() ->> 'used')::integer,
+  1::integer,
   'status reflects one used call'
 );
 
 -- Direct tampering with the row is restricted.
-reset role;
+set local role authenticated;
 select throws_ok(
   $$ update public.brave_quota_usage set searches = 0 $$,
   '42501',
   null,
   'authenticated cannot write the durable counter'
 );
-set local role authenticated;
 select throws_ok(
   $$ select public.reserve_brave_search() $$,
   '42501',
