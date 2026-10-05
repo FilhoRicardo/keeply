@@ -169,6 +169,12 @@ export async function searchManuals(
   let nextCallAllowedAt = now()
 
   for (const q of queries) {
+    // Hard stop, also inside the loop: if a previous call advanced the counter to the cap,
+    // do not issue another fetch on this iteration either. The per-process counter must not
+    // exceed freeQuotaCap, so we check before callCount++ (and before any network work).
+    if (callCount >= freeQuotaCap) {
+      return { status: 'empty', candidates: [], reason: 'quota_exhausted' }
+    }
     const gap = Math.max(0, nextCallAllowedAt - now())
     if (gap > 0) await sleep(gap)
     callCount++

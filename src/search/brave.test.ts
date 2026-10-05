@@ -297,6 +297,53 @@ describe('searchManuals', () => {
       expect(fetchMock2).not.toHaveBeenCalled()
     })
 
+    it('hard-stops mid-call: counter at cap-1 lets one fetch through, then the next loop iteration refuses', async () => {
+      // Spec: "the per-process counter must not exceed this, even if the API would otherwise
+      // accept a paid-tier request." With cap=2 and counter warmed to cap-1=1, the entry gate
+      // passes (1 < 2), the first iteration issues one fetch and advances the counter to 2,
+      // and the second iteration's in-loop check must fire and refuse the second and third
+      // fetches. Counter must end exactly at the cap, not cap+2.
+      process.env[ENV_KEY] = 'k'
+      const warmupFetch = vi.fn(async () => Response.json(goodResponse([])))
+      await searchManuals(
+        { manufacturer: 'Bosch', model: 'SMS6' },
+        { fetchImpl: fakeFetch(warmupFetch), freeQuotaCap: 100, now: () => fakeNow, sleep: fakeSleep },
+      )
+      expect(braveSearchCallCount()).toBe(3)
+      // Reset to counter=1 (cap-1) and run a fresh search with cap=2.
+      resetBraveSearchCallCount()
+      const warmupFetch2 = vi.fn(async () => Response.json(goodResponse([])))
+      await searchManuals(
+        { manufacturer: 'Bosch', model: 'SMS6' },
+        { fetchImpl: fakeFetch(warmupFetch2), freeQuotaCap: 100, now: () => fakeNow, sleep: fakeSleep },
+      )
+      expect(braveSearchCallCount()).toBe(3)
+      // Now bring the counter to exactly cap-1 by resetting and warming with cap=2 itself:
+      // counter=0, run with cap=2, entry gate 0<2 passes, first iteration counter 0->1,
+      // second iteration in-loop 1>=2 fires and returns quota_exhausted. So one run lands
+      // counter at 1, which is cap-1. Then the next call exercises the cap.
+      resetBraveSearchCallCount()
+      const warmToCapMinusOne = vi.fn(async () => Response.json(goodResponse([])))
+      const warm = await searchManuals(
+        { manufacturer: 'Bosch', model: 'SMS6' },
+        { fetchImpl: fakeFetch(warmToCapMinusOne), freeQuotaCap: 2, now: () => fakeNow, sleep: fakeSleep },
+      )
+      expectEmpty(warm)
+      expect(warm.reason).toBe('quota_exhausted')
+      expect(braveSearchCallCount()).toBe(1) // cap-1 = 1
+      // Now the test: cap=2, counter=1 (cap-1). Entry gate passes; iteration 1 issues one
+      // fetch (counter -> 2); iteration 2's in-loop check refuses; iteration 3 never runs.
+      const fetchMock = vi.fn(async () => Response.json(goodResponse([])))
+      const result = await searchManuals(
+        { manufacturer: 'Bosch', model: 'SMS6' },
+        { fetchImpl: fakeFetch(fetchMock), freeQuotaCap: 2, now: () => fakeNow, sleep: fakeSleep },
+      )
+      expectEmpty(result)
+      expect(result.reason).toBe('quota_exhausted')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(braveSearchCallCount()).toBe(2) // exactly the cap, not cap+2
+    })
+
     it('falls back to the documented default (2000) when no option or env is provided', async () => {
       process.env[ENV_KEY] = 'k'
       delete process.env.BRAVE_FREE_QUOTA_PER_MONTH
