@@ -70,7 +70,13 @@ test('Google connect without configuration returns safely', async ({ request }) 
   const response = await request.get('/auth/google/start?returnTo=//evil.example', { maxRedirects: 0 })
   expect(response.status()).toBe(307)
   expect(response.headers().location).toMatch(/^http:\/\/localhost:3123\/\?calendar=unconfigured$/)
-  expect((await request.post('/api/calendar/events', { data: { drafts: [] } })).status()).toBe(401)
+  // KEE-49: a same-origin POST without a Google token cookie must answer 401 not_connected.
+  // Playwright's request fixture doesn't always set Origin on same-origin posts, so be explicit.
+  const events = await request.post('/api/calendar/events', {
+    headers: { origin: 'http://localhost:3123' },
+    data: { drafts: [] },
+  })
+  expect(events.status()).toBe(401)
 })
 
 test('AI settings require a signed-in Google account and leave manual entry available', async ({ page }) => {

@@ -133,6 +133,9 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('POST /api/calendar/events with Supabase'
       new NextRequest('http://keeply.local/api/calendar/events', {
         method: 'POST',
         headers: {
+          // KEE-49: same-origin guard runs before the token check, so integration
+          // tests that POST same-origin must set Origin to match the request URL.
+          origin: 'http://keeply.local',
           'content-type': 'application/json',
           cookie: 'keeply_gcal_token=google-token',
           ...(user ? { authorization: `Bearer ${jwt(user)}` } : {}),
