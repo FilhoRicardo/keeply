@@ -39,6 +39,8 @@ export type LiveProposalResult = {
 export type ApiPlanProposerOptions = {
   fetch?: typeof fetch
   now?: () => Date
+  // The visitor's session token. /api/plan refuses to search without one.
+  accessToken?: () => Promise<string | null>
 }
 
 const DEFAULT_OUTCOME: ProposalOutcome = {
@@ -52,10 +54,11 @@ const DEFAULT_OUTCOME: ProposalOutcome = {
 async function postPlan(
   body: { manufacturer: string; model: string | null },
   fetcher: typeof fetch,
+  token: string | null,
 ): Promise<Response> {
   return fetcher('/api/plan', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify({ manufacturer: body.manufacturer, model: body.model ?? '' }),
   })
 }
@@ -142,7 +145,8 @@ export function createApiPlanProposer(opts: ApiPlanProposerOptions = {}): (appli
   const fetcher = opts.fetch ?? fetch
   return async ({ manufacturer, model }) => {
     try {
-      const response = await postPlan({ manufacturer, model }, fetcher)
+      const token = await opts.accessToken?.().catch(() => null)
+      const response = await postPlan({ manufacturer, model }, fetcher, token ?? null)
       if (response.status === 404 || response.status === 403) {
         // The route is disabled or the visitor was refused. Fall back to general guidance
         // without claiming we searched.

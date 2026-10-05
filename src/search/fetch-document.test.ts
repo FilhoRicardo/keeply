@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchDocument, type FetchDeps, type FetchInit } from './fetch-document'
+import { fetchDocument, pinnedLookup, type FetchDeps, type FetchInit } from './fetch-document'
 
 const PUBLIC = '93.184.216.34'
 
@@ -196,5 +196,20 @@ describe('fetchDocument', () => {
     expect(await fetchDocument('https://nope.com/m', d)).toEqual({ ok: false, reason: 'blocked_address' })
     expect(resolve).toHaveBeenCalledTimes(1)
     expect(fetchFn).not.toHaveBeenCalled()
+  })
+})
+// Node 20+ sockets call `lookup` with `{ all: true }` and expect an array of addresses; answering
+// with a single address makes every real manual fetch fail with ERR_INVALID_IP_ADDRESS.
+describe('pinnedLookup', () => {
+  it('answers with an address array when Node asks for all addresses', () => {
+    const cb = vi.fn()
+    pinnedLookup([PUBLIC])('example.com', { all: true }, cb)
+    expect(cb).toHaveBeenCalledWith(null, [{ address: PUBLIC, family: 4 }])
+  })
+
+  it('answers with a single address otherwise', () => {
+    const cb = vi.fn()
+    pinnedLookup([PUBLIC])('example.com', {}, cb)
+    expect(cb).toHaveBeenCalledWith(null, PUBLIC, 4)
   })
 })

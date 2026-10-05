@@ -142,6 +142,29 @@ describe('createApiPlanProposer', () => {
   })
 })
 
+describe('createApiPlanProposer session token', () => {
+  it('sends the visitor session as a bearer token, which /api/plan requires to search', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(VERIFIED_BODY))
+    const propose = createApiPlanProposer({
+      fetch: fetchMock as unknown as typeof fetch,
+      accessToken: async () => 'session-token',
+    })
+    await propose({ manufacturer, model })
+
+    const init = (fetchMock.mock.calls as unknown as [string, RequestInit][])[0][1]
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer session-token' })
+  })
+
+  it('sends no Authorization header when there is no session', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(VERIFIED_BODY))
+    const propose = createApiPlanProposer({ fetch: fetchMock as unknown as typeof fetch })
+    await propose({ manufacturer, model })
+
+    const init = (fetchMock.mock.calls as unknown as [string, RequestInit][])[0][1]
+    expect(init.headers).not.toHaveProperty('Authorization')
+  })
+})
+
 describe('fallbackReason', () => {
   it('maps known outcomes to a stable, UI-friendly reason', () => {
     expect(fallbackReason({ fallback: 'general', searchOutcome: 'ok', searchReason: null })).toBe('no_manual_needed')
