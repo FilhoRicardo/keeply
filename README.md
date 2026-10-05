@@ -13,7 +13,7 @@ pnpm dev            # http://localhost:3000; plans are stored in the browser unt
 
 Copy `.env.example` to `.env.local` to turn on Supabase and Google Calendar. Without them the full flow works on the device and approval saves the plan locally.
 
-Live test of label scanning with a real AI key, privately: `docs/live-testing.md` (`scripts/live-test.sh`).
+Live test of label scanning with a real AI key, privately: `docs/live-testing.md` (`scripts/live-test.sh`). Where each setting lives (`.env.local` / Vercel / Supabase / Google Cloud, names only): `docs/environments.md`.
 
 ## Checks
 
