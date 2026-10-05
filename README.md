@@ -28,7 +28,7 @@ CI runs all four on every pull request.
 
 ## Go live
 
-1. Supabase (`xmilbvzbptmozwjphvsx`): run `supabase/migrations/` (`supabase db push`, or paste into the SQL Editor), then enable **Anonymous sign-ins**. A project set up with the pre-MVP schema first runs `supabase/reset-pre-mvp.sql`.
+1. Supabase (`xmilbvzbptmozwjphvsx`): run `supabase/migrations/` (`supabase db push`, or paste into the SQL Editor), then enable **Anonymous sign-ins**.
 2. Google Cloud: enable the Calendar API, configure the consent screen, create a Web OAuth client with redirect URI `https://<your-domain>/auth/google/callback`. Scope used: `calendar.events` only. Keeply talks to Google Calendar directly with this client; the Supabase Google provider (step 3) is only for signing in.
 3. Sign in with Google (optional, recommended): in Supabase → Authentication → Sign In / Providers enable **Google** (a Google OAuth client whose redirect URI is `https://xmilbvzbptmozwjphvsx.supabase.co/auth/v1/callback`) and **Manual linking** (anonymous visitors keep their plans when they sign in). Add the site URL under URL Configuration → Redirect URLs. This login is separate from the calendar consent in step 2.
 4. Vercel: set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`. The service-role key is not used by the app.
