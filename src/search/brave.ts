@@ -11,14 +11,29 @@ import { buildDefaultManufacturerDomains, hostOf, rankCandidates, type Manufactu
 // result with a typed reason.
 
 const API_KEY_ENV = 'BRAVE_SEARCH_API_KEY'
+const FREE_QUOTA_ENV = 'BRAVE_FREE_QUOTA_PER_MONTH'
 const BRAVE_BASE_URL = 'https://api.search.brave.com/res/v1/web/search'
 const MIN_GAP_MS = 1000
 const DEFAULT_TIMEOUT_MS = 10_000
 const DEFAULT_RESULTS_PER_QUERY = 10
+// Brave Search free-tier cap at the time of writing. Hard stop: the per-process counter must
+// not exceed this, even if the API would otherwise accept a paid-tier request on a card on file.
+// The cap is overridable via BRAVE_FREE_QUOTA_PER_MONTH (positive integer) or the per-call
+// `freeQuotaCap` option. This is the upper bound, not a per-window budget — counter resets
+// happen via resetBraveSearchCallCount() in tests; a serverless deploy must persist the
+// counter to survive cold starts (tracked separately).
+const DEFAULT_FREE_QUOTA_PER_MONTH = 2000
 
 const DEFAULT_MANUFACTURER_DOMAINS: ManufacturerDomainMap = buildDefaultManufacturerDomains()
 
-export type SearchReason = 'rate_limited' | 'timeout' | 'network_error' | 'http_error' | 'malformed_response' | 'no_results'
+export type SearchReason =
+  | 'rate_limited'
+  | 'timeout'
+  | 'network_error'
+  | 'http_error'
+  | 'malformed_response'
+  | 'no_results'
+  | 'quota_exhausted'
 
 export type SearchCandidate = {
   url: string
@@ -47,6 +62,9 @@ export type BraveSearchCallOptions = {
   manufacturerDomains?: ManufacturerDomainMap
   // Optional per-query timeout in ms.
   timeoutMs?: number
+  // Optional override of the per-process free-quota cap. When set, must be a positive integer.
+  // The option is intended for tests; production should use BRAVE_FREE_QUOTA_PER_MONTH.
+  freeQuotaCap?: number
 }
 
 type BraveResponse = {
@@ -63,6 +81,16 @@ export function braveSearchCallCount(): number {
 
 export function resetBraveSearchCallCount(): void {
   callCount = 0
+}
+
+function resolveFreeQuotaCap(env: Record<string, string | undefined>, override: number | undefined): number {
+  if (typeof override === 'number' && Number.isInteger(override) && override > 0) return override
+  const raw = env[FREE_QUOTA_ENV]
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    const parsed = Number.parseInt(raw, 10)
+    if (Number.isInteger(parsed) && parsed > 0) return parsed
+  }
+  return DEFAULT_FREE_QUOTA_PER_MONTH
 }
 
 function defaultSleep(ms: number): Promise<void> {
@@ -119,6 +147,15 @@ export async function searchManuals(
     return { status: 'unavailable' }
   }
 
+  // Hard stop at the free quota. We refuse BEFORE issuing any API call: the per-process
+  // counter is the source of truth (it powers the CFO view), so on a refused call it must
+  // not advance. The Brave plan is free-only; reaching the cap means a paid-tier request
+  // would auto-route to a card on file, which is out of scope for this product.
+  const freeQuotaCap = resolveFreeQuotaCap(env, options.freeQuotaCap)
+  if (callCount >= freeQuotaCap) {
+    return { status: 'empty', candidates: [], reason: 'quota_exhausted' }
+  }
+
   const fetchImpl = options.fetchImpl ?? fetch
   const now = options.now ?? defaultNow
   const sleep = options.sleep ?? defaultSleep
@@ -132,6 +169,12 @@ export async function searchManuals(
   let nextCallAllowedAt = now()
 
   for (const q of queries) {
+    // Hard stop, also inside the loop: if a previous call advanced the counter to the cap,
+    // do not issue another fetch on this iteration either. The per-process counter must not
+    // exceed freeQuotaCap, so we check before callCount++ (and before any network work).
+    if (callCount >= freeQuotaCap) {
+      return { status: 'empty', candidates: [], reason: 'quota_exhausted' }
+    }
     const gap = Math.max(0, nextCallAllowedAt - now())
     if (gap > 0) await sleep(gap)
     callCount++
