@@ -73,6 +73,9 @@ export function toApplianceRecord(tree: ApplianceTree): ApplianceRecord {
     tasks: [...tree.maintenance_tasks].sort((a, b) => a.position - b.position).map(toTask),
     approvedAt: tree.approved_at,
     startDate: tree.start_date,
+    // KEE-43: the Supabase schema does not yet persist proposalMeta; the plan page falls back
+    // to a generic "we could not find a manual" message in that case.
+    proposalMeta: null,
   }
 }
 

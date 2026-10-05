@@ -5,6 +5,9 @@ import { useState } from 'react'
 import { usePlan } from '../../lib/plan-context'
 import { validateNewAppliance, type NewApplianceInput } from '../../lib/plan-state'
 
+// Adds a confirmed dishwasher. While the live search (KEE-42 /api/plan) is in flight the form
+// shows a "looking for your manual" progress message so the owner is not staring at a button
+// that may take ~25 s to respond.
 export function NewApplianceForm() {
   const router = useRouter()
   const { addAppliance } = usePlan()
@@ -72,8 +75,14 @@ export function NewApplianceForm() {
         </p>
       )}
 
+      {busy && (
+        <p className="form-progress" role="status" aria-live="polite" data-testid="form-progress">
+          Looking for your manual…
+        </p>
+      )}
+
       <button type="submit" className="aster-btn aster-btn--primary full-width" disabled={busy}>
-        Continue to maintenance plan
+        {busy ? 'Looking for your manual…' : 'Continue to maintenance plan'}
       </button>
     </form>
   )

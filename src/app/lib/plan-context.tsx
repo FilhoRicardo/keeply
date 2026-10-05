@@ -8,7 +8,8 @@ import type { PlanRepository } from './plan-repository'
 import { deviceAccount, type Account, type AccountService, type SignInResult } from './account'
 import { createPlanBackend, type PlanBackend } from './repository'
 import { findRecord, type NewApplianceInput, type PlanState } from './plan-state'
-import { generalGuidanceProposer, type PlanProposer } from './propose'
+import { livePlanProposer, type PlanProposer } from './propose'
+import type { ProposalMeta, TaskProposal } from '@/domain/model'
 import { defaultSink, safeTrack, type EventSink, type FunnelEvent } from './track'
 
 type PlanContextValue = {
@@ -49,12 +50,14 @@ export function PlanProvider({
   repository,
   sink,
   account: accountService,
-  proposer = generalGuidanceProposer,
+  proposer = livePlanProposer,
   children,
 }: {
   repository?: PlanRepository
   sink?: EventSink
   account?: AccountService
+  // A test can pass a stub proposer that returns plain TaskProposal[]; the live default returns
+  // { proposals, meta } so the plan page can render an honest outcome (KEE-43).
   proposer?: PlanProposer
   children: ReactNode
 }) {
@@ -158,8 +161,12 @@ export function PlanProvider({
         let applianceId = ''
         let proposed = { tasks: 0, verified: 0 }
         await apply(async () => {
-          const proposals = await proposer({ manufacturer: input.manufacturer.trim(), model: input.model.trim() || null })
-          const added = await repo.addAppliance(input, proposals)
+          // The live proposer returns { proposals, meta }; a stub returns TaskProposal[].
+          const raw = await proposer({ manufacturer: input.manufacturer.trim(), model: input.model.trim() || null })
+          const { proposals, meta }: { proposals: TaskProposal[]; meta: ProposalMeta | null } = Array.isArray(raw)
+            ? { proposals: raw, meta: null }
+            : raw
+          const added = await repo.addAppliance(input, proposals, meta)
           applianceId = added.applianceId
           proposed = {
             tasks: proposals.length,

@@ -10,6 +10,7 @@ import {
 } from '@/db/queries'
 import { toApplianceRecord } from '@/db/rows'
 import { approvalBlockers } from '@/domain/plan'
+import type { ProposalMeta } from '@/domain/model'
 import type { PlanRepository } from './plan-repository'
 import { validateNewAppliance, type PlanState } from './plan-state'
 
@@ -41,7 +42,11 @@ export function createSupabasePlanRepository({
       const { data } = await db.auth.getSession()
       return data.session?.access_token ?? null
     },
-    async addAppliance(input, proposals) {
+    async addAppliance(input, proposals, _meta?: ProposalMeta | null) {
+      // KEE-43: the Supabase adapter does not persist proposalMeta yet (no column). The plan
+      // page falls back to a generic banner in that case. The live proposer still runs; the
+      // outcome is recorded in the funnel event by the orchestration's `plan_search` write.
+      void _meta
       const error = validateNewAppliance(input)
       if (error) throw new Error(error)
       await ready()

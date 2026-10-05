@@ -2,13 +2,34 @@ import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 
 // Errors that are about the environment, not the app (e.g. fonts blocked by a proxy).
-const IGNORED = [/fonts\.(googleapis|gstatic)\.com/, /ERR_CERT_AUTHORITY_INVALID/]
+// /api/plan is intentionally disabled in CI/local (no Brave key, no non-Manual AI
+// provider) so the live proposer falls back to general guidance; the 404 the
+// browser logs is expected, not a code error.
+const IGNORED_PATTERNS = [/fonts\.(googleapis|gstatic)\.com/, /ERR_CERT_AUTHORITY_INVALID/]
+const IGNORED_URLS = [/\/api\/plan/]
+
+function isIgnored(text: string, url: string): boolean {
+  if (IGNORED_PATTERNS.some((r) => r.test(text))) return true
+  if (IGNORED_URLS.some((r) => r.test(url))) return true
+  return false
+}
 
 function watchConsole(page: Page) {
   const problems: string[] = []
   page.on('pageerror', (e) => problems.push(e.message))
   page.on('console', (m) => {
-    if (m.type() === 'error' && !IGNORED.some((r) => r.test(m.text()))) problems.push(m.text())
+    if (m.type() !== 'error') return
+    const text = m.text()
+    const url = m.location()?.url ?? ''
+    if (isIgnored(text, url)) return
+    problems.push(text)
+  })
+  page.on('requestfailed', (req) => {
+    // Expected: the plan route is disabled in CI/local, fonts may be blocked by the
+    // environment, and Next.js RSC prefetches can be aborted when a navigation wins.
+    // A failure here is not a code error; the proposer's fallback handles the route.
+    if (isIgnored(req.url(), req.url())) return
+    problems.push(`requestfailed: ${req.url()}`)
   })
   return problems
 }
@@ -38,7 +59,11 @@ test('add a dishwasher, accept or reject each task, approve and see the record',
 
   await expect(page).toHaveURL(/\/plan$/)
   const card = (name: string) => page.getByRole('article', { name })
-  await expect(page.getByText('General guidance')).toHaveCount(3)
+  // KEE-43: the plan screen also renders a fallback banner whose eyebrow says
+  // "General guidance" — so count the per-task chips (level-3 evidence cards)
+  // instead of the literal text. The banner is still asserted below by the
+  // "could not find model-specific guidance" copy inside the source panel.
+  await expect(page.locator('ul.plan-list .evidence--general_guidance')).toHaveCount(3)
   await expect(page.getByText(/manufacturer verified/i)).toHaveCount(0)
   await expect(page.getByText(/not set up on this server/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'Approve plan' })).toBeDisabled()

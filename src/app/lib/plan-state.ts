@@ -1,6 +1,6 @@
 import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
-import type { ApplianceRecord, MaintenanceTask, TaskProposal } from '@/domain/model'
+import type { ApplianceRecord, MaintenanceTask, ProposalMeta, TaskProposal } from '@/domain/model'
 import { approvePlan, decideTask, type Decision } from '@/domain/plan'
 
 // Everything Keeply keeps: the owner's dishwashers and their plans. Pure transitions only;
@@ -41,6 +41,7 @@ export function addAppliance(
   proposals: readonly TaskProposal[],
   newId: () => string,
   now: string,
+  meta: ProposalMeta | null = null,
 ): { state: PlanState; applianceId: string } {
   const error = validateNewAppliance(input)
   if (error) throw new Error(error)
@@ -65,6 +66,7 @@ export function addAppliance(
     tasks,
     approvedAt: null,
     startDate: null,
+    proposalMeta: meta,
   }
   return { state: { ...state, records: [...state.records, record] }, applianceId }
 }
@@ -94,11 +96,15 @@ export function removeAppliance(state: PlanState, applianceId: string): PlanStat
 }
 
 // Plans saved by an older version of Keeply are not migrated (pre-release prototype).
+// KEE-43: older plan snapshots (pre-meta) are read as records with no proposalMeta. The plan
+// page renders the all-general banner without a reason in that case.
 export function parseState(raw: string | null): PlanState {
   if (!raw) return EMPTY_STATE
   try {
-    const parsed = JSON.parse(raw) as PlanState
-    return parsed?.version === 2 && Array.isArray(parsed.records) ? parsed : EMPTY_STATE
+    const parsed = JSON.parse(raw) as PlanState & { records?: (ApplianceRecord & { proposalMeta?: ProposalMeta | null })[] }
+    if (parsed?.version !== 2 || !Array.isArray(parsed.records)) return EMPTY_STATE
+    const records = parsed.records.map((r) => ({ ...r, proposalMeta: r.proposalMeta ?? null }))
+    return { version: 2, records }
   } catch {
     return EMPTY_STATE
   }
