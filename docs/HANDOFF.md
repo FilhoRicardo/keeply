@@ -911,3 +911,27 @@ This is the MVP and replaces earlier wording where they conflict.
 -   §23 still applies (Phase 3 manual search with Brave Search +
     MiniMax, "verified only with a code-checked quote", tester invite
     code and caps).
+
+## 25. Hosted bring-your-own AI key (owner decision, 2026-10-05)
+
+Ricardo authorised a private hosted API-key settings screen, replacing
+the earlier restriction to self-hosted server environment keys. KEE-47
+implements MiniMax first, using the existing provider layer for appliance
+identification only. No maintenance-plan AI, manual retrieval or ChatGPT
+integration is part of this change.
+
+- Keeply Google account identity and AI credentials remain separate.
+  Personal keys require a signed-in, non-anonymous account.
+- Store keys encrypted on the server, scoped to the owning user. Never
+  return a stored key to the browser, put it in browser storage, or log it.
+  The owner can replace or remove their key.
+- Personal credentials take precedence over a server key; their failure
+  must never silently charge the app's provider account.
+- Retain invitations and atomic limits: five attempts per user per UTC
+  day, 100 across the app. Failed provider attempts still count.
+- MiniMax subscription/Token Plan keys are not supported in this hosted
+  BYO flow. Users supply API access permitted for their use and manage
+  spending with their provider. A scan limit is not a monetary budget.
+- Manual entry and human Confirm / Edit / Rescan remain available.
+- Deployment requires the credential migration, a server-only encryption
+  key and service-role credential; live access changes remain owner setup.
