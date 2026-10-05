@@ -166,5 +166,7 @@ grant execute on function public.scan_invite_status(), public.redeem_scan_invite
 alter table public.funnel_events drop constraint funnel_events_name_check;
 alter table public.funnel_events add constraint funnel_events_name_check check (name in (
   'scan_started', 'label_read', 'appliance_added', 'plan_proposed', 'plan_approved',
-  'calendar_connected', 'calendar_tasks_created', 'invite_redeemed', 'scan_denied'
+  'calendar_connected', 'calendar_tasks_created', 'invite_redeemed', 'scan_denied',
+  -- P3-5 (KEE-42): the plan search itself, with the search outcome (counts only).
+  'plan_search'
 ));
