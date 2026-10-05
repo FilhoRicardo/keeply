@@ -2,7 +2,7 @@
 
 PPM for your home: scan what you own, understand how to maintain it, and keep it working for longer.
 
-Status: MVP flow built (`docs/HANDOFF.md` §24): dishwasher (label photo → AI proposal → Confirm / Edit / Rescan, or typed) → proposed plan → Accept / Reject each task → Approval → accepted tasks become recurring Google Calendar events, managed there. The plan is general dishwasher guidance until manual search (Phase 3) lands. Scanning sits behind `NEXT_PUBLIC_KEEPLY_SCAN=1` and a server-side `MINIMAX_API_KEY`. Plan: `docs/HANDOFF.md`. How work is run: `AGENTS.md`. Module layout: `docs/architecture.md`.
+Status: MVP flow built (`docs/HANDOFF.md` §24): dishwasher (label photo → AI proposal → Confirm / Edit / Rescan, or typed) → proposed plan → Accept / Reject each task → Approval → accepted tasks become recurring Google Calendar events, managed there. Manual search finds the manufacturer's own manual (Brave Search), reads it with the AI, and shows each task with its page and verbatim quote; with no manufacturer manual the plan is honestly labelled general guidance. Scanning and search sit behind `NEXT_PUBLIC_KEEPLY_SCAN=1`, `MINIMAX_API_KEY` and `BRAVE_SEARCH_API_KEY` (all server-side). Plan: `docs/HANDOFF.md`. How work is run: `AGENTS.md`. Module layout: `docs/architecture.md`.
 
 ## Run it
 
@@ -31,11 +31,11 @@ CI runs all four on every pull request.
 1. Supabase (`xmilbvzbptmozwjphvsx`): run `supabase/migrations/` (`supabase db push`, or paste into the SQL Editor), then enable **Anonymous sign-ins**.
 2. Google Cloud: enable the Calendar API, configure the consent screen, create a Web OAuth client with redirect URI `https://<your-domain>/auth/google/callback`. Scope used: `calendar.events` only. Keeply talks to Google Calendar directly with this client; the Supabase Google provider (step 3) is only for signing in.
 3. Sign in with Google (optional, recommended): in Supabase → Authentication → Sign In / Providers enable **Google** (a Google OAuth client whose redirect URI is `https://xmilbvzbptmozwjphvsx.supabase.co/auth/v1/callback`) and **Manual linking** (anonymous visitors keep their plans when they sign in). Add the site URL under URL Configuration → Redirect URLs. This login is separate from the calendar consent in step 2.
-4. Vercel: set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`. The service-role key is not used by the app.
+4. Vercel: set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`. For scanning and manual search also set `NEXT_PUBLIC_KEEPLY_SCAN=1`, `MINIMAX_API_KEY`, `BRAVE_SEARCH_API_KEY` and the server-only `SUPABASE_SERVICE_ROLE_KEY` (the durable Brave quota and saved AI keys use it; without it the Brave quota check does nothing).
 
 ## Rules that the code enforces
 
-- AI label reading on public deployments only for invited testers: each scan reserves one billable attempt in Supabase first (5 per tester, 100 in total per UTC day; `docs/testers.md`). Refusals call nothing.
+- AI label reading on public deployments only for invited testers: each scan reserves one billable attempt in Supabase first (limits live in Supabase `scan_limits`; the live site uses 3 per tester and 100 in total per UTC day, and the owner's invite can be unlimited; `docs/testers.md`). Refusals call nothing.
 
 - Nothing reaches a calendar before Approval; rejected tasks never do. Approval needs every task decided and one accepted.
 - A proposed task is never rewritten (database trigger); the owner only accepts or rejects it.
