@@ -25,6 +25,6 @@ A visitor adds a dishwasher, by label photo (AI proposes; they Confirm, Edit or 
 
 ## Owner actions before production
 
-1. Supabase: run `supabase/reset-pre-mvp.sql` (projects set up with the earlier schema), then `supabase/migrations/20261005090000_mvp_schema.sql`; enable Anonymous sign-ins.
+1. Supabase: run `supabase/migrations/20261005090000_mvp_schema.sql`; enable Anonymous sign-ins.
 2. Google Cloud OAuth client (`calendar.events`), redirect `https://<domain>/auth/google/callback`.
 3. Vercel env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`.
