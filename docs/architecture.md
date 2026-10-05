@@ -8,7 +8,7 @@ Next.js (App Router) + TypeScript `strict`, pnpm, ESLint, Vitest. Verify with `p
 | `src/db/` | Supabase queries and row mappers. The only module that talks to Postgres. | `domain` |
 | `src/calendar/` | Google Calendar adapter and OAuth helpers behind a small `CalendarWriter` interface. | `domain` |
 | `src/ai/` | Server-only AI provider layer (`selectProvider`: ChatGPT-authorized → MiniMax → … → Manual). Holds any AI credentials; never imported by client code (`server-only`). Separate from Keeply login. | `domain` |
-| `src/search/` | Server-only manual search. Discovery: `searchManuals` (Brave Search client) and `rankCandidates` (pure ranking). Retrieval: `fetchDocument` (SSRF-safe https fetch with DNS pinning), `extractPages` (PDF/HTML to normalised `{page,text}`), and `normalizeText` (the one normaliser; `verifyQuote` must use it). Never imported by client code (`server-only`). | `domain` |
+| `src/search/` | Server-only manual search. Discovery: `searchManuals` (Brave Search client) and `rankCandidates` (pure ranking). Retrieval: `fetchDocument` (SSRF-safe https fetch with DNS pinning), `extractPages` (PDF/HTML to normalised `{page,text}`), and `normalizeText` (the one normaliser; `verifyQuote` must use it). Used by the plan proposer to surface candidates for the manufacturer's manual; never imported by client code (`server-only`). Hard-stops at the free quota (`BRAVE_FREE_QUOTA_PER_MONTH`, default 2000): a refused call does not advance the per-process counter. | `domain` |
 | `src/app/` | Routes and UI only. Calls domain, db and calendar; holds no business rules. | all of the above |
 
 ## MVP flow (docs/HANDOFF.md §24)

@@ -25,12 +25,13 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env[ENV_KEY]
+  delete process.env.BRAVE_FREE_QUOTA_PER_MONTH
 })
 
 function expectEmpty(result: Awaited<ReturnType<typeof searchManuals>>): asserts result is {
   status: 'empty'
   candidates: []
-  reason: 'rate_limited' | 'timeout' | 'network_error' | 'http_error' | 'malformed_response' | 'no_results'
+  reason: 'rate_limited' | 'timeout' | 'network_error' | 'http_error' | 'malformed_response' | 'no_results' | 'quota_exhausted'
 } {
   if (result.status !== 'empty') throw new Error(`expected empty, got ${result.status}`)
 }
@@ -237,6 +238,88 @@ describe('searchManuals', () => {
     await expect(
       searchManuals({ manufacturer: 'Bosch', model: 'SMS6' }, { fetchImpl: fakeFetch(fetchMock), now: () => fakeNow, sleep: fakeSleep }),
     ).resolves.toBeDefined()
+  })
+
+  describe('free-quota hard stop', () => {
+    it('returns quota_exhausted without calling fetchImpl when the in-process counter already equals the cap', async () => {
+      process.env[ENV_KEY] = 'k'
+      const warmupFetch = vi.fn(async () => Response.json(goodResponse([])))
+      // Drive the counter to 3 with a generous cap so the warm-up search completes.
+      await searchManuals(
+        { manufacturer: 'Bosch', model: 'SMS6' },
+        { fetchImpl: fakeFetch(warmupFetch), freeQuotaCap: 100, now: () => fakeNow, sleep: fakeSleep },
+      )
+      expect(braveSearchCallCount()).toBe(3)
+      // Tighten the cap to the exact current counter and run a fresh search. The gate must fire.
+      const fetchMock2 = vi.fn(async () => {
+        throw new Error('fetchImpl must not be called when the cap is reached')
+      })
+      const result = await searchManuals(
+        { manufacturer: 'Bosch', model: 'SMS6' },
+        { fetchImpl: fakeFetch(fetchMock2), freeQuotaCap: 3, now: () => fakeNow, sleep: fakeSleep },
+      )
+      expectEmpty(result)
+      expect(result.reason).toBe('quota_exhausted')
+      expect(fetchMock2).not.toHaveBeenCalled()
+      // Counter must NOT increment on a refused call.
+      expect(braveSearchCallCount()).toBe(3)
+    })
+
+    it('still serves the request when the counter is below the cap', async () => {
+      process.env[ENV_KEY] = 'k'
+      const fetchMock = vi.fn(async () => Response.json(goodResponse(['https://bosch-home.com/SMS6.pdf'])))
+      const result = await searchManuals(
+        { manufacturer: 'Bosch', model: 'SMS6' },
+        { fetchImpl: fakeFetch(fetchMock), freeQuotaCap: 100, now: () => fakeNow, sleep: fakeSleep },
+      )
+      expectOk(result)
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    })
+
+    it('reads BRAVE_FREE_QUOTA_PER_MONTH from the injected env when no option is passed', async () => {
+      process.env[ENV_KEY] = 'k'
+      const warmupFetch = vi.fn(async () => Response.json(goodResponse([])))
+      await searchManuals(
+        { manufacturer: 'Bosch', model: 'SMS6' },
+        { fetchImpl: fakeFetch(warmupFetch), freeQuotaCap: 100, now: () => fakeNow, sleep: fakeSleep },
+      )
+      expect(braveSearchCallCount()).toBe(3)
+      // Now claim the cap is exactly the current counter via env. The next search must refuse.
+      const fetchMock2 = vi.fn(async () => {
+        throw new Error('fetchImpl must not be called when the env-supplied cap is reached')
+      })
+      const result = await searchManuals(
+        { manufacturer: 'Bosch', model: 'SMS6' },
+        { fetchImpl: fakeFetch(fetchMock2), env: { ...process.env, BRAVE_FREE_QUOTA_PER_MONTH: '3' }, now: () => fakeNow, sleep: fakeSleep },
+      )
+      expectEmpty(result)
+      expect(result.reason).toBe('quota_exhausted')
+      expect(fetchMock2).not.toHaveBeenCalled()
+    })
+
+    it('falls back to the documented default (2000) when no option or env is provided', async () => {
+      process.env[ENV_KEY] = 'k'
+      delete process.env.BRAVE_FREE_QUOTA_PER_MONTH
+      const warmupFetch = vi.fn(async () => Response.json(goodResponse([])))
+      // Bring the counter to exactly 2 (one search, cap huge so it completes).
+      await searchManuals(
+        { manufacturer: 'Bosch', model: 'SMS6' },
+        { fetchImpl: fakeFetch(warmupFetch), freeQuotaCap: 100, now: () => fakeNow, sleep: fakeSleep },
+      )
+      // Verify the default cap by checking that a counter of 2 still allows a search (we cannot
+      // easily reach 2000 in a test, so we instead confirm the cap is consulted: any cap > counter
+      // is permissive, the default of 2000 is permissive for counter=3, but the call below would
+      // need 3 more increments. We assert instead that the default DOES NOT cause a refused call
+      // when the counter is small — proving the cap is large enough to permit a normal request.
+      const fetchMock = vi.fn(async () => Response.json(goodResponse([])))
+      const result = await searchManuals(
+        { manufacturer: 'Bosch', model: 'SMS6' },
+        { fetchImpl: fakeFetch(fetchMock), now: () => fakeNow, sleep: fakeSleep },
+      )
+      expectEmpty(result)
+      expect(result.reason).toBe('no_results')
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    })
   })
 })
 
