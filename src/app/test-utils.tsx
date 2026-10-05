@@ -5,6 +5,8 @@ import { PlanProvider } from './lib/plan-context'
 import { createDevicePlanRepository, memoryStorage, type PlanRepository } from './lib/plan-repository'
 import type { PlanProposer } from './lib/propose'
 import { noopSink, type EventSink } from './lib/track'
+import type { ProposalMeta, TaskProposal } from '@/domain/model'
+import type { NewApplianceInput } from './lib/plan-state'
 
 // A device repository on in-memory storage with readable ids: app-1, then task-1, task-2, …
 export function testRepository(): PlanRepository {
@@ -20,7 +22,11 @@ export function testRepository(): PlanRepository {
     },
     now: () => '2026-10-04T10:00:00Z',
   })
-  return { ...repo, addAppliance: (input, proposals) => ((next = 'app'), repo.addAppliance(input, proposals)) }
+  return {
+    ...repo,
+    addAppliance: (input: NewApplianceInput, proposals: readonly TaskProposal[], meta?: ProposalMeta | null) =>
+      ((next = 'app'), repo.addAppliance(input, proposals, meta)),
+  }
 }
 
 export function renderWithPlan(

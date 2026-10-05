@@ -9,6 +9,7 @@ import { approvalBlockers } from '@/domain/plan'
 import { CalendarPanel } from '../../../components/calendar-panel'
 import { CalendarReturnNotice } from '../../../components/calendar-return-notice'
 import { DeleteAppliance } from '../../../components/delete-appliance'
+import { PlanFallbackBanner } from '../../../components/plan-fallback-banner'
 import { LoadingPanel, NotFoundPanel } from '../../../components/screen'
 import { TaskCard } from '../../../components/task-card'
 import { fetchCalendarStatus, writeApprovedTasks, type CalendarStatus } from '../../../lib/calendar-client'
@@ -23,6 +24,10 @@ const BLOCKER_COPY = {
 
 // The proposed plan: Accept or Reject each task, pick a start date, approve. Only then are the
 // accepted tasks written to Google Calendar.
+//
+// KEE-43: every task shows source, page and the verbatim quote (TaskCard). When the live search
+// could not find a manufacturer manual, a PlanFallbackBanner explains why — the owner is never
+// shown general-guidance tasks without the disclaimer.
 export function PlanReview({ applianceId }: { applianceId: string }) {
   const router = useRouter()
   const { state, decide, approve, recordCalendarResults, accessToken, storageKind } = usePlan()
@@ -98,11 +103,15 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
         </p>
       </section>
 
-      <div className="plan-list">
+      {allGeneral && <PlanFallbackBanner meta={record.proposalMeta} />}
+
+      <ul className="plan-list">
         {record.tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onDecide={(d) => void decide(applianceId, task.id, d).catch(() => {})} />
+          <li key={task.id}>
+            <TaskCard task={task} onDecide={(d) => void decide(applianceId, task.id, d).catch(() => {})} />
+          </li>
         ))}
-      </div>
+      </ul>
 
       <label className="field aster-inner start-field">
         <span>First reminder on</span>

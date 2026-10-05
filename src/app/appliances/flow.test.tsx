@@ -20,14 +20,54 @@ vi.mock('next/navigation', () => ({
 
 type Calls = { url: string; body?: unknown }[]
 
-function mockFetch(status: { configured: boolean; connected: boolean }, calls: Calls, opts: { failWrites?: number } = {}) {
+function mockFetch(status: { configured: boolean; connected: boolean }, calls: Calls, opts: { failWrites?: number; plan?: 'disabled' | 'general' | 'verified' } = {}) {
   let failWrites = opts.failWrites ?? 0
+  const plan = opts.plan ?? 'general'
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, body: init?.body ? JSON.parse(init.body as string) : undefined })
       if (url === '/api/calendar/status') return Response.json(status)
       if (url === '/api/calendar/disconnect') return Response.json({ connected: false })
+      if (url === '/api/plan') {
+        // Default for the flow test: the live search is disabled, the proposer falls back to
+        // general guidance. Tests that exercise the UI banner with a real fallback override
+        // `plan: 'general'` or `plan: 'verified'`.
+        if (plan === 'disabled') return new Response(null, { status: 404 })
+        if (plan === 'general') {
+          return Response.json({
+            proposals: [
+              {
+                name: 'Clean the filter',
+                instructions: 'Twist out the filter at the bottom of the tub, rinse it under warm water.',
+                interval: { count: 1, unit: 'month' },
+                evidenceLevel: 'general_guidance',
+                source: { type: 'general_guidance', title: 'Keeply general dishwasher maintenance guidance', url: null, location: null, quote: null },
+              },
+              {
+                name: 'Run a cleaning cycle',
+                instructions: 'Run the hottest programme empty with a dishwasher cleaner.',
+                interval: { count: 1, unit: 'month' },
+                evidenceLevel: 'general_guidance',
+                source: { type: 'general_guidance', title: 'Keeply general dishwasher maintenance guidance', url: null, location: null, quote: null },
+              },
+              {
+                name: 'Check the spray arms',
+                instructions: 'Remove the spray arms, check they spin freely.',
+                interval: { count: 3, unit: 'month' },
+                evidenceLevel: 'general_guidance',
+                source: { type: 'general_guidance', title: 'Keeply general dishwasher maintenance guidance', url: null, location: null, quote: null },
+              },
+            ],
+            fallback: 'general',
+            searchOutcome: 'no_results',
+            searchReason: 'no_key',
+          })
+        }
+        // verified: covered by the manufacturer-guidance tests below; this path is never
+        // reached by the existing flow tests.
+        return new Response(null, { status: 500 })
+      }
       if (url === '/api/calendar/events') {
         if (failWrites-- > 0) return new Response(null, { status: 502 })
         const { drafts } = JSON.parse(init!.body as string) as { drafts: { taskId: string }[] }
@@ -93,7 +133,14 @@ describe('manual dishwasher → approved plan', () => {
     renderWithPlan(<PlanReview applianceId="app-1" />, repo)
 
     expect(await screen.findAllByRole('article')).toHaveLength(3)
-    expect(screen.getAllByText('General guidance')).toHaveLength(3)
+    // KEE-43: the plan screen also shows a fallback banner with the "General guidance" eyebrow
+    // when every task is general-guidance; we count the three per-task chips (not the banner).
+    const list = screen.getByRole('list') as HTMLElement
+    const cards = list.querySelectorAll('.plan-card')
+    expect(cards).toHaveLength(3)
+    const chips = list.querySelectorAll('.plan-card .evidence-badge')
+    expect(chips).toHaveLength(3)
+    expect(list.querySelectorAll('.evidence--manufacturer_verified')).toHaveLength(0)
     expect(screen.queryByText(/manufacturer verified/i)).not.toBeInTheDocument()
   })
 
@@ -135,7 +182,8 @@ describe('manual dishwasher → approved plan', () => {
     await decide('Check the spray arms', 'Reject')
     await screen.findByText('Google Calendar connected.')
     expect(screen.getByRole('button', { name: 'Approve and add 2 tasks to Google Calendar' })).toBeEnabled()
-    expect(calls.map((c) => c.url)).toEqual(['/api/calendar/status'])
+    // KEE-43: the live proposer is the default; the first call is /api/plan, then calendar status.
+    expect(calls.map((c) => c.url)).toEqual(['/api/plan', '/api/calendar/status'])
     expect((await record()).approvedAt).toBeNull()
 
     fireEvent.change(screen.getByLabelText('First reminder on'), { target: { value: '2026-10-05' } })

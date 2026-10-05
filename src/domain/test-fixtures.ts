@@ -36,6 +36,7 @@ export function record(overrides: Partial<ApplianceRecord> = {}): ApplianceRecor
     tasks: [task(), task({ id: 'task-rinse', name: 'Top up rinse aid', interval: { count: 1, unit: 'month' } })],
     approvedAt: null,
     startDate: null,
+    proposalMeta: null,
     ...overrides,
   }
 }

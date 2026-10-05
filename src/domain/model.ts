@@ -47,6 +47,26 @@ export type MaintenanceTask = TaskProposal & {
   readonly calendarEventId: string | null
 }
 
+// What the live plan proposer learned when it built this plan. Honest provenance of why the
+// owner is looking at a general-guidance list (KEE-43). The Supabase adapter does not yet
+// persist this; the field is then null after a Supabase round-trip and the plan page falls
+// back to a generic "we could not find a manual" message.
+export type ProposalMeta = {
+  readonly fallback: 'exact' | 'similar' | 'general'
+  readonly searchOutcome:
+    | 'ok'
+    | 'no_results'
+    | 'quota_exhausted'
+    | 'fetch_failed'
+    | 'extraction_unavailable'
+    | 'unreadable'
+    | 'no_text'
+    | 'timeout'
+    | 'unavailable'
+  readonly searchReason: string | null
+  readonly searched: boolean
+}
+
 // One dishwasher and its plan. After Approval the owner manages the tasks in their calendar.
 export type ApplianceRecord = {
   readonly appliance: Appliance
@@ -54,4 +74,7 @@ export type ApplianceRecord = {
   readonly approvedAt: string | null
   // First calendar date for every accepted task, chosen at Approval.
   readonly startDate: LocalDate | null
+  // Set when a live search (KEE-42 /api/plan) built this plan; null for the local
+  // general-guidance proposer and for any Supabase round-trip that does not yet persist it.
+  readonly proposalMeta: ProposalMeta | null
 }

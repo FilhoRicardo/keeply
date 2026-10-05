@@ -1,6 +1,6 @@
 import type { WriteResult } from '@/calendar/writer'
 import type { LocalDate } from '@/domain/dates'
-import type { TaskProposal } from '@/domain/model'
+import type { ProposalMeta, TaskProposal } from '@/domain/model'
 import type { Decision } from '@/domain/plan'
 import {
   addAppliance,
@@ -19,7 +19,11 @@ import {
 export interface PlanRepository {
   readonly kind: 'device' | 'supabase'
   load(): Promise<PlanState>
-  addAppliance(input: NewApplianceInput, proposals: readonly TaskProposal[]): Promise<{ state: PlanState; applianceId: string }>
+  addAppliance(
+    input: NewApplianceInput,
+    proposals: readonly TaskProposal[],
+    meta?: ProposalMeta | null,
+  ): Promise<{ state: PlanState; applianceId: string }>
   decide(applianceId: string, taskId: string, decision: Decision | null): Promise<PlanState>
   // The Approval action: the only way tasks become eligible for a calendar.
   approve(applianceId: string, startDate: LocalDate): Promise<PlanState>
@@ -88,8 +92,8 @@ export function createDevicePlanRepository({
   return {
     kind: 'device',
     load: async () => read(),
-    async addAppliance(input, proposals) {
-      const added = addAppliance(read(), input, proposals, newId, now())
+    async addAppliance(input, proposals, meta = null) {
+      const added = addAppliance(read(), input, proposals, newId, now(), meta)
       return { state: write(added.state), applianceId: added.applianceId }
     },
     decide: (applianceId, taskId, decision) => mutate((s) => decide(s, applianceId, taskId, decision)),

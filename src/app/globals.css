@@ -858,6 +858,67 @@ a {
   outline-offset: 3px;
 }
 
+/* KEE-43: honest "we could not find a manufacturer manual" banner on the plan page. Distinct
+   from the verified/similar evidence badges so the owner is never misled. */
+.plan-fallback {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid rgba(26, 86, 116, 0.35);
+  border-radius: 14px;
+  color: #1a4f6b;
+  background: rgba(26, 86, 116, 0.1);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.plan-fallback strong {
+  color: var(--aster-ink);
+  font-weight: 700;
+}
+
+.plan-fallback p {
+  margin: 0;
+}
+
+.plan-fallback-eyebrow {
+  font-family: var(--aster-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #1a4f6b;
+}
+
+/* "Looking for your manual…" progress message on the new-appliance form. */
+.form-progress {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: var(--aster-ink-2);
+  background: rgba(19, 115, 63, 0.08);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.form-progress::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: var(--aster-green);
+  vertical-align: middle;
+  animation: keeply-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes keeply-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
 .account-banner {
   margin-bottom: 14px;
 }
