@@ -1,24 +1,20 @@
 import type { EvidenceLevel } from './evidence'
+import { normalizeKeepLineBreaks, normalizeText } from './normalize'
 
 // Shortest quote (after normalising) that can verify anything; shorter text matches by accident.
 export const MIN_QUOTE_LENGTH = 20
 
-const normalise = (text: string, joinHyphenation: boolean) =>
-  text
-    .normalize('NFKC') // folds ligatures such as ﬁ -> fi
-    .replace(/­/g, '')
-    .replace(joinHyphenation ? /-\s*\n\s*/g : /(-)\s*\n\s*/g, joinHyphenation ? '' : '$1')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase()
-
 // True only when the quote appears verbatim in the document after normalising whitespace, case,
-// line-break hyphenation and ligatures. Exact substring match; never fuzzy.
+// line-break hyphenation and ligatures. Tries both joined (`dish-\nwasher` -> `dishwasher`) and
+// kept (`dish-\nwasher` -> `dish-washer`) hyphenation so genuine hyphenated compounds match too.
+// Exact substring match; never fuzzy.
 export function verifyQuote(documentText: string, quote: string): boolean {
-  return [true, false].some((join) => {
-    const q = normalise(quote, join)
-    return q.length >= MIN_QUOTE_LENGTH && normalise(documentText, join).includes(q)
-  })
+  const doc = normalizeText(documentText)
+  const docKept = normalizeKeepLineBreaks(documentText)
+  const q = normalizeText(quote)
+  const qKept = normalizeKeepLineBreaks(quote)
+  if (q.length >= MIN_QUOTE_LENGTH && doc.includes(q)) return true
+  return qKept.length >= MIN_QUOTE_LENGTH && docKept.includes(qKept)
 }
 
 export type EvidenceReason =
