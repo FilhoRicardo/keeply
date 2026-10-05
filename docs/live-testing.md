@@ -12,6 +12,7 @@ How the owner tests photo → AI proposal → Confirm / Edit / Rescan with a rea
 | Google Calendar | Configured for Vercel Preview and verified live (`docs/live-gates.md` G2). Locally it needs `GOOGLE_*` in `.env.local`. |
 | Vercel | Project `keeply` builds every push; the branch preview is the live test target until PR #4 is merged. |
 | Claude cloud sessions | Can reach MiniMax through the proxy-injected credential (test relay `scripts/minimax-proxy-relay.mjs`), but cannot give the owner a URL to open. They are for automated checks only. |
+| Plan proposer | `scripts/live-plan-check.mjs` drives the G10 plan-search gate (docs/live-gates.md G10) on a real Preview: manual add → `/api/plan` → plan page with source, page and quote → Accept / Reject → Approve → Google Calendar. Writes a row per case, with screenshots, the raw `/api/plan` response, and a single G10 evidence row. |
 
 ## Option A (recommended): private test on your Mac
 
