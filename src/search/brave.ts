@@ -133,7 +133,7 @@ function rankToSearchCandidate(ranked: RankedCandidate): SearchCandidate {
 
 function buildQueries(manufacturer: string, model: string): string[] {
   const head = `${manufacturer} ${model}`.trim()
-  return [`${head} user manual`, `${head} instruction manual`, `${head} maintenance`]
+  return [`${head} user manual`, `${head} manual filetype:pdf`, `${head} maintenance`]
 }
 
 export async function searchManuals(

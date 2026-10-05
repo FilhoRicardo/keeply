@@ -127,6 +127,19 @@ function safePageText(pages: ReadonlyArray<{ page: number; text: string }>, page
 
 const MAX_MANUAL_CANDIDATES = 3
 
+// The source resolver cannot tell from a URL which models a document covers, so we read the cover
+// pages: a manual whose first pages name the exact model (as a whole token, not a prefix of a longer
+// model number) covers it. A model mentioned only deeper in the document does not.
+const COVER_PAGES = 2
+
+function coversModel(pages: readonly { page: number; text: string }[], model: string): boolean {
+  const wanted = model.trim()
+  if (!wanted) return false
+  const escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const whole = new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, 'i')
+  return pages.some((p) => p.page <= COVER_PAGES && whole.test(p.text))
+}
+
 // Walks the ranked Brave candidates and tries each until one yields a manufacturer-verified plan.
 // If none of the top MAX_MANUAL_CANDIDATES yields a verified plan but at least one yields
 // similar-model tasks (same family), the similar-model tasks become the plan. Otherwise nothing
@@ -167,6 +180,8 @@ async function findPlans(
       continue
     }
     const resolved = deps.resolveSource(fetched.url)
+    const documentModels = [...resolved.documentModels]
+    if (coversModel(extracted.pages, args.model) && !documentModels.includes(args.model)) documentModels.push(args.model)
     const title = candidate.title
     for (const c of candidates) {
       const documentText = safePageText(extracted.pages, c.page)
@@ -174,7 +189,7 @@ async function findPlans(
         source: {
           url: fetched.url,
           page: c.page,
-          documentModels: [...resolved.documentModels],
+          documentModels,
           documentFamily: resolved.documentFamily,
         },
         model: { name: args.model, family: args.modelFamily },
