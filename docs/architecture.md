@@ -8,6 +8,7 @@ Next.js (App Router) + TypeScript `strict`, pnpm, ESLint, Vitest. Verify with `p
 | `src/db/` | Supabase queries and row mappers. The only module that talks to Postgres. | `domain` |
 | `src/calendar/` | Google Calendar adapter and OAuth helpers behind a small `CalendarWriter` interface. | `domain` |
 | `src/ai/` | Server-only AI provider layer (`selectProvider`: ChatGPT-authorized → MiniMax → … → Manual). Holds any AI credentials; never imported by client code (`server-only`). Separate from Keeply login. | `domain` |
+| `src/search/` | Server-only Brave Search client (`searchManuals`) plus a pure ranking module (`rankCandidates`). Used by the plan proposer to surface candidates for the manufacturer's manual; never imported by client code (`server-only`). | `domain` |
 | `src/app/` | Routes and UI only. Calls domain, db and calendar; holds no business rules. | all of the above |
 
 ## MVP flow (docs/HANDOFF.md §24)

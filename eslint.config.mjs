@@ -11,6 +11,7 @@ export const domainBoundary = {
       {
         patterns: [
           { regex: '(^|/)(db|calendar|app|ai)(/|$)|^@/(db|calendar|app|ai)', message: 'src/domain must not import from src/db, src/calendar, src/ai or src/app.' },
+          { regex: '(^|/)search(/|$)|^@/search', message: 'src/domain must not import from src/search.' },
           { regex: '^next(/|$)', message: 'src/domain must not import from next.' },
           { regex: '^@supabase/', message: 'src/domain must not import from @supabase/*.' },
         ],
