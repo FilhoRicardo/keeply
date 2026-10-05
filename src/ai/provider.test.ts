@@ -7,7 +7,7 @@ const fake = (kind: AiCandidate['kind'], available: boolean | 'throws'): AiCandi
     if (available === 'throws') throw new Error('misconfigured')
     return available
   },
-  create: () => ({ kind, identifyAppliance: async () => null }),
+  create: () => ({ kind, identifyAppliance: async () => null, extractTasks: async () => 'unavailable' }),
 })
 
 describe('selectProvider', () => {
@@ -50,5 +50,21 @@ describe('selectProvider', () => {
     )
     const provider = selectProvider({ env: { MINIMAX_API_KEY: 'k' }, fetch: fetchMock as unknown as typeof fetch })
     expect(await provider.identifyAppliance({ bytes: new Uint8Array([1]), mimeType: 'image/jpeg' })).toMatchObject({ model: 'SMS6ZCI49E' })
+  })
+
+  it('wires the MiniMax adapter to extractTasks through the same provider', async () => {
+    const body = { candidates: [{ task: 'Clean the filter', instructions: 'Rinse it.', interval: { count: 1, unit: 'month' }, page: 1, quote: 'Clean the filter every month.' }] }
+    const fetchMock = vi.fn(async () => Response.json({ choices: [{ message: { content: JSON.stringify(body) } }] }))
+    const provider = selectProvider({ env: { MINIMAX_API_KEY: 'k' }, fetch: fetchMock as unknown as typeof fetch })
+    const result = await provider.extractTasks({ model: 'MiniMax-M3', pages: [{ page: 1, text: 'Page one says: Clean the filter every month.' }] })
+    expect(result).toEqual([
+      { task: 'Clean the filter', instructions: 'Rinse it.', interval: { count: 1, unit: 'month' }, page: 1, quote: 'Clean the filter every month.' },
+    ])
+  })
+
+  it('returns "unavailable" for the Manual provider and any provider that has not implemented extraction yet', async () => {
+    expect(await manualProvider.extractTasks({ model: 'm', pages: [] })).toBe('unavailable')
+    const provider = selectProvider({ env: {} })
+    expect(await provider.extractTasks({ model: 'm', pages: [] })).toBe('unavailable')
   })
 })

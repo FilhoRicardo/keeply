@@ -1,4 +1,5 @@
 import 'server-only'
+import { EXTRACTION_INSTRUCTIONS, type ExtractedPage, parseExtractionReply, type ExtractedTaskCandidate } from './extraction'
 import { extractJsonObject, IDENTITY_INSTRUCTIONS, normaliseIdentity, type ApplianceIdentity, type LabelPhoto } from './identity'
 
 // MiniMax adapter. Everything MiniMax-specific stays in this file.
@@ -77,4 +78,57 @@ export async function identifyWithMiniMax(
   if (typeof content !== 'string') return null
   const reply = content.replace(/<think>[\s\S]*?<\/think>/g, '')
   return normaliseIdentity(extractJsonObject(reply))
+}
+
+// Maximum total characters of manual text we will send in one extraction call. MiniMax-M3 has a
+// large context window but a one-page at a time manual is plenty for a beta, and the smaller the
+// prompt the lower the billable token count.
+const MAX_PROMPT_CHARS = 60_000
+const MAX_PAGES = 30
+
+// Sends a manual's pages to MiniMax and returns the cleaned task candidates. The model may return
+// anything: malformed items are dropped by `parseExtractionReply` and never throw. A model reply
+// that points a candidate at a page that was not sent is also dropped. A non-2xx, an in-body
+// MiniMax error, a network timeout, or an aborted fetch throws `MiniMaxError`: the caller is
+// expected to catch and fall back to general guidance (the reservation has already been charged
+// and is never refunded, per docs/testers.md).
+export async function extractTasksWithMiniMax(
+  config: MiniMaxConfig,
+  pages: readonly ExtractedPage[],
+  fetchImpl: typeof fetch = fetch,
+): Promise<ExtractedTaskCandidate[]> {
+  if (pages.length === 0) return []
+  const safePages = pages.slice(0, MAX_PAGES)
+  const pageNumbers = new Set(safePages.map((p) => p.page))
+  const pagesText = safePages
+    .map((p) => `[Page ${p.page}]\n${p.text}`)
+    .join('\n\n')
+    .slice(0, MAX_PROMPT_CHARS)
+  const response = await fetchImpl(`${config.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        { role: 'system', content: EXTRACTION_INSTRUCTIONS },
+        { role: 'user', content: pagesText },
+      ],
+      // Manual reading needs no long reasoning; keep any that happens out of the content.
+      thinking: { type: 'disabled' },
+      reasoning_split: true,
+      temperature: 0.1,
+      max_tokens: 2000,
+    }),
+    signal: AbortSignal.timeout(60_000),
+  })
+  if (!response.ok) throw new MiniMaxError(`MiniMax rejected the request (${response.status})`, response.status)
+  const body = (await response.json()) as {
+    choices?: { message?: { content?: unknown } }[]
+    base_resp?: { status_code?: number; status_msg: string }
+  }
+  if (body.base_resp?.status_code) throw new MiniMaxError(`MiniMax error ${body.base_resp.status_code}: ${body.base_resp.status_msg ?? ''}`)
+  const content = body.choices?.[0]?.message?.content
+  if (typeof content !== 'string') return []
+  const reply = content.replace(/<think>[\s\S]*?<\/think>/g, '')
+  return parseExtractionReply(reply, pageNumbers)
 }
