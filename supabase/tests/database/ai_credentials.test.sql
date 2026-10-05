@@ -3,6 +3,8 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 set search_path = public, extensions;
+-- The local CI stub omits service_role's access to the test extension schema.
+grant usage on schema extensions to service_role;
 
 select plan(19);
 
