@@ -1,3 +1,4 @@
+import { NextResponse, type NextRequest } from 'next/server'
 import type { CalendarEventDraft } from '@/domain/calendar-event'
 import { isLocalDate } from '@/domain/dates'
 
@@ -70,4 +71,23 @@ export function parseTaskRequest(body: unknown): { applianceId: string; taskIds:
 export function bearerToken(header: string | null): string | null {
   const match = /^Bearer (\S+)$/.exec(header ?? '')
   return match ? match[1] : null
+}
+
+// Stops a credentialed cross-site "simple" POST. Browsers send Origin on every fetch and on most
+// navigation POSTs, so a missing or mismatched Origin is not a same-origin request. SameSite=Lax
+// alone does not cover every shape of cross-site write (e.g. form posts without a cookie).
+export function enforceSameOrigin(request: NextRequest): NextResponse | null {
+  const origin = request.headers.get('origin')
+  if (origin && origin === request.nextUrl.origin) return null
+  return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+}
+
+// request.json() happily parses text/plain, so an attacker can still send a body that looks like
+// JSON. Browsers set Content-Type to application/json for fetch(), so requiring it is safe.
+export function enforceJsonContentType(request: NextRequest): NextResponse | null {
+  const raw = request.headers.get('content-type')?.trim().toLowerCase() ?? ''
+  // Charset (e.g. "application/json; charset=utf-8") is allowed; anything else is not JSON.
+  const mediaType = raw.split(';', 1)[0]?.trim() ?? ''
+  if (mediaType === 'application/json') return null
+  return NextResponse.json({ error: 'unsupported_media_type' }, { status: 415 })
 }

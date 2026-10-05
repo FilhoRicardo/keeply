@@ -5,19 +5,27 @@ import { writeEvents, type CalendarWriter } from '@/calendar/writer'
 import { loadApplianceTree } from '@/db/queries'
 import { toApplianceRecord } from '@/db/rows'
 import { draftsForTasks, type CalendarEventDraft } from '@/domain/calendar-event'
-import { bearerToken, parseDrafts, parseTaskRequest, TOKEN_COOKIE } from '../../../lib/calendar-session'
+import {
+  bearerToken,
+  enforceJsonContentType,
+  enforceSameOrigin,
+  parseDrafts,
+  parseTaskRequest,
+  TOKEN_COOKIE,
+} from '../../../lib/calendar-session'
 
 type Drafts = { drafts: CalendarEventDraft[] } | { error: string; status: number }
 
-// With Supabase configured, the server loads the approved plan itself under the caller's session
-// (RLS), so a browser can only ever write its owner's accepted, approved tasks.
+// Non-negotiable 1: nothing is written to a calendar before the owner has approved the plan.
+// In Supabase mode the server loads the approved plan itself under the caller's session (RLS),
+// so a browser can only ever write its owner's accepted, approved tasks.
 async function draftsFromSupabase(request: NextRequest, body: unknown, url: string, anonKey: string): Promise<Drafts> {
   const ask = parseTaskRequest(body)
   if (!ask) return { error: 'invalid_request', status: 400 }
   const userToken = bearerToken(request.headers.get('authorization'))
   if (!userToken) return { error: 'not_signed_in', status: 401 }
   const db = createClient(url, anonKey, {
-    global: { headers: { Authorization: `Bearer ${userToken}` } },
+    global: { headers: { Authorization: 'Bearer ' + userToken } },
     auth: { persistSession: false, autoRefreshToken: false },
   })
   const tree = await loadApplianceTree(db, ask.applianceId)
@@ -41,6 +49,12 @@ function watchUnauthorised(writer: CalendarWriter) {
 }
 
 export async function POST(request: NextRequest) {
+  // Same-origin first: a cross-site POST should not even learn whether a token exists.
+  const originGuard = enforceSameOrigin(request)
+  if (originGuard) return originGuard
+  const contentTypeGuard = enforceJsonContentType(request)
+  if (contentTypeGuard) return contentTypeGuard
+
   const accessToken = request.cookies.get(TOKEN_COOKIE)?.value
   if (!accessToken) return NextResponse.json({ error: 'not_connected' }, { status: 401 })
 
@@ -52,7 +66,12 @@ export async function POST(request: NextRequest) {
     if ('error' in loaded) return NextResponse.json({ error: loaded.error }, { status: loaded.status })
     drafts = loaded.drafts
   } else {
-    // Device storage: the plan only exists in the browser, so it sends validated drafts.
+    // Device storage exists for local dev and e2e. In production Supabase is always configured and
+    // the only source of truth for approval; the raw-drafts path would let any browser write any
+    // shape-valid drafts to Google with no server-side Approval proof, breaking non-negotiable 1.
+    if (process.env.VERCEL_ENV === 'production') {
+      return NextResponse.json({ error: 'storage_unavailable' }, { status: 503 })
+    }
     const parsed = parseDrafts(body)
     if (!parsed) return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
     drafts = parsed
