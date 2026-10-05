@@ -162,7 +162,7 @@ export function PlanProvider({
         let proposed = { tasks: 0, verified: 0 }
         await apply(async () => {
           // The live proposer returns { proposals, meta }; a stub returns TaskProposal[].
-          const raw = await proposer({ manufacturer: input.manufacturer.trim(), model: input.model.trim() || null })
+          const raw = await proposer({ manufacturer: input.manufacturer.trim(), model: input.model.trim() || null }, { accessToken })
           const { proposals, meta }: { proposals: TaskProposal[]; meta: ProposalMeta | null } = Array.isArray(raw)
             ? { proposals: raw, meta: null }
             : raw

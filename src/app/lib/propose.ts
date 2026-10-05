@@ -13,6 +13,7 @@ import { createApiPlanProposer, type LiveProposalResult } from './api-plan-propo
 
 export type PlanProposer = (
   appliance: Pick<Appliance, 'manufacturer' | 'model'>,
+  session?: { accessToken?: () => Promise<string | null> },
 ) => Promise<TaskProposal[] | LivePlanProposerResult>
 
 export type LivePlanProposerResult = {
@@ -23,8 +24,8 @@ export type LivePlanProposerResult = {
 // KEE-43: the live proposer is now the default. It returns the proposals and the
 // `proposalMeta` (fallback + searchOutcome + searchReason + searched flag) that the plan
 // page reads from the record.
-export const livePlanProposer: PlanProposer = async ({ manufacturer, model }) => {
-  const result = await callLive({ manufacturer: manufacturer.trim(), model: model?.trim() || null })
+export const livePlanProposer: PlanProposer = async ({ manufacturer, model }, session) => {
+  const result = await callLive({ manufacturer: manufacturer.trim(), model: model?.trim() || null }, session?.accessToken)
   if (result.proposals.length > 0) {
     return { proposals: result.proposals, meta: toMeta(result) }
   }
@@ -49,10 +50,10 @@ function toMeta(result: LiveProposalResult): ProposalMeta {
 export const generalGuidanceProposer: PlanProposer = async () => [...GENERAL_DISHWASHER_TASKS]
 
 // A package-private helper for tests and for callers that want the raw outcome.
-export async function callLive(input: {
-  manufacturer: string
-  model: string | null
-}): Promise<LiveProposalResult> {
-  const propose = createApiPlanProposer()
+export async function callLive(
+  input: { manufacturer: string; model: string | null },
+  accessToken?: () => Promise<string | null>,
+): Promise<LiveProposalResult> {
+  const propose = createApiPlanProposer({ accessToken })
   return propose(input)
 }

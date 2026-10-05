@@ -72,10 +72,17 @@ function addressFamily(ip: string): 4 | 6 {
 // `https.request` still uses the hostname for SNI and the Host header (set explicitly below),
 // but the actual socket goes to the pinned IP — defeating DNS rebinding that returns a public
 // IP at validation time and a private one at connect time.
-function pinnedLookup(pinned: string[]) {
-  return (_host: string, _opts: unknown, cb: (err: Error | null, address: string, family: number) => void) => {
+export function pinnedLookup(pinned: string[]) {
+  return (
+    _host: string,
+    opts: { all?: boolean },
+    cb: (err: Error | null, address: string | { address: string; family: number }[], family?: number) => void,
+  ) => {
     const [address] = pinned
-    cb(null, address, addressFamily(address))
+    const family = addressFamily(address)
+    // Node 20+ asks for every address (`all: true`) and rejects a single-address answer.
+    if (opts?.all) cb(null, [{ address, family }])
+    else cb(null, address, family)
   }
 }
 
