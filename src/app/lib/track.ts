@@ -13,6 +13,7 @@ export type FunnelEvent =
   | { name: 'calendar_tasks_created'; count: number }
   | { name: 'invite_redeemed' }
   | { name: 'scan_denied'; reason: AccessDenial }
+  | { name: 'plan_search'; outcome: 'ok' | 'no_results' | 'quota_exhausted' | 'fetch_failed' | 'extraction_unavailable' | 'unreadable' | 'no_text' | 'timeout' }
 
 export type EventSink = (event: FunnelEvent) => void
 
