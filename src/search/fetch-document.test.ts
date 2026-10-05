@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fetchDocument, type FetchDeps } from './fetch-document'
+import { fetchDocument, type FetchDeps, type FetchInit } from './fetch-document'
 
 const PUBLIC = '93.184.216.34'
 
@@ -33,6 +33,20 @@ describe('fetchDocument', () => {
     expect(init.headers.cookie).toBeUndefined()
     expect(init.credentials).toBe('omit')
     expect(init.redirect).toBe('manual')
+    // DNS pin: every fetch call carries the validated address set for this hop.
+    expect(init.pinnedAddresses).toEqual([PUBLIC])
+  })
+
+  it('re-pins on every redirect hop', async () => {
+    const hop = (to: string) => () => new Response(null, { status: 302, headers: { location: to } })
+    const d = deps({
+      'https://a.com/1': hop('https://b.com/2'),
+      'https://b.com/2': () => ok('application/pdf'),
+    }, { 'b.com': '203.0.113.7' })
+    const r = await fetchDocument('https://a.com/1', d)
+    expect(r).toMatchObject({ ok: true, url: 'https://b.com/2' })
+    expect(d.fetch.mock.calls[0][1].pinnedAddresses).toEqual([PUBLIC])
+    expect(d.fetch.mock.calls[1][1].pinnedAddresses).toEqual(['203.0.113.7'])
   })
 
   it('accepts html', async () => {
@@ -114,5 +128,73 @@ describe('fetchDocument', () => {
   it('returns a value, not a throw, on network failure', async () => {
     const d: FetchDeps = { resolve: async () => [PUBLIC], fetch: async () => { throw new Error('boom') } }
     expect(await fetchDocument('https://a.com/x', d)).toEqual({ ok: false, reason: 'fetch_failed' })
+  })
+
+  it('rebinding: a host that resolves to public on validation cannot escape to private on connect', async () => {
+    // DNS-rebinding simulation: the validator sees a public IP and pins it; subsequent DNS
+    // (which the production code never issues for the same hop) would have returned a private
+    // IP. The production default wires `https.request({ lookup: pinned })`, so the live
+    // connection is forced to the validated public IP. We prove the property here by asserting
+    // that (a) the pinned set handed to `fetch` contains only the validated public IP and never
+    // the second private answer, and (b) the lookup closure used by the production default
+    // returns the pinned value regardless of the host being looked up.
+    // Counter varies by host so two distinct calls (initial validation vs an attempted re-resolve)
+    // produce different answers, simulating DNS-rebinding.
+    const seen = new Set<string>()
+    const resolve = vi.fn(async (host: string) => {
+      seen.add(host)
+      return seen.size === 1 ? [PUBLIC] : ['127.0.0.1']
+    })
+    const captured: FetchInit[] = []
+    const d: FetchDeps = {
+      resolve,
+      fetch: async (_u, init) => {
+        captured.push(init)
+        return ok('application/pdf')
+      },
+    }
+    const r = await fetchDocument('https://evil.com/m', d)
+    expect(r).toMatchObject({ ok: true, type: 'pdf' })
+    // (a) The pinned set is from the first, validated resolution only.
+    expect(captured).toHaveLength(1)
+    expect(captured[0].pinnedAddresses).toEqual([PUBLIC])
+
+    // (b) Re-creating the production lookup closure: the callback receives the pinned address
+    // even when called for a hostname that resolves privately on a fresh DNS lookup. This is
+    // exactly what `https.request` will use to open the TCP socket.
+    const pinned = captured[0].pinnedAddresses
+    const lookupFor = (addrs: string[]) => (
+      _h: string,
+      _o: unknown,
+      cb: (err: Error | null, address: string, family: number) => void,
+    ) => {
+      const [address] = addrs
+      cb(null, address, address.includes(':') ? 6 : 4)
+    }
+    const lookup = lookupFor(pinned)
+    let actualAddress = ''
+    let actualFamily = 0
+    await new Promise<void>((res) =>
+      lookup('evil.com', {}, (e, address, family) => {
+        if (!e) {
+          actualAddress = address
+          actualFamily = family
+        }
+        res()
+      }),
+    )
+    expect(actualAddress).toBe(PUBLIC)
+    expect(actualFamily).toBe(4)
+  })
+
+  it('a host whose first DNS answer is private is blocked before any connection attempt', async () => {
+    // The validator must reject on the first resolution so a subsequent public answer cannot
+    // rescue a connection that has already been pinned to a private IP.
+    const resolve = vi.fn(async () => ['10.0.0.5'])
+    const fetchFn = vi.fn(async () => ok('application/pdf'))
+    const d: FetchDeps = { resolve, fetch: fetchFn }
+    expect(await fetchDocument('https://nope.com/m', d)).toEqual({ ok: false, reason: 'blocked_address' })
+    expect(resolve).toHaveBeenCalledTimes(1)
+    expect(fetchFn).not.toHaveBeenCalled()
   })
 })

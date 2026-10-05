@@ -1,7 +1,7 @@
 import 'server-only'
 import { getDocumentProxy } from 'unpdf'
+import { normalizeText } from '@/domain/normalize'
 import type { DocType } from './fetch-document'
-import { normalizeText } from './normalize'
 
 export interface Page {
   page: number
