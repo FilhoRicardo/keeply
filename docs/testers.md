@@ -43,6 +43,14 @@ Change the limits (for example, pause all AI scans with `global_daily = 0`):
 update public.scan_limits set per_tester_daily = 5, global_daily = 100;
 ```
 
+Make your own account unlimited (no per-tester or daily ceiling; its scans are still counted). Create an invite with the note `Owner`, redeem it from your own signed-in account, then:
+
+```sql
+update public.scan_invites set unlimited = true where note = 'Owner';
+```
+
+Only the owner can set this flag; visitors cannot read or change invites. Remove it with `set unlimited = false`.
+
 ## Before inviting anyone
 
 AI for other people needs a key whose terms allow serving other users. MiniMax describes its Token Plan as being for individual, interactive developer use and recommends pay-as-you-go for production. It also needs spending controls on that key. See `docs/live-gates.md` G7.
