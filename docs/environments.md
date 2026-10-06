@@ -8,8 +8,7 @@ for the production setup, and `docs/live-gates.md` for what has been
 verified live.
 
 If a setting is not in this table, it is either a constant in the code
-(for example, `MINIMAX_BASE_URL`, which has a correct default and is
-intentionally not exposed) or an OAuth-screen configuration in Google
+(for example, the MiniMax model default) or an OAuth-screen configuration in Google
 Cloud / Supabase, which the README's "Go live" list covers step by step.
 Do not invent a new location; add it here first.
 
@@ -19,7 +18,7 @@ Do not invent a new location; add it here first.
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | `.env.local` / Vercel | no (public anon URL) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `.env.local` / Vercel | no (anon key; RLS protects data) |
-| `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` / Vercel | **yes** (server only; bypasses RLS) |
+| `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` / Vercel | **yes** (server only; bypasses RLS; also needed for the durable Brave quota) |
 | `KEEPLY_AI_KEY_ENCRYPTION_KEY` | `.env.local` / Vercel | **yes** (server only; AES-256-GCM key) |
 | `GOOGLE_CLIENT_ID` | `.env.local` / Vercel | no (public OAuth client id) |
 | `GOOGLE_CLIENT_SECRET` | `.env.local` / Vercel | **yes** (server only) |
@@ -29,7 +28,7 @@ Do not invent a new location; add it here first.
 | `BRAVE_FREE_QUOTA_PER_MONTH` | `.env.local` / Vercel | no (counter cap; override only for self-hosted tests) |
 | `MINIMAX_API_KEY` | `.env.local` / Vercel | **yes** (server only; never `NEXT_PUBLIC_*`) |
 | `MINIMAX_MODEL` | `.env.local` / Vercel | no (model name) |
-| `MINIMAX_BASE_URL` | constant in code (`src/ai/minimax.ts`) | no (intentionally not a setting) |
+| `MINIMAX_BASE_URL` | `.env.local` / Vercel (optional) | no (defaults to `https://api.minimax.io/v1`; set for the mainland host) |
 | `KEEPLY_SCAN_ACCESS` | `.env.local` / Vercel | no (scan-access mode; "invite" is the safe default) |
 
 ### Local development (`.env.local`)
@@ -85,7 +84,7 @@ Supabase but are code (`supabase/migrations/`), not settings.
 | Setting | Where | Notes |
 |---|---|---|
 | Calendar API enabled | Google Cloud → APIs & Services → Library | Required for the MVP write |
-| OAuth consent screen | Google Cloud → APIs & Services → OAuth consent screen | External; the owner is the only test user during preview |
+| OAuth consent screen | Google Cloud → APIs & Services → OAuth consent screen | External, in Testing mode: only listed test users can connect |
 | OAuth client "Keeply" | Google Cloud → APIs & Services → Credentials | Web client; redirect URI `https://<your-domain>/auth/google/callback` |
 | Test users | Google Cloud → Auth Platform → Audience | Up to 100 invited testers (G7) |
 
