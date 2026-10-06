@@ -31,7 +31,7 @@ export function NewApplianceForm() {
       // banner — which is reserved for network and storage failures — is not triggered.
       const result = await addAppliance(input)
       if (result.kind === 'no_plan') {
-        setError('No plan could be built for this appliance. Try a different category, or look up the manufacturer’s manual online.')
+        setError('No plan could be built for this appliance because Keeply found no manufacturer manual for this model. Check the model number, or look up the manufacturer’s manual online.')
         setBusy(false)
         return
       }
