@@ -188,11 +188,13 @@ test('fridge + no manual (manual entry): one plain message, no provider banner, 
   await page.getByRole('button', { name: 'Continue to maintenance plan' }).click()
 
   // Exactly one alert — the local form message — and no provider banner.
-  const alerts = page.getByRole('alert')
+  // A bare `page.getByRole('alert')` also matches Next.js's hidden route announcer,
+  // so scope the locator to the form before counting alerts.
+  const alerts = page.locator('form').getByRole('alert')
   await expect(alerts).toHaveCount(1)
   await expect(alerts.first()).toContainText(/no plan could be built for this appliance/i)
-  await expect(page.getByText(/could not reach your plan/i)).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0)
+  await expect(page.getByText(/could not reach your plan/i)).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Continue to maintenance plan' })).toBeEnabled()
   await expect(page).toHaveURL(/\/appliances\/new$/)
   await page.screenshot({ path: 'test-results/kee-60-fridge-manual-result.png' })
