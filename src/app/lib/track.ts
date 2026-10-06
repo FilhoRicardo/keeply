@@ -6,7 +6,10 @@ import type { AccessDenial } from '@/domain/identification'
 export type FunnelEvent =
   | { name: 'scan_started' }
   | { name: 'label_read'; recognised: boolean }
-  | { name: 'appliance_added'; scanned: boolean }
+  // KEE-60: `plan: 'none'` is the no_plan outcome (no manual found, not a dishwasher). For
+  // every other appliance (or when a manual was found) `plan` is omitted; tracking stays
+  // a small counts-only funnel so no appliance-specific facts leak.
+  | { name: 'appliance_added'; scanned: boolean; plan?: 'none' }
   | { name: 'plan_proposed'; tasks: number; verified: number }
   | { name: 'plan_approved'; accepted: number; rejected: number }
   | { name: 'calendar_connected' }

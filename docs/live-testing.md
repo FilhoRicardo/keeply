@@ -42,7 +42,7 @@ Prepared, not done: these steps put your key on Vercel, so they are yours to tak
 
 1. A clear photo of the rating plate. Check each proposed field against the plate, especially look-alike characters (V/Y, 0/O, 1/I, 5/S, 8/B). Then Confirm.
 2. The same plate again: Edit a field, then Confirm. An edited record keeps no AI confidence.
-3. A photo of the whole dishwasher with no plate visible. Expect the neutral "could not read a dishwasher label" message and the manual form, with nothing invented.
+3. A photo of the whole appliance with no plate visible. Expect the neutral "could not read a label" message and the manual form, with nothing invented. For non-dishwasher appliances the manual form is the only path: Keeply does not invent tasks when no manufacturer manual was found.
 4. A blurry or very dark plate, then Rescan.
 5. Reload the page: the appliance stays on Home.
 

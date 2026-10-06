@@ -1,7 +1,9 @@
 import type { Source, TaskProposal } from './model'
 
-// Used when no manufacturer guidance was found for the model. Honestly General guidance:
-// never present these as verified.
+// KEE-60: the only hand-curated general-guidance list. Dishwashers only. Other appliances show
+// an honest "no plan could be built" message unless a manufacturer manual was located. The list
+// is kept here (not in plan-orchestration) so a no-AI deployment still has something to render
+// for dishwashers and the migration's evidence_supported check stays unchanged.
 export const GENERAL_DISHWASHER_SOURCE: Source = {
   type: 'general_guidance',
   title: 'Keeply general dishwasher maintenance guidance',

@@ -5,7 +5,9 @@ import { applianceName } from '@/domain/calendar-event'
 import { usePlan } from './lib/plan-context'
 import type { ApplianceRecord } from '@/domain/model'
 
-function DishwasherIcon() {
+// KEE-60: the appliance glyph is appliance-agnostic (a generic box). Renamed from
+// DishwasherIcon; the shape and the CSS class are unchanged.
+function ApplianceIcon() {
   return (
     <span className="appliance-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" role="img">
@@ -38,7 +40,7 @@ export function ApplianceList() {
   if (!state) {
     return (
       <div className="empty-state aster-inner" aria-busy="true">
-        <DishwasherIcon />
+        <ApplianceIcon />
         <p>Loading your appliances…</p>
       </div>
     )
@@ -48,10 +50,10 @@ export function ApplianceList() {
   if (records.length === 0) {
     return (
       <div className="empty-state aster-inner">
-        <DishwasherIcon />
+        <ApplianceIcon />
         <div>
           <h3>No appliances yet.</h3>
-          <p>Add your dishwasher to start building its maintenance plan.</p>
+          <p>Add your first appliance to start building its maintenance plan.</p>
         </div>
       </div>
     )
@@ -65,7 +67,7 @@ export function ApplianceList() {
         return (
           <li key={appliance.id}>
             <Link className="appliance-row aster-inner" href={href}>
-              <DishwasherIcon />
+              <ApplianceIcon />
               <span>
                 <strong>{applianceName(appliance)}</strong>
                 <small>{summary(record)}</small>

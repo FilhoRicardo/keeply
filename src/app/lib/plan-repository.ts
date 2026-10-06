@@ -28,7 +28,8 @@ export interface PlanRepository {
   // The Approval action: the only way tasks become eligible for a calendar.
   approve(applianceId: string, startDate: LocalDate): Promise<PlanState>
   recordCalendarResults(applianceId: string, results: readonly WriteResult[]): Promise<PlanState>
-  // Removes the dishwasher and its tasks from Keeply (not from the calendar).
+  // Removes the appliance and its tasks from Keeply (not from the calendar). KEE-60: pre-KEE-60
+  // wording kept as a migration comment for traceability; the implementation is identical.
   deleteAppliance(applianceId: string): Promise<PlanState>
   // Bearer token for server routes that act on this user's plan (Supabase only).
   accessToken?(): Promise<string | null>

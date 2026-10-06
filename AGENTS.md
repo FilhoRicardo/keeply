@@ -2,7 +2,7 @@
 
 ## Identity
 
-Route here for work on Keeply (`active/Keeply/`). Outcome: a mobile-first PWA where a user photographs a dishwasher and, in about a minute, gets an evidence-labelled maintenance plan, accepts or rejects each task, and has only the accepted tasks written to Google Calendar, where the owner manages them. Working name; branding is an open decision.
+Route here for work on Keeply (`active/Keeply/`). Outcome: a mobile-first PWA where a user photographs a household appliance and, in about a minute, gets an evidence-labelled maintenance plan, accepts or rejects each task, and has only the accepted tasks written to Google Calendar, where the owner manages them. Working name; branding is an open decision.
 
 ## Source of Truth
 
@@ -27,7 +27,7 @@ Route here for work on Keeply (`active/Keeply/`). Outcome: a mobile-first PWA wh
 3. Never rewrite what a source recommends: the owner only accepts or rejects each proposed task (MVP decision 2026-10-04, `docs/HANDOFF.md` §24).
 4. After Approval the owner manages tasks in their calendar; Keeply does not track completions or reschedule (§24 replaces the earlier completion-based rule).
 5. AI is never the authoritative source for maintenance intervals; provenance is first-class data.
-6. Dishwashers only. Mobile-first. Keep infrastructure near €0 (Vercel + Supabase free tiers).
+6. Any household appliance (widened from dishwashers only by Ricardo, KEE-59, 2026-10-06). Without a manufacturer manual only dishwashers get the built-in general list. Mobile-first. Keep infrastructure near €0 (Vercel + Supabase free tiers).
 7. AI access goes through a provider layer (ChatGPT-authorized / BYO API key / Keeply-hosted / manual) that is separate from Keeply account authentication; Manual must always work. See `docs/HANDOFF.md` §22.
 8. **ChatGPT integration: research first.** Before writing any code for Sign in with ChatGPT, research the current official OpenAI documentation and return an implementation plan with links to it. Do not code that portion until the capability and requirements are verified. Never treat it as ordinary OAuth, a key-paste flow, or social login, and never expose OpenAI credentials client-side.
 

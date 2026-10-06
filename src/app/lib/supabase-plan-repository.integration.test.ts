@@ -166,7 +166,9 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('POST /api/calendar/events with Supabase'
       expect(response.status).toBe(200)
       const { results } = await response.json()
       expect(results.map((r: { taskId: string }) => r.taskId)).toEqual([ids[0], ids[1]])
-      expect(google).toEqual(['Clean the filter · Bosch SMS6ZCI49E dishwasher', 'Run a cleaning cycle · Bosch SMS6ZCI49E dishwasher'])
+      // KEE-60: applianceName no longer appends " dishwasher" — the calendar event summary is
+      // just "Clean the filter · Bosch SMS6ZCI49E" because Keeply is no longer dishwasher-only.
+      expect(google).toEqual(['Clean the filter · Bosch SMS6ZCI49E', 'Run a cleaning cycle · Bosch SMS6ZCI49E'])
 
       expect((await call(OTHER, { applianceId, taskIds: [ids[0]] })).status).toBe(404)
       expect((await call(null, { applianceId, taskIds: [ids[0]] })).status).toBe(401)

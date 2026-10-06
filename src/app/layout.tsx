@@ -6,7 +6,7 @@ import { ServiceWorkerRegistration } from './service-worker-registration'
 
 export const metadata: Metadata = {
   title: 'Keeply',
-  description: 'Planned preventive maintenance for your dishwasher.',
+  description: 'Planned preventive maintenance for your household appliances.',
   applicationName: 'Keeply',
   manifest: '/manifest.webmanifest',
   icons: {

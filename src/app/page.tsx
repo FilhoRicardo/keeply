@@ -48,7 +48,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="site-footer aster-mono">Dishwashers only</footer>
+      <footer className="site-footer aster-mono">Household appliances</footer>
     </div>
   )
 }

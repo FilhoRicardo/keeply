@@ -1,17 +1,20 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { usePlan } from '../../lib/plan-context'
 import { validateNewAppliance, type NewApplianceInput } from '../../lib/plan-state'
 
-// Adds a confirmed dishwasher. While the live search (KEE-42 /api/plan) is in flight the form
-// shows a "looking for your manual" progress message so the owner is not staring at a button
-// that may take ~25 s to respond.
+// Adds a confirmed appliance. KEE-60: any household appliance, not only dishwashers. The category
+// field defaults to "Dishwasher" (the pre-KEE-60 default) so the existing dishwasher flow keeps
+// working, but the owner can change it to anything (Fridge, Washing machine, etc.). While the
+// live search (KEE-42 /api/plan) is in flight the form shows a "looking for your manual"
+// progress message so the owner is not staring at a button that may take ~25 s to respond.
 export function NewApplianceForm() {
   const router = useRouter()
+  const id = useId()
   const { addAppliance } = usePlan()
-  const [input, setInput] = useState<NewApplianceInput>({ manufacturer: '', model: '', serialNumber: '' })
+  const [input, setInput] = useState<NewApplianceInput>({ category: 'Dishwasher', manufacturer: '', model: '', serialNumber: '' })
   const [error, setError] = useState<string | null>(null)
 
   const [busy, setBusy] = useState(false)
@@ -21,17 +24,27 @@ export function NewApplianceForm() {
     const problem = validateNewAppliance(input)
     if (problem) return setError(problem)
     setBusy(true)
+    setError(null)
     try {
-      const id = await addAppliance(input)
-      router.push(`/appliances/${id}/plan`)
+      // KEE-60: the proposer can honestly return no plan for a non-dishwasher with no manual.
+      // The context returns a typed `no_plan` result (not a throw) so the provider's error
+      // banner — which is reserved for network and storage failures — is not triggered.
+      const result = await addAppliance(input)
+      if (result.kind === 'no_plan') {
+        setError('No plan could be built for this appliance because Keeply found no manufacturer manual for this model. Check the model number, or look up the manufacturer’s manual online.')
+        setBusy(false)
+        return
+      }
+      router.push(`/appliances/${result.applianceId}/plan`)
     } catch {
-      // The provider's banner shows the failure.
+      // A throw here is a real failure (network, storage, validation): the provider's banner
+      // is already showing it. Just unlock the form so the owner can retry.
       setBusy(false)
     }
   }
 
-  const field = (key: 'manufacturer' | 'model' | 'serialNumber') => ({
-    value: input[key],
+  const field = (key: 'category' | 'manufacturer' | 'model' | 'serialNumber') => ({
+    value: input[key] ?? '',
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => setInput((i) => ({ ...i, [key]: e.target.value })),
   })
 
@@ -43,8 +56,15 @@ export function NewApplianceForm() {
       </p>
 
       <label className="field">
-        <span>Appliance</span>
-        <input className="input" value="Dishwasher" readOnly aria-readonly="true" />
+        <span>
+          Appliance <small>(for example Dishwasher or Fridge)</small>
+        </span>
+        <input
+          id={`${id}-category`}
+          className="input"
+          autoComplete="off"
+          {...field('category')}
+        />
       </label>
       <label className="field">
         <span>Manufacturer</span>

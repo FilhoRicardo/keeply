@@ -17,7 +17,7 @@ export type CalendarEventDraft = {
 }
 
 export function applianceName(appliance: Pick<Appliance, 'manufacturer' | 'model'>): string {
-  return [appliance.manufacturer, appliance.model].filter(Boolean).join(' ') + ' dishwasher'
+  return [appliance.manufacturer, appliance.model].filter(Boolean).join(' ').trim()
 }
 
 // One recurring event per accepted task, from the plan's start date. After this the owner

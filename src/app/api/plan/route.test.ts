@@ -115,7 +115,7 @@ describe('POST /api/plan', () => {
     })
     const response = await post({ manufacturer: 'Bosch', model: 'SMS6' }, { authorization: 'Bearer user-session-token' })
     expect(response.status).toBe(200)
-    expect(mockRunPlan).toHaveBeenCalledWith({ manufacturer: 'Bosch', model: 'SMS6', modelFamily: undefined })
+    expect(mockRunPlan).toHaveBeenCalledWith({ manufacturer: 'Bosch', model: 'SMS6', modelFamily: undefined, applianceType: 'unknown' })
     expect(mockRecordPlanSearch).toHaveBeenCalledWith('no_results')
   })
 

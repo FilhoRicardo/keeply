@@ -11,15 +11,18 @@ import { proposePlan, type PlanDeps } from '../../lib/plan-orchestration'
 
 // The P3-5 server route. Same gate as /api/identify: scan on, a billable provider or Brave key
 // configured, the invite/limit reservation, and the per-instance/durable counters. Manual mode
-// (no key, no provider) just falls through to general guidance. The route writes a `plan_search`
-// funnel event (counts only, no document text) so the team can see how the search went.
+// (no key, no provider) just falls through to general guidance for dishwashers, or returns an
+// empty plan for other appliances (KEE-60). The route writes a `plan_search` funnel event
+// (counts only, no document text) so the team can see how the search went.
 
 import type { SourceType } from '@/domain/model'
 import type { EvidenceLevel } from '@/domain/evidence'
 import type { IntervalUnit } from '@/domain/format-interval'
 
 // Funnel event added in KEE-42. The migration's check constraint is updated in the same change set.
-export type PlanSearchOutcome = 'ok' | 'no_results' | 'quota_exhausted' | 'fetch_failed' | 'extraction_unavailable' | 'unreadable' | 'no_text' | 'timeout'
+// KEE-60: 'no_plan' is returned when the appliance is not a dishwasher and the search yielded
+// nothing — the UI shows a plain "no plan could be built" message with the manual-entry form.
+export type PlanSearchOutcome = 'ok' | 'no_results' | 'quota_exhausted' | 'fetch_failed' | 'extraction_unavailable' | 'unreadable' | 'no_text' | 'timeout' | 'no_plan'
 
 export type PlanProposalJson = {
   name: string
@@ -122,10 +125,12 @@ export async function getBraveDailyUsage(env: Record<string, string | undefined>
   return braveQuotaStatus(db)
 }
 
-export type PlanRequest = { manufacturer: string; model: string; modelFamily?: string }
+export type PlanRequest = { manufacturer: string; model: string; modelFamily?: string; applianceType?: string | null }
 
 // The single entry point the route handler calls. Separated so tests can drive the same code path
 // without a real Supabase.
+// KEE-60: the applianceType is forwarded to the orchestration so non-dishwashers do not get the
+// general-guidance fallback when the search yields nothing.
 export async function runPlan(
   request: PlanRequest,
   env: Record<string, string | undefined> = process.env,
@@ -134,7 +139,12 @@ export async function runPlan(
   const timer = setTimeout(() => controller.abort(), PLAN_TIMEOUT_MS)
   try {
     const outcome = await proposePlan(
-      { manufacturer: request.manufacturer, model: request.model, modelFamily: request.modelFamily },
+      {
+        manufacturer: request.manufacturer,
+        model: request.model,
+        modelFamily: request.modelFamily,
+        applianceType: request.applianceType,
+      },
       buildDeps({
         signal: controller.signal,
         manufacturerDomains: buildDefaultManufacturerDomains(),

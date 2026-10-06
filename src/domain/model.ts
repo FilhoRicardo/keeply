@@ -2,7 +2,9 @@ import type { LocalDate } from './dates'
 import type { EvidenceLevel } from './evidence'
 import type { Interval } from './format-interval'
 
-// Keeply's MVP: dishwashers only.
+// Keeply's appliance record. KEE-60: any household appliance, not only dishwashers. The category
+// (dishwasher, fridge, etc.) is captured on the confirm screen but is not persisted — only the
+// manufacturer, model and serial number identify the appliance in storage.
 export type Appliance = {
   readonly id: string
   readonly manufacturer: string

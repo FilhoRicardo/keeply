@@ -35,78 +35,83 @@ export function planFallbackReason(meta: ProposalMeta | null): PlanFallbackReaso
   return 'no_search_key'
 }
 
+// KEE-60: the body copy is appliance-agnostic. The general-guidance list is dishwasher-specific
+// (GENERAL_DISHWASHER_TASKS) and only used for dishwashers — the body still calls the tasks
+// "general guidance" so the same banner wording works whether the appliance is a dishwasher or
+// any other category that happens to surface general tasks. (Other categories today get an
+// empty plan with the no-plan banner; this banner only appears when every task is general.)
 const REASON_COPY: Record<PlanFallbackReason, { eyebrow: string; title: string; body: string }> = {
   no_search_key: {
     eyebrow: 'General guidance',
     title: 'Keeply could not look for a manual for this model',
     body:
-      'No search key is configured on this device. These are general dishwasher tasks. They are not a manufacturer recommendation.',
+      'No search key is configured on this device. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
   plan_search_disabled: {
     eyebrow: 'General guidance',
     title: 'Manual search is not enabled on this device',
     body:
-      'Keeply did not search for a manufacturer manual. These are general dishwasher tasks. They are not a manufacturer recommendation.',
+      'Keeply did not search for a manufacturer manual. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
   plan_search_refused: {
     eyebrow: 'General guidance',
     title: 'Keeply was not allowed to search',
     body:
-      'Keeply could not look for a manual at this time (no active session or no remaining scans). These are general dishwasher tasks. They are not a manufacturer recommendation.',
+      'Keeply could not look for a manual at this time (no active session or no remaining scans). These are general guidance tasks. They are not a manufacturer recommendation.',
   },
   quota_exhausted: {
     eyebrow: 'General guidance',
     title: 'Daily search quota reached',
     body:
-      'Keeply hit its daily search limit and did not fetch a manual. These are general dishwasher tasks. They are not a manufacturer recommendation. The limit resets at midnight UTC.',
+      'Keeply hit its daily search limit and did not fetch a manual. These are general guidance tasks. They are not a manufacturer recommendation. The limit resets at midnight UTC.',
   },
   no_results: {
     eyebrow: 'General guidance',
     title: 'No manufacturer manual found for this model',
     body:
-      'Keeply could not find a manual for this model. These are general dishwasher tasks. They are not a manufacturer recommendation.',
+      'Keeply could not find a manual for this model. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
   fetch_failed: {
     eyebrow: 'General guidance',
     title: 'Could not download the manufacturer manual',
     body:
-      'Keeply found a manual link but could not open the document. These are general dishwasher tasks. They are not a manufacturer recommendation.',
+      'Keeply found a manual link but could not open the document. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
   extraction_unavailable: {
     eyebrow: 'General guidance',
     title: 'Could not read the manufacturer manual',
     body:
-      'Keeply found a manual but the AI service is not available right now. These are general dishwasher tasks. They are not a manufacturer recommendation.',
+      'Keeply found a manual but the AI service is not available right now. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
   unreadable: {
     eyebrow: 'General guidance',
     title: 'Manufacturer manual was unreadable',
     body:
-      'Keeply found a manual but the document could not be parsed. These are general dishwasher tasks. They are not a manufacturer recommendation.',
+      'Keeply found a manual but the document could not be parsed. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
   no_text: {
     eyebrow: 'General guidance',
     title: 'Manufacturer manual had no text',
     body:
-      'Keeply found a manual but the document did not contain readable text. These are general dishwasher tasks. They are not a manufacturer recommendation.',
+      'Keeply found a manual but the document did not contain readable text. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
   timeout: {
     eyebrow: 'General guidance',
     title: 'Search took too long',
     body:
-      'Keeply did not finish searching in time. These are general dishwasher tasks. They are not a manufacturer recommendation.',
+      'Keeply did not finish searching in time. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
   network_error: {
     eyebrow: 'General guidance',
     title: 'Could not reach the search service',
     body:
-      'Keeply could not reach its own search service. These are general dishwasher tasks. They are not a manufacturer recommendation.',
+      'Keeply could not reach its own search service. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
   no_proposal_meta: {
     eyebrow: 'General guidance',
     title: 'No manufacturer manual found for this model',
     body:
-      'Keeply could not find a manual for this model. These are general dishwasher tasks. They are not a manufacturer recommendation.',
+      'Keeply could not find a manual for this model. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
 }
 

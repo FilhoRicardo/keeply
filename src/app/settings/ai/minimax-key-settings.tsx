@@ -200,7 +200,7 @@ function GoogleMiniMaxKeySettings({ accessToken }: { accessToken: () => Promise<
       <section className="settings-notes aster-inner" aria-label="AI access details">
         <h3>Access and usage</h3>
         <p>An invite is still required for AI scans. Invited testers can use up to 5 scans per day, within a shared 100-scan daily cap.</p>
-        <p>Saving a key does not bypass invite access or these limits. If AI is unavailable, you can always enter dishwasher details manually.</p>
+        <p>Saving a key does not bypass invite access or these limits. If AI is unavailable, you can always enter appliance details manually.</p>
         <Link href="/invite">Have an invite code?</Link>
       </section>
     </div>

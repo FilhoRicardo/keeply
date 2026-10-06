@@ -29,8 +29,18 @@ type PlanContextValue = {
   // Supabase session token for server routes; null with device storage.
   accessToken(): Promise<string | null>
   track(event: FunnelEvent): void
-  // Finds the plan for the confirmed dishwasher and saves both. Resolves to the new appliance id.
-  addAppliance(input: NewApplianceInput, scanned?: boolean): Promise<string>
+  // Finds the plan for the confirmed appliance and saves it. Resolves to a typed result:
+  //   - 'added'   — the appliance was saved; `applianceId` is ready for the plan screen.
+  //   - 'no_plan' — the proposer returned an honest empty plan (no manual was found, and the
+  //                 dishwasher general-guidance fallback does not apply). The owner is told in
+  //                 the form; the provider's error banner is NOT set, because this is a
+  //                 legitimate outcome of the appliance-agnostic flow (KEE-60), not a network
+  //                 or storage failure. Callers MUST handle the no_plan branch.
+  // Other failures (network, storage, validation) still throw and are surfaced by the banner.
+  addAppliance(
+    input: NewApplianceInput,
+    scanned?: boolean,
+  ): Promise<{ kind: 'added'; applianceId: string } | { kind: 'no_plan' }>
   decide(applianceId: string, taskId: string, decision: Decision | null): Promise<PlanState>
   approve(applianceId: string, startDate: LocalDate): Promise<PlanState>
   recordCalendarResults(applianceId: string, results: readonly WriteResult[]): Promise<PlanState>
@@ -158,25 +168,39 @@ export function PlanProvider({
       accessToken,
       track: (event) => safeTrack(sinkRef, event),
       async addAppliance(input, scanned = false) {
+        // The live proposer returns { proposals, meta }; a stub returns TaskProposal[].
+        // KEE-60: the category comes from the AI read or the owner's manual entry; the
+        // proposer uses it to decide between the dishwasher general-guidance fallback and
+        // an honest empty plan for everything else. An empty proposals list is a legitimate
+        // outcome (no manual was found and the dishwasher fallback does not apply), not a
+        // failure — return it as a typed result so the provider's error banner stays for
+        // network and storage failures only.
+        const raw = await proposer(
+          { manufacturer: input.manufacturer.trim(), model: input.model.trim() || null, category: input.category ?? null },
+          { accessToken },
+        )
+        const { proposals, meta }: { proposals: TaskProposal[]; meta: ProposalMeta | null } = Array.isArray(raw)
+          ? { proposals: raw, meta: null }
+          : raw
+        if (proposals.length === 0) {
+          safeTrack(sinkRef, { name: 'appliance_added', scanned, plan: 'none' })
+          return { kind: 'no_plan' as const }
+        }
+        // Capture the new id through the closure so `apply` can keep its `PlanState` return
+        // type; the no_plan branch above never enters this path.
         let applianceId = ''
-        let proposed = { tasks: 0, verified: 0 }
         await apply(async () => {
-          // The live proposer returns { proposals, meta }; a stub returns TaskProposal[].
-          const raw = await proposer({ manufacturer: input.manufacturer.trim(), model: input.model.trim() || null }, { accessToken })
-          const { proposals, meta }: { proposals: TaskProposal[]; meta: ProposalMeta | null } = Array.isArray(raw)
-            ? { proposals: raw, meta: null }
-            : raw
           const added = await repo.addAppliance(input, proposals, meta)
           applianceId = added.applianceId
-          proposed = {
-            tasks: proposals.length,
-            verified: proposals.filter((p) => p.evidenceLevel === 'manufacturer_verified').length,
-          }
           return added.state
         })
         safeTrack(sinkRef, { name: 'appliance_added', scanned })
-        safeTrack(sinkRef, { name: 'plan_proposed', ...proposed })
-        return applianceId
+        safeTrack(sinkRef, {
+          name: 'plan_proposed',
+          tasks: proposals.length,
+          verified: proposals.filter((p) => p.evidenceLevel === 'manufacturer_verified').length,
+        })
+        return { kind: 'added' as const, applianceId }
       },
       decide: (applianceId, taskId, decision) => apply(() => repo.decide(applianceId, taskId, decision)),
       async approve(applianceId, startDate) {

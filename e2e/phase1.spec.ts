@@ -88,7 +88,8 @@ test('add a dishwasher, accept or reject each task, approve and see the record',
   await accessible(page)
 
   await page.goto('/')
-  await expect(page.getByRole('link', { name: /Bosch SMS6ZCI49E dishwasher/ })).toContainText('2 tasks approved · 2 not in Google Calendar yet')
+  // KEE-60: applianceName is appliance-agnostic — the link text is just "Bosch SMS6ZCI49E".
+  await expect(page.getByRole('link', { name: /Bosch SMS6ZCI49E/ })).toContainText('2 tasks approved · 2 not in Google Calendar yet')
   expect(problems).toEqual([])
 })
 
@@ -148,4 +149,54 @@ test('works offline after the first visit', async ({ page, context }) => {
   await page.goto('/appliances/new').catch(() => {})
   await expect(page.locator('body')).toContainText(/offline/i)
   await context.setOffline(false)
+})
+
+// KEE-60: when a non-dishwasher has no manual, the form must show exactly one plain message
+// and the provider's "could not reach your plan" banner must NOT appear (a no_plan outcome
+// is not a failure). This test drives the real flow against a built `next start` and saves
+// screenshots so the Lead can open them without re-running the build.
+//
+// The scan-confirm path is covered by the unit test in src/app/appliances/flow.test.tsx
+// ("non-dishwasher with no manual (KEE-60) › scan confirm path") which exercises the same
+// React tree and the same `addAppliance` plumbing. The browser path is gated behind
+// NEXT_PUBLIC_KEEPLY_SCAN, which the e2e intentionally leaves off (the existing
+// "scanning stays shut when it is off" test relies on it). Re-run this Playwright file with
+// NEXT_PUBLIC_KEEPLY_SCAN=1 to get a scan-path screenshot.
+test('fridge + no manual (manual entry): one plain message, no provider banner, no navigation', async ({ page }) => {
+  const problems = watchConsole(page)
+  // The live /api/plan would either return general guidance (for dishwashers) or an empty
+  // plan (for non-dishwashers with no key) — both are honest responses, but we pin the
+  // empty-plan response here so the test is hermetic.
+  await page.route('**/api/plan', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        proposals: [],
+        fallback: 'general',
+        searchOutcome: 'no_results',
+        searchReason: 'no_plan',
+      }),
+    })
+  })
+
+  await page.goto('/appliances/new')
+  await page.getByLabel('Appliance', { exact: false }).fill('Fridge')
+  await page.getByLabel('Manufacturer').fill('Bosch')
+  await page.getByLabel(/Model number/).fill('KGN39VLEB')
+  await page.screenshot({ path: 'test-results/kee-60-fridge-manual-form.png' })
+  await page.getByRole('button', { name: 'Continue to maintenance plan' }).click()
+
+  // Exactly one alert — the local form message — and no provider banner.
+  // A bare `page.getByRole('alert')` also matches Next.js's hidden route announcer,
+  // so scope the locator to the form before counting alerts.
+  const alerts = page.locator('form').getByRole('alert')
+  await expect(alerts).toHaveCount(1)
+  await expect(alerts.first()).toContainText(/no plan could be built for this appliance/i)
+  await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0)
+  await expect(page.getByText(/could not reach your plan/i)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Continue to maintenance plan' })).toBeEnabled()
+  await expect(page).toHaveURL(/\/appliances\/new$/)
+  await page.screenshot({ path: 'test-results/kee-60-fridge-manual-result.png' })
+  expect(problems).toEqual([])
 })

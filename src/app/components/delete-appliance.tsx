@@ -24,13 +24,13 @@ export function DeleteAppliance({ applianceId, name, hasCalendarEvents }: { appl
   if (!confirming) {
     return (
       <button type="button" className="link-button danger-link" onClick={() => setConfirming(true)}>
-        Delete this dishwasher
+        Delete this appliance
       </button>
     )
   }
 
   return (
-    <section className="calendar-panel aster-inner" aria-label="Delete dishwasher">
+    <section className="calendar-panel aster-inner" aria-label="Delete appliance">
       <p>
         Delete <strong>{name}</strong>? Its plan is removed from Keeply.
         {hasCalendarEvents && ' Events already in Google Calendar stay there; remove them in Calendar if you want.'}

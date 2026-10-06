@@ -34,10 +34,10 @@ async function takePhoto() {
 describe('ScanFlow without recognition (v0.1)', () => {
   it('guides the photo, says nothing was read, and saves the typed identity', async () => {
     renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo)
-    expect(screen.getByText(/photograph the label/i)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: /photograph the label/i })).toBeInTheDocument()
     await takePhoto()
 
-    expect(screen.getByText(/could not read a dishwasher label in this photo/)).toBeInTheDocument()
+    expect(screen.getByText(/could not read an appliance label in this photo/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
     expect(screen.getByRole('alert')).toHaveTextContent(/manufacturer/)
 
@@ -117,15 +117,21 @@ describe('scanEnabled', () => {
 })
 
 describe('ScanFlow when the photo is not a dishwasher label', () => {
-  it('stays neutral and leaves the owner to rescan or type', async () => {
-    const notDishwasher: ApplianceRecognizer = { recognise: async () => ({ identification: null, notice: 'not_a_dishwasher' }) }
-    renderWithPlan(<ScanFlow recognizer={notDishwasher} />, repo)
+  it('shows the appliance type the model read, never claims it is "not a dishwasher"', async () => {
+    // KEE-60: every recognised appliance is a valid proposal. A fridge is a valid appliance —
+    // the confirm screen shows "Fridge" as the appliance, not a rejection.
+    const fridge: ApplianceRecognizer = {
+      recognise: async () => ({
+        identification: { category: 'fridge', manufacturer: 'LG', model: 'LRFXS2503S', serialNumber: '', confidence: 0.7, source: 'photo_recognition' },
+        notice: null,
+      }),
+    }
+    renderWithPlan(<ScanFlow recognizer={fridge} />, repo)
     await takePhoto()
-    // A whole-appliance photo can come back as "other"; never claim it is not a dishwasher.
-    expect(screen.getByText(/could not read a dishwasher label in this photo/)).toBeInTheDocument()
-    expect(screen.queryByText(/does not look like a dishwasher/)).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Manufacturer')).toHaveValue('')
-    expect(screen.getByRole('button', { name: 'Rescan' })).toBeInTheDocument()
+    expect(screen.getByText(/is this correct\?/)).toBeInTheDocument()
+    expect(screen.getByText('Fridge')).toBeInTheDocument()
+    expect(screen.getByText('LG')).toBeInTheDocument()
+    expect(screen.getByText('LRFXS2503S')).toBeInTheDocument()
   })
 })
 
@@ -136,7 +142,7 @@ describe('ScanFlow privacy', () => {
     renderWithPlan(<ScanFlow recognizer={{ recognise }} />, repo)
     await takePhoto()
     expect(recognise).not.toHaveBeenCalled()
-    expect(screen.getByText(/could not read a dishwasher label in this photo/)).toBeInTheDocument()
+    expect(screen.getByText(/could not read an appliance label in this photo/)).toBeInTheDocument()
   })
 })
 

@@ -32,17 +32,32 @@ type Step =
       notice: RecognitionNotice | null
     }
 
-const UNREAD =
-  'Keeply could not read a dishwasher label in this photo. Try a clearer photo of the label, or enter the details below.'
-
 // Why the owner is typing instead of confirming a proposal.
-const MANUAL_REASON: Record<RecognitionNotice | 'unread', string> = {
+type ManualReasonKey = 'unread' | 'no_invite' | 'tester_limit' | 'daily_limit' | 'ai_unavailable'
+
+const UNREAD =
+  'Keeply could not read an appliance label in this photo. Try a clearer photo of the label, or enter the details below.'
+
+const MANUAL_REASON: Record<ManualReasonKey, string> = {
   unread: UNREAD,
-  not_a_dishwasher: UNREAD,
   no_invite: 'AI label reading is for invited testers, so the photo was not sent to the AI service. Enter the details below.',
   tester_limit: 'You have used today’s AI scans, so the photo was not sent to the AI service. Enter the details below, or scan again tomorrow.',
   daily_limit: 'Keeply has reached today’s AI scan limit, so the photo was not sent to the AI service. Enter the details below, or scan again tomorrow.',
   ai_unavailable: 'AI label reading is not available right now, so the photo was not sent to the AI service. Enter the details below.',
+}
+
+function manualReasonFor(notice: RecognitionNotice | null): string {
+  // KEE-60: only access refusals come through here; an "other" appliance is no longer a refusal.
+  if (notice && (MANUAL_REASON as Record<string, string>)[notice]) return MANUAL_REASON[notice as ManualReasonKey]
+  return UNREAD
+}
+
+// KEE-60: capitalise the appliance category for display ("dishwasher" → "Dishwasher"). Falls back
+// to "Appliance" when the model did not recognise one.
+function displayCategory(category: string): string {
+  const trimmed = category.trim()
+  if (!trimmed) return 'Appliance'
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
 }
 
 // What AI reading the visitor can expect, from /api/scan-access. Refreshed when the account changes.
@@ -144,8 +159,8 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
       <section className="aster-glass form-panel" aria-label="Photograph the label">
         <ScanAccessNote access={access} />
         <p className="form-intro">
-          Open the dishwasher door and photograph the label on the edge of the door or inside the tub. It shows the
-          manufacturer and model number. Keeply may send the photo to an AI service to suggest the details, and does not keep it; you
+          Open the appliance door (or panel) and photograph the rating label. It shows the manufacturer
+          and model number. Keeply may send the photo to an AI service to suggest the details, and does not keep it; you
           always confirm them.
         </p>
         <p className="settings-footnote">
@@ -176,7 +191,7 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
 
   const { identification, recognised, editing, notice } = step
   // Typing answers any earlier "enter the manufacturer" error, so it no longer applies.
-  const set = (change: Partial<Pick<ApplianceIdentification, 'manufacturer' | 'model' | 'serialNumber'>>) => {
+  const set = (change: Partial<Pick<ApplianceIdentification, 'category' | 'manufacturer' | 'model' | 'serialNumber'>>) => {
     setError(null)
     setStep({ ...step, identification: editIdentification(identification, change) })
   }
@@ -186,8 +201,12 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
     if (problem) return setError(problem)
     setBusy(true)
     try {
-      const applianceId = await addAppliance(
+      // KEE-60: a non-dishwasher with no manual returns a typed `no_plan` result. Surface the
+      // honest message in the form; do not navigate, do not let the provider's error banner
+      // (which is reserved for network and storage failures) appear.
+      const result = await addAppliance(
         {
+          category: identification.category,
           manufacturer: identification.manufacturer,
           model: identification.model,
           serialNumber: identification.serialNumber,
@@ -195,8 +214,14 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
         },
         true,
       )
-      router.push(`/appliances/${applianceId}/plan`)
+      if (result.kind === 'no_plan') {
+        setError('No plan could be built for this appliance because Keeply found no manufacturer manual for this model. Check the model number, or look up the manufacturer’s manual online.')
+        setBusy(false)
+        return
+      }
+      router.push(`/appliances/${result.applianceId}/plan`)
     } catch {
+      // Real failure: the provider's banner is already showing it. Just unlock the form.
       setBusy(false)
     }
   }
@@ -214,7 +239,8 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
           <dl className="identity">
             <div>
               <dt>Appliance</dt>
-              <dd>Dishwasher</dd>
+              {/* KEE-60: the model reads any household appliance; show what it recognised, capitalised. */}
+              <dd>{displayCategory(identification.category)}</dd>
             </div>
             <div>
               <dt>Manufacturer</dt>
@@ -239,7 +265,19 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
         </>
       ) : (
         <>
-          {!recognised && <p className="form-intro">{MANUAL_REASON[notice ?? 'unread']}</p>}
+          {!recognised && <p className="form-intro">{manualReasonFor(notice)}</p>}
+          <label className="field">
+            <span>
+              Appliance <small>(for example Dishwasher or Fridge)</small>
+            </span>
+            <input
+              id={`${id}-category`}
+              className="input"
+              autoComplete="off"
+              value={identification.category}
+              onChange={(e) => set({ category: e.target.value })}
+            />
+          </label>
           <label className="field">
             <span>Manufacturer</span>
             <input

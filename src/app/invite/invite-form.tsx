@@ -48,7 +48,7 @@ export function InviteForm() {
   return (
     <form className="aster-glass form-panel" onSubmit={accept} noValidate>
       <p className="form-intro">
-        Keeply can read your dishwasher’s label from a photo. During testing this is for invited testers, with a few AI
+        Keeply can read your appliance’s label from a photo. During testing this is for invited testers, with a few AI
         scans per day. You can always type the details instead.
       </p>
       {account?.kind === 'anonymous' && (
@@ -75,7 +75,7 @@ export function InviteForm() {
       {done ? (
         scanEnabled() ? (
           <Link className="aster-btn aster-btn--primary full-width" href="/appliances/scan">
-            Scan a dishwasher
+            Scan an appliance
           </Link>
         ) : (
           <p className="form-intro">AI label reading is not switched on yet. Your invite is saved for when it is.</p>

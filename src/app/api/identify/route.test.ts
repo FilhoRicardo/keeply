@@ -56,7 +56,24 @@ describe('POST /api/identify', () => {
     )
     const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
     expect(await response.json()).toEqual({
-      identification: { category: 'dishwasher', manufacturer: 'Bosch', model: 'SMS6ZCI49E', serialNumber: '', confidence: 0.8, source: 'photo_recognition' },
+      identification: { category: 'unknown', manufacturer: 'Bosch', model: 'SMS6ZCI49E', serialNumber: '', confidence: 0.8, source: 'photo_recognition' },
+      notice: null,
+    })
+  })
+
+  it('accepts a fridge label and proposes it (no dishwasher rejection, KEE-60)', async () => {
+    vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
+    vi.stubEnv('MINIMAX_API_KEY', 'server-key')
+    vi.stubEnv('KEEPLY_SCAN_ACCESS', 'open')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({ choices: [{ message: { content: '{"applianceType":"fridge","manufacturer":"LG","model":"LRFXS2503S","serialNumber":null,"confidence":0.7}' } }] }),
+      ),
+    )
+    const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
+    expect(await response.json()).toEqual({
+      identification: { category: 'fridge', manufacturer: 'LG', model: 'LRFXS2503S', serialNumber: '', confidence: 0.7, source: 'photo_recognition' },
       notice: null,
     })
   })
@@ -231,6 +248,7 @@ describe('wellFormed', () => {
     const { wellFormed } = await import('./route')
     const good = { category: 'dishwasher', manufacturer: 'Bosch', model: '', serialNumber: '', confidence: 0.7, source: 'photo_recognition' }
     expect(wellFormed(good)).toBe(true)
+    expect(wellFormed({ ...good, category: 'fridge' })).toBe(true)
     expect(wellFormed({ ...good, manufacturer: undefined })).toBe(false)
     expect(wellFormed({ ...good, confidence: '0.7' })).toBe(false)
     expect(wellFormed({ ...good, source: 'manual' })).toBe(false)
@@ -239,11 +257,11 @@ describe('wellFormed', () => {
 })
 
 describe('toProposal', () => {
-  it('says when the label is not a dishwasher', async () => {
+  it('accepts any appliance type from the model (no more dishwasher rejection, KEE-60)', async () => {
     const { toProposal } = await import('./route')
-    expect(toProposal({ applianceType: 'other', manufacturer: 'Bosch', model: 'WAX32', serialNumber: null, confidence: 0.9 })).toEqual({
-      identification: null,
-      notice: 'not_a_dishwasher',
+    expect(toProposal({ applianceType: 'fridge', manufacturer: 'LG', model: 'LRFXS2503S', serialNumber: null, confidence: 0.7 })).toEqual({
+      identification: { category: 'fridge', manufacturer: 'LG', model: 'LRFXS2503S', serialNumber: '', confidence: 0.7, source: 'photo_recognition' },
+      notice: null,
     })
   })
 

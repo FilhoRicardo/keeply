@@ -25,7 +25,7 @@ describe('toCalendarEvent', () => {
   it('makes one recurring all-day event from the plan start date', () => {
     expect(toCalendarEvent(accepted, appliance, '2026-10-05')).toMatchObject({
       taskId: 'task-filter',
-      summary: 'Clean the filter · Bosch SMS6ZCI49E dishwasher',
+      summary: 'Clean the filter · Bosch SMS6ZCI49E',
       date: '2026-10-05',
       endDate: '2026-10-06',
       recurrence: ['RRULE:FREQ=DAILY;INTERVAL=14'],
@@ -55,7 +55,7 @@ describe('toCalendarEvent', () => {
   })
 
   it('names an appliance without a model', () => {
-    expect(applianceName({ manufacturer: 'Miele', model: null })).toBe('Miele dishwasher')
+    expect(applianceName({ manufacturer: 'Miele', model: null })).toBe('Miele')
   })
 })
 

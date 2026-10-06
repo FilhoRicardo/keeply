@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Keeply',
     short_name: 'Keeply',
-    description: 'Planned preventive maintenance for your dishwasher.',
+    description: 'Planned preventive maintenance for your household appliances.',
     start_url: '/',
     display: 'standalone',
     background_color: '#eef1ef',
