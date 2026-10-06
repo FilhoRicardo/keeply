@@ -201,7 +201,10 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
     if (problem) return setError(problem)
     setBusy(true)
     try {
-      const applianceId = await addAppliance(
+      // KEE-60: a non-dishwasher with no manual returns a typed `no_plan` result. Surface the
+      // honest message in the form; do not navigate, do not let the provider's error banner
+      // (which is reserved for network and storage failures) appear.
+      const result = await addAppliance(
         {
           category: identification.category,
           manufacturer: identification.manufacturer,
@@ -211,8 +214,14 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
         },
         true,
       )
-      router.push(`/appliances/${applianceId}/plan`)
+      if (result.kind === 'no_plan') {
+        setError('No plan could be built for this appliance. Try a different category, or look up the manufacturer’s manual online.')
+        setBusy(false)
+        return
+      }
+      router.push(`/appliances/${result.applianceId}/plan`)
     } catch {
+      // Real failure: the provider's banner is already showing it. Just unlock the form.
       setBusy(false)
     }
   }

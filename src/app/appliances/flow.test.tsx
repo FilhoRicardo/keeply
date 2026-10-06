@@ -10,6 +10,8 @@ import { renderWithPlan, testRepository } from '../test-utils'
 import { ApplianceRecordView } from './[id]/appliance-record'
 import { PlanReview } from './[id]/plan/plan-review'
 import { NewApplianceForm } from './new/new-appliance-form'
+import { ScanFlow } from './scan/scan-flow'
+import type { ApplianceRecognizer } from '@/domain/identification'
 
 const push = vi.fn()
 let search = new URLSearchParams()
@@ -17,6 +19,18 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
   useSearchParams: () => search,
 }))
+
+// jsdom cannot decode images, so stand in for the browser's re-encode (which drops EXIF/GPS).
+let reencode = true
+vi.mock('../lib/photo', () => ({
+  prepareLabelPhoto: async (file: Blob) => (reencode ? new Blob([file], { type: 'image/jpeg' }) : file),
+}))
+
+const labelPhoto = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], 'label.jpg', { type: 'image/jpeg' })
+async function takePhoto() {
+  const input = screen.getByLabelText('Take or choose a photo')
+  await act(async () => fireEvent.change(input, { target: { files: [labelPhoto] } }))
+}
 
 type Calls = { url: string; body?: unknown }[]
 
@@ -83,6 +97,7 @@ beforeEach(() => {
   repo = testRepository()
   push.mockReset()
   search = new URLSearchParams()
+  reencode = true
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -420,6 +435,86 @@ describe('manufacturer guidance on the plan screen', () => {
     fireEvent.click(within(card).getByRole('button', { name: 'Why? / View source' }))
     expect(within(card).getByText('“Check the filters for residues after each wash.”')).toBeInTheDocument()
     expect(within(card).getByRole('link', { name: 'Open' })).toHaveAttribute('href', 'https://www.bosch-home.com/manual.pdf')
+  })
+})
+
+describe('non-dishwasher with no manual (KEE-60)', () => {
+  // KEE-60: when the proposer honestly returns no plan (a fridge with no manual), the
+  // provider's error banner must NOT appear and the form must not navigate. The form shows
+  // exactly one plain message and re-enables the button so the owner can change the category.
+  it('manual-entry path: shows a plain message, no banner, and does not navigate', async () => {
+    const events: FunnelEvent[] = []
+    renderWithPlan(<NewApplianceForm />, repo, (e) => void events.push(e), {
+      proposer: async () => ({
+        proposals: [],
+        meta: { fallback: 'general', searchOutcome: 'no_results', searchReason: 'no_plan', searched: false },
+      }),
+    })
+    fireEvent.change(screen.getByLabelText('Appliance', { exact: false }), { target: { value: 'Fridge' } })
+    fireEvent.change(screen.getByLabelText('Manufacturer'), { target: { value: 'Bosch' } })
+    fireEvent.change(screen.getByLabelText(/Model number/), { target: { value: 'KGN39VLEB' } })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue to maintenance plan' })))
+
+    // The form shows exactly one message — the local "No plan could be built" line.
+    const alerts = await screen.findAllByRole('alert')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]).toHaveTextContent(/no plan could be built for this appliance/i)
+    // The provider's "could not reach your plan" banner is NOT set.
+    expect(screen.queryByText(/could not reach your plan/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    // The form unlocks so the owner can change the category and try again.
+    expect(screen.getByRole('button', { name: 'Continue to maintenance plan' })).toBeEnabled()
+    // No navigation, no save.
+    expect(push).not.toHaveBeenCalled()
+    expect((await repo.load()).records).toEqual([])
+    // The funnel only fires `appliance_added` with `plan: 'none'`; no `plan_proposed` (no plan).
+    expect(events.map((e) => e.name)).toEqual(['appliance_added'])
+    expect(events[0]).toMatchObject({ scanned: false, plan: 'none' })
+  })
+
+  it('scan confirm path: shows a plain message, no banner, and does not navigate', async () => {
+    const events: FunnelEvent[] = []
+    const fridge: ApplianceRecognizer = {
+      recognise: async () => ({
+        identification: {
+          category: 'fridge',
+          manufacturer: 'Bosch',
+          model: 'KGN39VLEB',
+          serialNumber: '',
+          confidence: 0.8,
+          source: 'photo_recognition',
+        },
+        notice: null,
+      }),
+    }
+    renderWithPlan(<ScanFlow recognizer={fridge} />, repo, (e) => void events.push(e), {
+      proposer: async () => ({
+        proposals: [],
+        meta: { fallback: 'general', searchOutcome: 'no_results', searchReason: 'no_plan', searched: false },
+      }),
+    })
+    await takePhoto()
+    // The recognised identity is shown; the owner confirms the photo read.
+    expect(screen.getByText('Fridge')).toBeInTheDocument()
+    expect(screen.getByText('Bosch')).toBeInTheDocument()
+    expect(screen.getByText('KGN39VLEB')).toBeInTheDocument()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm' })))
+
+    // The confirm form shows exactly one message — the local "No plan could be built" line.
+    const alerts = await screen.findAllByRole('alert')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]).toHaveTextContent(/no plan could be built for this appliance/i)
+    // The provider's "could not reach your plan" banner is NOT set.
+    expect(screen.queryByText(/could not reach your plan/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    // The confirm button is re-enabled so the owner can change the category and try again.
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled()
+    // No navigation, no save.
+    expect(push).not.toHaveBeenCalled()
+    expect((await repo.load()).records).toEqual([])
+    // Scan funnel: scan_started, label_read, appliance_added (no_plan); no plan_proposed.
+    expect(events.map((e) => e.name)).toEqual(['scan_started', 'label_read', 'appliance_added'])
+    expect(events[events.length - 1]).toMatchObject({ scanned: true, plan: 'none' })
   })
 })
 

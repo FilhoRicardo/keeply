@@ -26,19 +26,19 @@ export function NewApplianceForm() {
     setBusy(true)
     setError(null)
     try {
-      const id = await addAppliance(input)
-      router.push(`/appliances/${id}/plan`)
-    } catch (err) {
-      // KEE-60: a non-dishwasher with no manufacturer manual has no plan to save. The proposer
-      // returns [] and the migration refuses empty plans, so we surface the "needs at least one
-      // proposed task" message in the form so the owner knows to add a manual or pick a
-      // different category. Other failures (network, storage) keep the previous behaviour: the
-      // provider's banner in <PlanProvider> shows them and the form is unlocked so the owner can
-      // retry.
-      const message = err instanceof Error ? err.message : ''
-      if (message.includes('at least one proposed task')) {
-        setError('No plan could be built. Try entering the manufacturer’s manual, or pick a different appliance.')
+      // KEE-60: the proposer can honestly return no plan for a non-dishwasher with no manual.
+      // The context returns a typed `no_plan` result (not a throw) so the provider's error
+      // banner — which is reserved for network and storage failures — is not triggered.
+      const result = await addAppliance(input)
+      if (result.kind === 'no_plan') {
+        setError('No plan could be built for this appliance. Try a different category, or look up the manufacturer’s manual online.')
+        setBusy(false)
+        return
       }
+      router.push(`/appliances/${result.applianceId}/plan`)
+    } catch {
+      // A throw here is a real failure (network, storage, validation): the provider's banner
+      // is already showing it. Just unlock the form so the owner can retry.
       setBusy(false)
     }
   }
