@@ -88,7 +88,8 @@ test('add a dishwasher, accept or reject each task, approve and see the record',
   await accessible(page)
 
   await page.goto('/')
-  await expect(page.getByRole('link', { name: /Bosch SMS6ZCI49E dishwasher/ })).toContainText('2 tasks approved · 2 not in Google Calendar yet')
+  // KEE-60: applianceName is appliance-agnostic — the link text is just "Bosch SMS6ZCI49E".
+  await expect(page.getByRole('link', { name: /Bosch SMS6ZCI49E/ })).toContainText('2 tasks approved · 2 not in Google Calendar yet')
   expect(problems).toEqual([])
 })
 
