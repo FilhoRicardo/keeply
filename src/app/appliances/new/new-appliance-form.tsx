@@ -1,17 +1,20 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { usePlan } from '../../lib/plan-context'
 import { validateNewAppliance, type NewApplianceInput } from '../../lib/plan-state'
 
-// Adds a confirmed dishwasher. While the live search (KEE-42 /api/plan) is in flight the form
-// shows a "looking for your manual" progress message so the owner is not staring at a button
-// that may take ~25 s to respond.
+// Adds a confirmed appliance. KEE-60: any household appliance, not only dishwashers. The category
+// field defaults to "Dishwasher" (the pre-KEE-60 default) so the existing dishwasher flow keeps
+// working, but the owner can change it to anything (Fridge, Washing machine, etc.). While the
+// live search (KEE-42 /api/plan) is in flight the form shows a "looking for your manual"
+// progress message so the owner is not staring at a button that may take ~25 s to respond.
 export function NewApplianceForm() {
   const router = useRouter()
+  const id = useId()
   const { addAppliance } = usePlan()
-  const [input, setInput] = useState<NewApplianceInput>({ manufacturer: '', model: '', serialNumber: '' })
+  const [input, setInput] = useState<NewApplianceInput>({ category: 'Dishwasher', manufacturer: '', model: '', serialNumber: '' })
   const [error, setError] = useState<string | null>(null)
 
   const [busy, setBusy] = useState(false)
@@ -21,17 +24,27 @@ export function NewApplianceForm() {
     const problem = validateNewAppliance(input)
     if (problem) return setError(problem)
     setBusy(true)
+    setError(null)
     try {
       const id = await addAppliance(input)
       router.push(`/appliances/${id}/plan`)
-    } catch {
-      // The provider's banner shows the failure.
+    } catch (err) {
+      // KEE-60: a non-dishwasher with no manufacturer manual has no plan to save. The proposer
+      // returns [] and the migration refuses empty plans, so we surface the "needs at least one
+      // proposed task" message in the form so the owner knows to add a manual or pick a
+      // different category. Other failures (network, storage) keep the previous behaviour: the
+      // provider's banner in <PlanProvider> shows them and the form is unlocked so the owner can
+      // retry.
+      const message = err instanceof Error ? err.message : ''
+      if (message.includes('at least one proposed task')) {
+        setError('No plan could be built. Try entering the manufacturer’s manual, or pick a different appliance.')
+      }
       setBusy(false)
     }
   }
 
-  const field = (key: 'manufacturer' | 'model' | 'serialNumber') => ({
-    value: input[key],
+  const field = (key: 'category' | 'manufacturer' | 'model' | 'serialNumber') => ({
+    value: input[key] ?? '',
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => setInput((i) => ({ ...i, [key]: e.target.value })),
   })
 
@@ -43,8 +56,15 @@ export function NewApplianceForm() {
       </p>
 
       <label className="field">
-        <span>Appliance</span>
-        <input className="input" value="Dishwasher" readOnly aria-readonly="true" />
+        <span>
+          Appliance <small>(for example Dishwasher or Fridge)</small>
+        </span>
+        <input
+          id={`${id}-category`}
+          className="input"
+          autoComplete="off"
+          {...field('category')}
+        />
       </label>
       <label className="field">
         <span>Manufacturer</span>

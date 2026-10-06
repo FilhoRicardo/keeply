@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { validateIdentification, type ApplianceIdentification } from '@/domain/identification'
+import {
+  validateIdentification,
+  type AccessDenial,
+  type ApplianceIdentification,
+} from '@/domain/identification'
 import type { ApplianceIdentity } from '@/ai/identity'
 import { selectProvider } from '@/ai/provider'
 import { checkPhoto } from '../../lib/identify'
@@ -12,17 +16,18 @@ export const maxDuration = 30
 export type IdentifyResponse = {
   // Proposal for the Confirm / Edit / Rescan screen; never saved without the owner confirming.
   identification: ApplianceIdentification | null
-  // Why there is no proposal, when the provider read something that is not usable.
-  notice: 'not_a_dishwasher' | null
+  // Why there is no proposal (an access refusal). KEE-60: 'not_a_dishwasher' was retired — every
+  // recognised appliance is a valid proposal and the owner confirms or edits it.
+  notice: AccessDenial | null
 }
 
-// Keeply's neutral identity → the confirm screen's proposal. Labels rarely say "dishwasher", so an
-// unknown type with a readable manufacturer is still proposed; "other" is not.
+// Keeply's neutral identity → the confirm screen's proposal. KEE-60: every appliance is a valid
+// proposal. The category comes from the model as free text; the owner can edit it on the confirm
+// screen. A reading without a manufacturer is still dropped (the confirm screen needs one).
 export function toProposal(identity: ApplianceIdentity | null): IdentifyResponse {
   if (!identity) return { identification: null, notice: null }
-  if (identity.applianceType === 'other') return { identification: null, notice: 'not_a_dishwasher' }
   const proposal: ApplianceIdentification = {
-    category: 'dishwasher',
+    category: identity.applianceType,
     manufacturer: identity.manufacturer ?? '',
     model: identity.model ?? '',
     serialNumber: identity.serialNumber ?? '',

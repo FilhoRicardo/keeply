@@ -1,10 +1,16 @@
 // Phase 2 groundwork: identifying an appliance from a photo of its label.
 // A recogniser only proposes; the owner always confirms or corrects before anything is saved.
+// KEE-60: any household appliance, not only dishwashers. The `category` field is free text
+// (e.g. "dishwasher", "fridge", "washing machine") or 'unknown'; it is never persisted.
+
+export type ApplianceCategory = string
+
+export const UNKNOWN_CATEGORY: ApplianceCategory = 'unknown'
 
 export type IdentificationSource = 'manual' | 'photo_recognition'
 
 export type ApplianceIdentification = {
-  category: 'dishwasher'
+  category: ApplianceCategory
   manufacturer: string
   model: string
   serialNumber: string
@@ -16,15 +22,16 @@ export type ApplianceIdentification = {
 export type RecognitionResult = {
   // A proposal for the owner to confirm, edit or rescan; null when nothing usable was read.
   identification: ApplianceIdentification | null
-  // Why there is no proposal: the photo was read but is not usable, or AI reading was not allowed
-  // (no invite, or a scan limit reached).
-  notice: RecognitionNotice | null
+  // Why there is no proposal: AI reading was not allowed (no invite, or a scan limit reached).
+  // KEE-60: an "other" appliance is a valid appliance, not a refusal — the proposal is shown
+  // and the owner confirms. Only access denials come through here.
+  notice: AccessDenial | null
 }
 
-// Reading outcomes ('not_a_dishwasher') and access refusals (nothing was sent to a provider).
+// Access refusals (nothing was sent to a provider). 'not_a_dishwasher' was retired in KEE-60.
 export const ACCESS_DENIALS = ['no_invite', 'tester_limit', 'daily_limit', 'ai_unavailable'] as const
 export type AccessDenial = (typeof ACCESS_DENIALS)[number]
-export type RecognitionNotice = 'not_a_dishwasher' | AccessDenial
+export type RecognitionNotice = AccessDenial
 
 export function isAccessDenial(notice: RecognitionNotice | null): notice is AccessDenial {
   return (ACCESS_DENIALS as readonly string[]).includes(notice ?? '')
@@ -42,6 +49,8 @@ export const noRecognizer: ApplianceRecognizer = {
   recognise: async () => NOTHING_RECOGNISED,
 }
 
+// KEE-60: free-text category now. The owner's default is "dishwasher" only because the
+// pre-KEE-60 flow taught it; any household appliance is supported.
 export function emptyIdentification(): ApplianceIdentification {
   return { category: 'dishwasher', manufacturer: '', model: '', serialNumber: '', confidence: null, source: 'manual' }
 }
@@ -49,16 +58,23 @@ export function emptyIdentification(): ApplianceIdentification {
 // Any edit by the owner makes the identification theirs: a recogniser's confidence no longer applies.
 export function editIdentification(
   current: ApplianceIdentification,
-  change: Partial<Pick<ApplianceIdentification, 'manufacturer' | 'model' | 'serialNumber'>>,
+  change: Partial<Pick<ApplianceIdentification, 'category' | 'manufacturer' | 'model' | 'serialNumber'>>,
 ): ApplianceIdentification {
   return { ...current, ...change, confidence: null, source: 'manual' }
 }
 
 export function validateIdentification(id: ApplianceIdentification): string | null {
-  if (id.category !== 'dishwasher') return 'Keeply supports dishwashers only for now.'
+  if (id.category.trim().length === 0) return 'Name the appliance, for example Dishwasher or Fridge.'
   if (id.manufacturer.trim().length === 0) return 'Enter the manufacturer, for example Bosch.'
   if (id.confidence !== null && (id.confidence < 0 || id.confidence > 1)) return 'Confidence must be between 0 and 1.'
   return null
+}
+
+// True when the appliance has the only hand-curated general-guidance list (dishwashers). Other
+// appliance types do not get an invented plan: they fall back to "no plan found" unless a manual
+// was located. Used by the proposer and the UI. KEE-60 owner decision (KEE-59).
+export function isDishwasherCategory(category: ApplianceCategory | null | undefined): boolean {
+  return typeof category === 'string' && category.trim().toLowerCase() === 'dishwasher'
 }
 
 // Fit an image inside a square of `maxEdge` pixels, never enlarging it.

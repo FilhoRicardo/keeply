@@ -25,7 +25,7 @@ export function Screen({
         <h1>{title}</h1>
       </header>
       <main className="screen-content">{children}</main>
-      {footer ? <footer className="screen-footer">{footer}</footer> : <footer className="site-footer aster-mono">Dishwashers only</footer>}
+      {footer ? <footer className="screen-footer">{footer}</footer> : <footer className="site-footer aster-mono">Household appliances</footer>}
     </div>
   )
 }
@@ -42,7 +42,7 @@ export function NotFoundPanel() {
   return (
     <div className="empty-state aster-inner">
       <div>
-        <h3>We could not find that dishwasher.</h3>
+        <h3>We could not find that appliance.</h3>
         <p>Check the link, or go back to your appliances.</p>
       </div>
     </div>

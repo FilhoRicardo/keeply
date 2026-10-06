@@ -8,10 +8,12 @@ import type { ExtractResult } from '@/search/extract-pages'
 import type { BraveReserveResult } from '@/db/brave-quota'
 import type { ManufacturerDomainMap } from '@/search/rank'
 
-// Orchestrates Phase 3's manual search for a confirmed dishwasher: confirmed model -> Brave Search
+// Orchestrates Phase 3's manual search for a confirmed appliance: confirmed model -> Brave Search
 // -> fetchDocument + extractPages -> extractTasks -> classifyEvidence -> TaskProposal[]. The model
-// never decides the evidence level. Fallbacks in order: similar-model (quotes that match the same
-// product family) -> general dishwasher guidance. Manual and the existing path always work.
+// never decides the evidence level. KEE-60: any household appliance, not only dishwashers.
+// Fallbacks in order: similar-model (quotes that match the same product family) -> general
+// guidance when the appliance is a dishwasher, or "no plan found" for everything else. Manual
+// search and the existing path always work for dishwashers.
 //
 // Every external step is in `deps`, so a test can fake Brave, the document fetch, the AI provider
 // and the durable quota counter. The route owns the time budget and an AbortSignal.
@@ -68,6 +70,7 @@ export type SearchOutcome =
   | 'unreadable'
   | 'no_text'
   | 'timeout'
+  | 'no_plan'
 
 // The classifier the orchestration uses to decide the evidence level. Imported from
 // src/domain/evidence-check.ts; the test can pass a stub. The function is a real function (not a
@@ -75,7 +78,9 @@ export type SearchOutcome =
 export type ClassifyEvidence = typeof classifyEvidence
 
 // What the route returns to the client. Counts only in the outcome; no per-task document text or
-// page content. Manual and the old general-guidance path always return at least one proposal.
+// page content. Manual and the old general-guidance path always return at least one proposal
+// for dishwashers. KEE-60: for non-dishwashers, `fallback` may be 'general' with empty proposals
+// and `searchOutcome === 'no_plan'` — the UI shows a plain "no plan could be built" message.
 export type PlanOutcome = {
   proposals: readonly TaskProposal[]
   fallback: 'exact' | 'similar' | 'general'
@@ -89,6 +94,12 @@ const GENERAL_GUIDANCE_TITLE = 'Keeply general dishwasher maintenance guidance'
 
 function generalSource(): Source {
   return { type: 'general_guidance', title: GENERAL_GUIDANCE_TITLE, url: null, location: null, quote: null }
+}
+
+// KEE-60: True when the appliance category is "dishwasher" (case-insensitive). Other appliance
+// types never use the hand-curated general-guidance list; they show an honest "no plan" path.
+function isDishwasher(category: string | null | undefined): boolean {
+  return typeof category === 'string' && category.trim().toLowerCase() === 'dishwasher'
 }
 
 // The P3-1 source for a Manufacturer verified task. The evidence_supported check in the migration
@@ -229,37 +240,52 @@ async function findPlans(
 
 // Drives the full orchestration. Every failure returns the general-guidance fallback so the route
 // can hand the client a guaranteed plan; the searchOutcome carries the reason for the funnel.
+// KEE-60: only dishwashers use the general-guidance fallback. Other appliance types return an
+// empty plan with searchOutcome 'no_plan' when the search yields nothing.
 export async function proposePlan(
-  args: { manufacturer: string; model: string; modelFamily?: string },
+  args: { manufacturer: string; model: string; modelFamily?: string; applianceType?: string | null },
   deps: PlanDeps,
 ): Promise<PlanOutcome> {
+  const isDish = isDishwasher(args.applianceType)
   const fallbackGeneral = (): readonly TaskProposal[] =>
-    deps.generalGuidance().map((p) => ({ ...p, source: generalSource() }))
+    isDish ? deps.generalGuidance().map((p) => ({ ...p, source: generalSource() })) : []
+  const noPlan = (): PlanOutcome => ({
+    proposals: [],
+    fallback: 'general',
+    searchOutcome: 'no_plan',
+    searchReason: 'no_plan',
+  })
 
   if (timedOut(deps.signal)) {
-    return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
+    if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
+    return noPlan()
   }
   // Step 1: durable counter check. Runs BEFORE searchManuals so a refused call is never started
   // (CEO directive, 2026-10-05). Once at the cap the Brave fetch is never made (asserted in tests).
   const reservation = await deps.reserveBraveSearch()
   if (reservation === 'quota_exhausted') {
-    return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'quota_exhausted', searchReason: 'quota_exhausted' }
+    if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'quota_exhausted', searchReason: 'quota_exhausted' }
+    return { ...noPlan(), searchOutcome: 'quota_exhausted', searchReason: 'quota_exhausted' }
   }
   if (timedOut(deps.signal)) {
-    return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
+    if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
+    return noPlan()
   }
 
   // Step 2: discovery.
   const search = await deps.searchManuals({ manufacturer: args.manufacturer, model: args.model })
   if (search.status === 'unavailable') {
-    return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'no_results', searchReason: 'no_key' }
+    if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'no_results', searchReason: 'no_key' }
+    return { ...noPlan(), searchReason: 'no_key' }
   }
   if (search.status === 'empty') {
-    return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'no_results', searchReason: search.reason }
+    if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'no_results', searchReason: search.reason }
+    return { ...noPlan(), searchReason: search.reason }
   }
   // search.status === 'ok'. Walk candidates.
   if (timedOut(deps.signal)) {
-    return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
+    if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
+    return noPlan()
   }
   const find = await findPlans(
     { manufacturer: args.manufacturer, model: args.model, modelFamily: args.modelFamily, candidates: search.candidates },
@@ -271,5 +297,6 @@ export async function proposePlan(
       : 'similar'
     return { proposals: find.proposals, fallback, searchOutcome: find.outcome, searchReason: null }
   }
-  return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: find.outcome, searchReason: null }
+  if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: find.outcome, searchReason: null }
+  return { ...noPlan(), searchOutcome: find.outcome }
 }

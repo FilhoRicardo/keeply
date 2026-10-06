@@ -16,18 +16,21 @@ export const maxDuration = 30
 const MANUFACTURER = /^[A-Za-z0-9 .,'&/+-]{1,80}$/
 const MODEL = /^[A-Za-z0-9 .,'&/+()-]{1,40}$/
 
-type PlanBody = { manufacturer?: unknown; model?: unknown; modelFamily?: unknown }
+type PlanBody = { manufacturer?: unknown; model?: unknown; modelFamily?: unknown; applianceType?: unknown }
 
-function parseBody(body: unknown): { manufacturer: string; model: string; modelFamily?: string } | null {
+function parseBody(body: unknown): { manufacturer: string; model: string; modelFamily?: string; applianceType?: string } | null {
   if (!body || typeof body !== 'object') return null
   const b = body as PlanBody
   if (typeof b.manufacturer !== 'string' || !MANUFACTURER.test(b.manufacturer.trim())) return null
   if (typeof b.model !== 'string' || !MODEL.test(b.model.trim())) return null
   if (b.modelFamily !== undefined && (typeof b.modelFamily !== 'string' || !MODEL.test(b.modelFamily.trim()))) return null
+  // KEE-60: applianceType is free text. Empty / non-string is treated as "unknown".
+  const applianceType = typeof b.applianceType === 'string' && b.applianceType.trim().length > 0 ? b.applianceType.trim() : 'unknown'
   return {
     manufacturer: b.manufacturer.trim(),
     model: b.model.trim(),
     modelFamily: typeof b.modelFamily === 'string' ? b.modelFamily.trim() : undefined,
+    applianceType,
   }
 }
 

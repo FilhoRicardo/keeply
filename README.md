@@ -2,7 +2,7 @@
 
 PPM for your home: scan what you own, understand how to maintain it, and keep it working for longer.
 
-Status: MVP flow built (`docs/HANDOFF.md` §24): dishwasher (label photo → AI proposal → Confirm / Edit / Rescan, or typed) → proposed plan → Accept / Reject each task → Approval → accepted tasks become recurring Google Calendar events, managed there. Manual search finds the manufacturer's own manual (Brave Search), reads it with the AI, and shows each task with its page and verbatim quote; with no manufacturer manual the plan is honestly labelled general guidance. Scanning and search sit behind `NEXT_PUBLIC_KEEPLY_SCAN=1`, `MINIMAX_API_KEY` and `BRAVE_SEARCH_API_KEY` (all server-side). Plan: `docs/HANDOFF.md`. How work is run: `AGENTS.md`. Module layout: `docs/architecture.md`.
+Status: MVP flow built (`docs/HANDOFF.md` §24): any household appliance (label photo → AI proposal → Confirm / Edit / Rescan, or typed) → proposed plan → Accept / Reject each task → Approval → accepted tasks become recurring Google Calendar events, managed there. Dishwashers fall back to a hand-curated general-guidance list when no manual is found; every other appliance needs a found manual or the plan is honestly empty (no plan). Manual search finds the manufacturer's own manual (Brave Search), reads it with the AI, and shows each task with its page and verbatim quote. Scanning and search sit behind `NEXT_PUBLIC_KEEPLY_SCAN=1`, `MINIMAX_API_KEY` and `BRAVE_SEARCH_API_KEY` (all server-side). Plan: `docs/HANDOFF.md`. How work is run: `AGENTS.md`. Module layout: `docs/architecture.md`.
 
 ## Run it
 

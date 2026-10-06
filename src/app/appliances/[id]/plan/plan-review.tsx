@@ -49,7 +49,7 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
         <div>
           <h3>This plan is approved.</h3>
           <p>
-            <Link href={`/appliances/${applianceId}`}>View your dishwasher</Link>
+            <Link href={`/appliances/${applianceId}`}>View your appliance</Link>
           </p>
         </div>
       </div>
@@ -83,7 +83,7 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
           outcome = result.kind
         }
       } catch {
-        // The plan is approved either way; writes are idempotent, so the dishwasher page can retry.
+        // The plan is approved either way; writes are idempotent, so the appliance page can retry.
         outcome = 'failed'
       }
     }
@@ -98,7 +98,7 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
         <p>
           Keeply proposes; you decide. Nothing reaches your calendar until you approve.{' '}
           {allGeneral
-            ? 'These are general dishwasher tasks: Keeply found no guidance for your exact model.'
+            ? 'These are general guidance tasks: Keeply found no guidance for your exact model.'
             : 'Each task shows where its guidance comes from and how closely it matches your model.'}
         </p>
       </section>

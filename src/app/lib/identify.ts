@@ -38,7 +38,7 @@ export function httpRecognizer(accessToken: () => Promise<string | null> = async
         }
         if (!response.ok) return NOTHING_RECOGNISED
         const { identification, notice } = (await response.json()) as Partial<RecognitionResult>
-        return { identification: identification ?? null, notice: notice === 'not_a_dishwasher' ? notice : null }
+        return { identification: identification ?? null, notice: notice ?? null }
       } catch {
         return NOTHING_RECOGNISED
       }

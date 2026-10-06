@@ -63,7 +63,7 @@ describe('proposePlan', () => {
     const fetchSpy = vi.fn(fetchOk(new TextEncoder().encode(PAGE_TEXT)))
     const extractPagesSpy = vi.fn(extractPagesOk())
     const extractTasksSpy = vi.fn(extractedTasksOk([CANDIDATE]))
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY, applianceType: 'dishwasher' }, makeDeps({
       reserveBraveSearch: reserveSpy,
       searchManuals: searchSpy,
       fetchDocument: fetchSpy,
@@ -95,7 +95,7 @@ describe('proposePlan', () => {
   describe('document model coverage from the cover pages', () => {
     const noModelsFromUrl = () => ({ documentModels: [] as string[], documentFamily: undefined })
     const verifiedWith = (pages: { page: number; text: string }[]) =>
-      proposePlan({ manufacturer: BOSCH, model: MODEL }, makeDeps({
+      proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
         searchManuals: searchOkWith(PDF_URL),
         fetchDocument: fetchOk(new TextEncoder().encode('x')),
         extractPages: async () => ({ ok: true, pages }),
@@ -129,7 +129,7 @@ describe('proposePlan', () => {
     // when the document declares it covers our model and the family matches.
     const unofficialUrl = `https://manualslib.com/${MODEL}.pdf`
     const searchSpy = vi.fn(searchOkWith(unofficialUrl, 'manualslib'))
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY, applianceType: 'dishwasher' }, makeDeps({
       searchManuals: searchSpy,
       fetchDocument: fetchOk(new TextEncoder().encode(PAGE_TEXT)),
       extractPages: extractPagesOk(),
@@ -148,7 +148,7 @@ describe('proposePlan', () => {
     // that came from a manual because generalGuidance() is already the honest fallback. Then it
     // returns the existing general-guidance list.
     const differentText = 'This document does not state any maintenance schedule.'
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY, applianceType: 'dishwasher' }, makeDeps({
       searchManuals: searchOkWith(PDF_URL),
       fetchDocument: fetchOk(new TextEncoder().encode(differentText)),
       extractPages: extractPagesOk(differentText),
@@ -160,7 +160,7 @@ describe('proposePlan', () => {
   })
 
   it('returns general guidance when searchManuals reports no_results', async () => {
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
       searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'no_results' }),
     }))
     expect(result.fallback).toBe('general')
@@ -170,7 +170,7 @@ describe('proposePlan', () => {
   })
 
   it('returns general guidance with reason no_key when searchManuals is unavailable (no API key)', async () => {
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
       searchManuals: async () => ({ status: 'unavailable' }),
     }))
     expect(result.fallback).toBe('general')
@@ -185,7 +185,7 @@ describe('proposePlan', () => {
     const search = vi.fn(async () => {
       throw new Error('searchManuals must not happen at the cap')
     })
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
       reserveBraveSearch: async () => 'quota_exhausted',
       searchManuals: search as unknown as PlanDeps['searchManuals'],
       fetchDocument: fetch as unknown as PlanDeps['fetchDocument'],
@@ -199,7 +199,7 @@ describe('proposePlan', () => {
   })
 
   it('reports typed rate_limited and falls back to general guidance when Brave returns 429', async () => {
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
       searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'rate_limited' }),
     }))
     expect(result.fallback).toBe('general')
@@ -213,7 +213,7 @@ describe('proposePlan', () => {
     // The orchestration must NOT emit them as proposals; it must fall back to generalGuidance()
     // (the existing honest list). The chain rule: similar-model -> general, not general from
     // a manual.
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY, applianceType: 'dishwasher' }, makeDeps({
       searchManuals: searchOkWith(PDF_URL),
       fetchDocument: fetchOk(new TextEncoder().encode(PAGE_TEXT)),
       extractPages: extractPagesOk(),
@@ -234,7 +234,7 @@ describe('proposePlan', () => {
         { url: goodUrl, title: 'good', snippet: '', host: BOSCH_DOMAIN },
       ],
     }))
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY, applianceType: 'dishwasher' }, makeDeps({
       searchManuals: search,
       fetchDocument: vi.fn(async (url: string) =>
         url === goodUrl
@@ -260,7 +260,7 @@ describe('proposePlan', () => {
       ],
     }))
     let extractCall = 0
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY, applianceType: 'dishwasher' }, makeDeps({
       searchManuals: search,
       fetchDocument: fetchOk(new TextEncoder().encode(PAGE_TEXT)),
       extractPages: vi.fn(async () => {
@@ -278,7 +278,7 @@ describe('proposePlan', () => {
   })
 
   it('falls back to general when extractTasks returns unavailable (Manual AI provider)', async () => {
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
       searchManuals: searchOkWith(PDF_URL),
       fetchDocument: fetchOk(new TextEncoder().encode(PAGE_TEXT)),
       extractPages: extractPagesOk(),
@@ -293,7 +293,7 @@ describe('proposePlan', () => {
     const controller = new AbortController()
     controller.abort()
     const search = vi.fn(searchOkWith(PDF_URL))
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
       signal: controller.signal,
       searchManuals: search,
     }))
@@ -323,7 +323,7 @@ describe('proposePlan', () => {
         },
       },
     ]
-    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL }, makeDeps({
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
       generalGuidance: () => general,
       searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'no_results' }),
     }))
@@ -346,7 +346,69 @@ describe('proposePlan', () => {
       extractPages: vi.fn(async () => { order.push('pages'); return { ok: false as const, reason: 'unreadable' as const } }),
       extractTasks: vi.fn(async () => { order.push('tasks'); return [] }),
     })
-    await proposePlan({ manufacturer: BOSCH, model: MODEL }, deps)
+    await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, deps)
     expect(order[0]).toBe('reserve')
+  })
+
+  // KEE-60: owner decision (KEE-59) — only dishwashers get the hand-curated general-guidance
+  // list when no manual is found. Other appliances get an empty plan with a no_plan outcome so
+  // the UI can show a plain "no plan could be built" message with the manual-entry path. We
+  // never invent dishwasher tasks for another appliance (non-negotiables 2 and 4).
+  it('KEE-60: a non-dishwasher with no manual returns an empty plan, not dishwasher general tasks', async () => {
+    const generalSpy = vi.fn(() => GENERAL_DISHWASHER_TASKS)
+    const result = await proposePlan(
+      { manufacturer: 'LG', model: 'LRFXS2503S', applianceType: 'fridge' },
+      makeDeps({
+        generalGuidance: generalSpy,
+        searchManuals: async () => ({ status: 'empty' as const, candidates: [], reason: 'no_results' as const }),
+      }),
+    )
+    expect(result.proposals).toEqual([])
+    expect(result.fallback).toBe('general')
+    // The UI looks at searchOutcome first; the reason carries the underlying search detail.
+    expect(result.searchOutcome).toBe('no_plan')
+    expect(result.searchReason).toBe('no_results')
+    // Never called the general list for a non-dishwasher; never fabricated dishwasher tasks.
+    expect(generalSpy).not.toHaveBeenCalled()
+  })
+
+  it('KEE-60: a non-dishwasher with no manual does not consume the search quota needlessly', async () => {
+    // The route refuses to save an empty plan (the migration requires at least one task). When no
+    // manual is found, the orchestration must return a no_plan outcome so the UI shows the
+    // manual-entry path instead of pretending a search happened.
+    const reserve = vi.fn(async () => 'allowed' as const)
+    const search = vi.fn(async (): ReturnType<PlanDeps['searchManuals']> => ({ status: 'empty', candidates: [], reason: 'no_results' }))
+    const result = await proposePlan(
+      { manufacturer: 'Miele', model: 'WSD663', applianceType: 'washing machine' },
+      makeDeps({ reserveBraveSearch: reserve, searchManuals: search }),
+    )
+    expect(result.proposals).toEqual([])
+    expect(result.searchOutcome).toBe('no_plan')
+    // We still consulted the durable counter; the search ran and was empty. We do not retry.
+    expect(reserve).toHaveBeenCalledTimes(1)
+    expect(search).toHaveBeenCalledTimes(1)
+  })
+
+  it('KEE-60: a non-dishwasher with a verified manual still gets the manual\'s tasks', async () => {
+    // KEE-60 only changes the fallback behaviour. If a real manufacturer manual was located and
+    // classified as verified, those tasks are still used — even for a fridge.
+    const fridgeModel = 'LRFXS2503S'
+    const fridgeFamily = 'LRFXS25'
+    const lgDomain = 'lg.com'
+    const lgPdfUrl = `https://${lgDomain}/docs/${fridgeModel}.pdf`
+    const result = await proposePlan(
+      { manufacturer: 'LG', model: fridgeModel, modelFamily: fridgeFamily, applianceType: 'fridge' },
+      makeDeps({
+        manufacturerDomains: { lg: [lgDomain] },
+        searchManuals: searchOkWith(lgPdfUrl, 'LG fridge manual'),
+        fetchDocument: fetchOk(new TextEncoder().encode(PAGE_TEXT)),
+        extractPages: extractPagesOk(),
+        resolveSource: () => ({ documentModels: [fridgeModel], documentFamily: fridgeFamily }),
+        extractTasks: extractedTasksOk([CANDIDATE]),
+      }),
+    )
+    expect(result.fallback).toBe('exact')
+    expect(result.proposals).toHaveLength(1)
+    expect(result.proposals[0].evidenceLevel).toBe('manufacturer_verified')
   })
 })

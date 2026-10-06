@@ -2,17 +2,24 @@ import { GENERAL_DISHWASHER_TASKS } from '@/domain/general-guidance'
 import type { Appliance, ProposalMeta, TaskProposal } from '@/domain/model'
 import { createApiPlanProposer, type LiveProposalResult } from './api-plan-proposer'
 
-// Finds the maintenance plan for a confirmed dishwasher.
+// Finds the maintenance plan for a confirmed appliance. KEE-60: any household appliance, not
+// only dishwashers. The dishwashers-only general-guidance list is the honest fallback for
+// dishwashers when no manual was found; for every other appliance an empty plan with a
+// 'no_plan' outcome is returned unless the live search yielded tasks. The owner can still type
+// the manual-entry form when no plan was found.
 //
 // The default `livePlanProposer` calls /api/plan (KEE-42) and returns both the proposals and
 // the outcome (fallback, searchOutcome, searchReason) so the plan page can render an honest
 // "looking for your manual" / "we could not find a manual" message. When the route is
-// disabled, the visitor is refused, or the search returns nothing, it falls back to
-// general-guidance proposals. `generalGuidanceProposer` is the local, network-free fallback
-// used by tests and older deployments.
+// disabled, the visitor is refused, or the search returns nothing:
+//   - for dishwashers: fall back to general-guidance proposals.
+//   - for everything else: fall back to an empty plan with outcome 'no_plan', so the UI
+//     shows the manual-entry path (owner decision, KEE-59; KEE-60).
+// `generalGuidanceProposer` is the local, network-free fallback used by tests and older
+// deployments.
 
 export type PlanProposer = (
-  appliance: Pick<Appliance, 'manufacturer' | 'model'>,
+  appliance: Pick<Appliance, 'manufacturer' | 'model'> & { category?: string | null },
   session?: { accessToken?: () => Promise<string | null> },
 ) => Promise<TaskProposal[] | LivePlanProposerResult>
 
@@ -21,20 +28,42 @@ export type LivePlanProposerResult = {
   meta: ProposalMeta
 }
 
-// KEE-43: the live proposer is now the default. It returns the proposals and the
+// Outcome returned when no plan could be built for a non-dishwasher. The proposalMeta stays
+// generic (no manufacturer manual was searched for) so the plan screen can render a plain
+// "we could not build a plan" message with the manual-entry path.
+const NO_PLAN_OUTCOME: ProposalMeta = {
+  fallback: 'general',
+  searchOutcome: 'no_results',
+  searchReason: 'no_plan',
+  searched: false,
+}
+
+const isDishwasher = (category: string | null | undefined): boolean =>
+  typeof category === 'string' && category.trim().toLowerCase() === 'dishwasher'
+
+// KEE-43 + KEE-60: the live proposer is now the default. It returns the proposals and the
 // `proposalMeta` (fallback + searchOutcome + searchReason + searched flag) that the plan
 // page reads from the record.
-export const livePlanProposer: PlanProposer = async ({ manufacturer, model }, session) => {
-  const result = await callLive({ manufacturer: manufacturer.trim(), model: model?.trim() || null }, session?.accessToken)
+export const livePlanProposer: PlanProposer = async ({ manufacturer, model: applianceModel, category }, session) => {
+  const result = await callLive({ manufacturer: manufacturer.trim(), model: applianceModel?.trim() || null }, session?.accessToken)
+  // Dishwashers: existing behaviour — fall back to general guidance so the plan screen still
+  // renders and the owner can still decide.
+  if (isDishwasher(category)) {
+    if (result.proposals.length > 0) {
+      return { proposals: result.proposals, meta: toMeta(result) }
+    }
+    return {
+      proposals: [...GENERAL_DISHWASHER_TASKS],
+      meta: toMeta(result),
+    }
+  }
+  // Any other appliance: keep whatever the live search found; never invent dishwasher tasks.
+  // If the search returned nothing, the plan is honestly empty — the owner can use the
+  // manual-entry path or accept the appliance with no tasks.
   if (result.proposals.length > 0) {
     return { proposals: result.proposals, meta: toMeta(result) }
   }
-  // Either the route is disabled, the search yielded nothing, or something failed. Fall back
-  // to general guidance so the plan screen still renders and the owner can still decide.
-  return {
-    proposals: [...GENERAL_DISHWASHER_TASKS],
-    meta: toMeta(result),
-  }
+  return { proposals: [], meta: NO_PLAN_OUTCOME }
 }
 
 function toMeta(result: LiveProposalResult): ProposalMeta {
@@ -47,7 +76,10 @@ function toMeta(result: LiveProposalResult): ProposalMeta {
 }
 
 // The legacy, network-free proposer. Kept for the existing tests and for offline use.
-export const generalGuidanceProposer: PlanProposer = async () => [...GENERAL_DISHWASHER_TASKS]
+// KEE-60: now requires a category. Dishwashers get general guidance; everything else gets an
+// empty plan (consistent with the live proposer above).
+export const generalGuidanceProposer: PlanProposer = async ({ category }) =>
+  isDishwasher(category) ? [...GENERAL_DISHWASHER_TASKS] : []
 
 // A package-private helper for tests and for callers that want the raw outcome.
 export async function callLive(

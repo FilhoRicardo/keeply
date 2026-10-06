@@ -26,7 +26,7 @@ const OUTCOME_COPY: Record<string, string> = {
   failed: 'Plan approved, but Google Calendar could not be reached. Try again below.',
 }
 
-// The dishwasher after Approval: what was accepted and where it lives now. The owner manages the
+// The appliance after Approval: what was accepted and where it lives now. The owner manages the
 // tasks in Google Calendar; Keeply only adds what is still missing.
 export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
   const { state, storageKind, recordCalendarResults, accessToken } = usePlan()
@@ -93,7 +93,7 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
       )}
 
       <section className="plan-intro aster-inner">
-        <p className="aster-eyebrow">Dishwasher</p>
+        <p className="aster-eyebrow">Appliance</p>
         <h2>{applianceName(appliance)}</h2>
         <dl className="identity">
           {appliance.serialNumber && (

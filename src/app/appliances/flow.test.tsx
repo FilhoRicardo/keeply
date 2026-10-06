@@ -234,7 +234,7 @@ describe('manual dishwasher → approved plan', () => {
     await addDishwasher()
     await decideAndApprove(ONE_ACCEPTED)
     renderWithPlan(<Home />, repo)
-    expect(await screen.findByRole('link', { name: /Bosch SMS6ZCI49E dishwasher/ })).toHaveTextContent('1 task in Google Calendar')
+    expect(await screen.findByRole('link', { name: /Bosch SMS6ZCI49E/ })).toHaveTextContent('1 task in Google Calendar')
   })
 })
 
@@ -363,12 +363,12 @@ describe('deleting a dishwasher', () => {
     await decideAndApprove(ONE_ACCEPTED)
 
     renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete this dishwasher' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete this appliance' }))
     expect(screen.getByText(/Events already in Google Calendar stay there/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect((await repo.load()).records).toHaveLength(1)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete this dishwasher' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete this appliance' }))
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Delete' })))
     expect(push).toHaveBeenLastCalledWith('/')
     expect((await repo.load()).records).toEqual([])

@@ -10,6 +10,7 @@ export type PlanState = { version: 2; records: ApplianceRecord[] }
 export const EMPTY_STATE: PlanState = { version: 2, records: [] }
 
 export type NewApplianceInput = {
+  category?: string | null
   manufacturer: string
   model: string
   serialNumber: string
@@ -45,7 +46,7 @@ export function addAppliance(
 ): { state: PlanState; applianceId: string } {
   const error = validateNewAppliance(input)
   if (error) throw new Error(error)
-  if (proposals.length === 0) throw new Error('A dishwasher needs at least one proposed task.')
+  if (proposals.length === 0) throw new Error('An appliance needs at least one proposed task.')
   const applianceId = newId()
   const tasks: MaintenanceTask[] = proposals.map((p) => ({
     ...p,

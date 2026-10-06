@@ -162,7 +162,13 @@ export function PlanProvider({
         let proposed = { tasks: 0, verified: 0 }
         await apply(async () => {
           // The live proposer returns { proposals, meta }; a stub returns TaskProposal[].
-          const raw = await proposer({ manufacturer: input.manufacturer.trim(), model: input.model.trim() || null }, { accessToken })
+          // KEE-60: the category comes from the AI read or the owner's manual entry; the
+          // proposer uses it to decide between the dishwasher general-guidance fallback and
+          // an honest empty plan for everything else.
+          const raw = await proposer(
+            { manufacturer: input.manufacturer.trim(), model: input.model.trim() || null, category: input.category ?? null },
+            { accessToken },
+          )
           const { proposals, meta }: { proposals: TaskProposal[]; meta: ProposalMeta | null } = Array.isArray(raw)
             ? { proposals: raw, meta: null }
             : raw

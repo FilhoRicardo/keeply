@@ -5,7 +5,9 @@ import type { Decision } from '@/domain/plan'
 import { fromProposal, type ApplianceTree } from './rows'
 
 // Every Keeply read and write against Supabase. Each call runs as the signed-in user, so
-// row-level security scopes it to their own dishwashers.
+// row-level security scopes it to their own dishwashers. (KEE-60 kept this comment verbatim:
+// the underlying schema is unchanged, only the UI copy and the proposer's fallback policy
+// changed.)
 
 function check<T>({ data, error }: { data: T | null; error: { message: string } | null }): T {
   if (error) throw new Error(`Supabase: ${error.message}`)
