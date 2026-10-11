@@ -5,8 +5,8 @@ import { IDENTITY_INSTRUCTIONS, type LabelPhoto } from './identity'
 // Shared OpenAI-compatible Chat Completions client. MiniMax and OpenRouter both speak this
 // shape; provider-specific headers, body fields and error policy stay in each adapter.
 
-export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const
-export const MAX_IMAGE_BYTES = 10_000_000
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const
+const MAX_IMAGE_BYTES = 10_000_000
 export const CHAT_TEMPERATURE = 0.1
 export const IDENTIFY_MAX_TOKENS = 400
 export const EXTRACT_MAX_TOKENS = 2_000
@@ -37,7 +37,7 @@ export function labelPhotoAccepted(photo: LabelPhoto): boolean {
   return (IMAGE_TYPES as readonly string[]).includes(photo.mimeType) && photo.bytes.length <= MAX_IMAGE_BYTES
 }
 
-export function toDataUri({ bytes, mimeType }: LabelPhoto): string {
+function toDataUri({ bytes, mimeType }: LabelPhoto): string {
   let binary = ''
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
   return `data:${mimeType};base64,${btoa(binary)}`
@@ -74,7 +74,7 @@ export function extractionMessages(prompt: string): ChatMessage[] {
 }
 
 // Drops reasoning the model wrapped around the answer. A separate `reasoning` field is never read.
-export function stripReasoning(content: string): string {
+function stripReasoning(content: string): string {
   return content.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<reasoning>[\s\S]*?<\/reasoning>/g, '')
 }
 
@@ -83,9 +83,11 @@ function messageText(content: unknown): string | null {
   if (!Array.isArray(content)) return null
   let text = ''
   for (const part of content) {
-    if (!part || typeof part !== 'object' || !('text' in part)) continue
-    const value = (part as { text?: unknown }).text
-    if (typeof value === 'string') text += value
+    if (!part || typeof part !== 'object') continue
+    const record = part as { type?: unknown; text?: unknown }
+    // A reasoning part can contain a JSON object. Only the text part is the answer.
+    if (record.type !== 'text' || typeof record.text !== 'string') continue
+    text += record.text
   }
   return text.length > 0 ? stripReasoning(text) : null
 }
@@ -122,6 +124,7 @@ export async function completeChat(input: {
   if (!response.ok) return { ok: false, status: response.status, content: null }
   const body = (await response.json()) as {
     choices?: { message?: { content?: unknown } }[]
+    // MiniMax sometimes reports a failure here on HTTP 200. Callers decide whether that is fatal.
     base_resp?: { status_code?: number; status_msg?: string }
   }
   return {

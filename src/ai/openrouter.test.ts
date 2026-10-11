@@ -106,6 +106,27 @@ describe('identifyWithOpenRouter', () => {
     expect(await identifyWithOpenRouter(config, photo, fetchMock as unknown as typeof fetch)).toBeNull()
   })
 
+  it('ignores a reasoning content part and parses the text part', async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        choices: [
+          {
+            message: {
+              content: [
+                { type: 'reasoning', text: '{"applianceType":"dishwasher","manufacturer":"Smeg","model":"DI6012-1","serialNumber":null,"confidence":0.99}' },
+                { type: 'text', text: '{"applianceType":"dishwasher","manufacturer":"Electrolux","model":"KEQB7300L","serialNumber":null,"confidence":0.8}' },
+              ],
+            },
+          },
+        ],
+      }),
+    )
+    expect(await identifyWithOpenRouter(config, photo, fetchMock as unknown as typeof fetch)).toMatchObject({
+      manufacturer: 'Electrolux',
+      model: 'KEQB7300L',
+    })
+  })
+
   it('reads text parts when the reply content is an array', async () => {
     const fetchMock = vi.fn(async () =>
       Response.json({

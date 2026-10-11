@@ -12,6 +12,7 @@ import {
   identifyMessages,
   labelPhotoAccepted,
   manualPagesPrompt,
+  type ChatCompletion,
 } from './openai-chat'
 
 // MiniMax adapter. Everything MiniMax-specific stays in this file. The HTTP call and the
@@ -45,13 +46,20 @@ export class MiniMaxError extends Error {
   }
 }
 
+function minimaxReply(result: ChatCompletion): string | null {
+  if (!result.ok) throw new MiniMaxError(`MiniMax rejected the request (${result.status})`, result.status)
+  // MiniMax reports some failures inside a 200 response.
+  if (result.baseResp?.status_code) throw new MiniMaxError(`MiniMax error ${result.baseResp.status_code}: ${result.baseResp.status_msg ?? ''}`)
+  return result.content
+}
+
 export async function identifyWithMiniMax(
   config: MiniMaxConfig,
   photo: LabelPhoto,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApplianceIdentity | null> {
   if (!labelPhotoAccepted(photo)) return null
-  const result = await completeChat({
+  const content = minimaxReply(await completeChat({
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
     model: config.model,
@@ -61,12 +69,9 @@ export async function identifyWithMiniMax(
     timeoutMs: IDENTIFY_TIMEOUT_MS,
     extraBody: MINIMAX_BODY,
     fetchImpl,
-  })
-  if (!result.ok) throw new MiniMaxError(`MiniMax rejected the request (${result.status})`, result.status)
-  // MiniMax reports some failures inside a 200 response.
-  if (result.baseResp?.status_code) throw new MiniMaxError(`MiniMax error ${result.baseResp.status_code}: ${result.baseResp.status_msg ?? ''}`)
-  if (result.content == null) return null
-  return normaliseIdentity(extractJsonObject(result.content))
+  }))
+  if (content == null) return null
+  return normaliseIdentity(extractJsonObject(content))
 }
 
 // Sends a manual's pages to MiniMax and returns the cleaned task candidates. The model may return
@@ -82,7 +87,7 @@ export async function extractTasksWithMiniMax(
 ): Promise<ExtractedTaskCandidate[]> {
   if (pages.length === 0) return []
   const { prompt, pageNumbers } = manualPagesPrompt(pages)
-  const result = await completeChat({
+  const content = minimaxReply(await completeChat({
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
     model: config.model,
@@ -92,9 +97,7 @@ export async function extractTasksWithMiniMax(
     timeoutMs: EXTRACT_TIMEOUT_MS,
     extraBody: MINIMAX_BODY,
     fetchImpl,
-  })
-  if (!result.ok) throw new MiniMaxError(`MiniMax rejected the request (${result.status})`, result.status)
-  if (result.baseResp?.status_code) throw new MiniMaxError(`MiniMax error ${result.baseResp.status_code}: ${result.baseResp.status_msg ?? ''}`)
-  if (result.content == null) return []
-  return parseExtractionReply(result.content, pageNumbers)
+  }))
+  if (content == null) return []
+  return parseExtractionReply(content, pageNumbers)
 }
