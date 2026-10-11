@@ -4,7 +4,7 @@
 
 Before new project scope or any independently scoped implementation ticket is released, Codex runs `grill-with-docs` with Ricardo. It combines `grilling` (also used by `grill-me`) and `domain-modeling`; do not repeat the same interview twice. Research factual questions rather than asking Ricardo to supply discoverable facts.
 
-Resolve the outcome, boundaries, acceptance criteria, dependencies, test seams and material tradeoffs. Ricardo explicitly confirms shared understanding. Record that confirmation and the spec revision it covers in the Linear spec; an agent must not manufacture owner approval. Use `to-spec` and `to-tickets` for the agreed scope. Child tickets inherit this gate from their confirmed parent spec. Reopen it if material requirements change or unresolved design decisions emerge.
+Resolve the outcome, boundaries, acceptance criteria, dependencies, test seams and material tradeoffs. Ricardo, or a proxy he explicitly authorizes to answer planning questions, confirms shared understanding. Record the confirmation, any delegation and its scope, and the spec revision it covers in Linear. Proxy decisions must be attributed to the proxy; delegation to plan does not grant production, secret, schema, calendar/email, merge, or deployment approval. Use `to-spec` and `to-tickets` for the agreed scope. Child tickets inherit this gate from their confirmed parent spec. Reopen it if material requirements change or unresolved design decisions emerge.
 
 This workflow setup is already authorized in the conversation; it does not authorize new Keeply product features.
 
@@ -25,3 +25,7 @@ Merge only with an explicit passing review of the current commit and required CI
 ## Budget and activation
 
 Use Codex signed in with ChatGPT; no OpenAI API key or API-backed Action. Cursor uses its separate subscription and cloud allowance, which must be verified before automation is enabled. Start with one worker and at most two automatic repair rounds, then escalate. Automation setup/validation is tracked in RF-338. No worker automation is enabled by these files.
+
+## Final step: /retro
+
+At the end of each completed work cycle or session, after verification and any authorized delivery/status updates, invoke `retro` as the final workflow step before reporting back. Read its `writing-for-agents` dependency and the session evidence. Present concrete environment/workflow improvements ranked by severity, or explicitly report no actionable findings. A planning-only or blocked session may run a retro of that session; it must not imply implementation or delivery finished. Proposed retro improvements become separate follow-up work unless already authorized.
