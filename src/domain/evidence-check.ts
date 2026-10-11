@@ -53,7 +53,9 @@ function onManufacturerDomain(url: string, domains: string[]): boolean {
 
 // Manufacturer verified only when the link is on the manufacturer's own https domain, the document
 // covers this exact model, the quote is found in the document text, and link and page are present.
-// Otherwise Similar-model (same family manual) or General guidance, with every failing reason.
+// Similar-model needs the same quote, page and link, plus a matching product family. A missing
+// quote, page or link stays General guidance even when the family matches. A different family
+// stays General guidance too. Every failing reason is still reported.
 export function classifyEvidence({ source, model, manufacturerDomains, quote, documentText }: ClassifyInput): EvidenceClassification {
   const reasons: EvidenceReason[] = []
   if (!source.url?.trim()) reasons.push('missing_link')
@@ -65,5 +67,6 @@ export function classifyEvidence({ source, model, manufacturerDomains, quote, do
   if (reasons.length === 0) return { level: 'manufacturer_verified', reasons }
   const sameFamily =
     !!model.family && !!source.documentFamily && sameModel(model.family, source.documentFamily)
-  return { level: sameFamily ? 'similar_model' : 'general_guidance', reasons }
+  const blocksSimilar = reasons.some((reason) => reason === 'missing_link' || reason === 'missing_page' || reason === 'quote_not_found')
+  return { level: sameFamily && !blocksSimilar ? 'similar_model' : 'general_guidance', reasons }
 }

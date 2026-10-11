@@ -64,13 +64,25 @@ describe('classifyEvidence', () => {
     expect(classifyEvidence(other).level).toBe('general_guidance')
     expect(classifyEvidence({ ...other, model: { name: 'dw-100' } }).level).toBe('general_guidance')
   })
-  it('downgrades when the quote is not in the document', () => {
-    expect(classifyEvidence({ ...base, documentText: 'Nothing relevant here at all, sorry.' })).toMatchObject({ level: 'similar_model', reasons: ['quote_not_found'] })
+  it('downgrades when the quote is not in the document, and does not keep Similar-model', () => {
+    expect(classifyEvidence({ ...base, documentText: 'Nothing relevant here at all, sorry.' })).toMatchObject({
+      level: 'general_guidance',
+      reasons: ['quote_not_found'],
+    })
   })
-  it('downgrades when link or page is missing', () => {
-    expect(classifyEvidence({ ...base, source: { ...base.source, url: null } }).reasons).toContain('missing_link')
-    expect(classifyEvidence({ ...base, source: { ...base.source, page: null } }).reasons).toContain('missing_page')
-    expect(classifyEvidence({ ...base, source: { ...base.source, page: 0 } }).reasons).toContain('missing_page')
+  it('downgrades when link or page is missing, and does not keep Similar-model on family alone', () => {
+    expect(classifyEvidence({ ...base, source: { ...base.source, url: null } })).toMatchObject({
+      level: 'general_guidance',
+      reasons: expect.arrayContaining(['missing_link']),
+    })
+    expect(classifyEvidence({ ...base, source: { ...base.source, page: null } })).toMatchObject({
+      level: 'general_guidance',
+      reasons: expect.arrayContaining(['missing_page']),
+    })
+    expect(classifyEvidence({ ...base, source: { ...base.source, page: 0 } })).toMatchObject({
+      level: 'general_guidance',
+      reasons: expect.arrayContaining(['missing_page']),
+    })
   })
   it('reports every failing condition', () => {
     const r = classifyEvidence({ ...base, quote: '', source: { ...base.source, page: null, documentModels: [] } })

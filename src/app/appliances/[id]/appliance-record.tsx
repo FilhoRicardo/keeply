@@ -132,7 +132,7 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
             <details>
               <summary>Instructions and source</summary>
               <p className="plan-card-description">{task.instructions}</p>
-              <SourceDetails task={task} />
+              <SourceDetails task={task} ownerModel={appliance.model} />
             </details>
           </li>
         ))}

@@ -134,6 +134,9 @@ function asProposals(input: unknown): TaskProposal[] {
           url: typeof source.url === 'string' ? source.url : null,
           location: typeof source.location === 'string' ? source.location : null,
           quote: typeof source.quote === 'string' ? source.quote : null,
+          ...(typeof source.coveredModel === 'string' && source.coveredModel.trim()
+            ? { coveredModel: source.coveredModel.trim() }
+            : {}),
         },
       }
     })

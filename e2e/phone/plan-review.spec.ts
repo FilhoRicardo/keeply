@@ -151,11 +151,11 @@ const FALLBACK_FIXTURE = {
   ],
 }
 
-async function seedAndOpen(page: Page, fixture: unknown, applianceId: string) {
+async function seedAndOpen(page: Page, fixture: unknown, applianceId: string, viewport = PHONE_VIEWPORT) {
   await page.addInitScript((value) => {
     window.localStorage.setItem('keeply.plan.v2', value)
   }, JSON.stringify(fixture))
-  await page.setViewportSize(PHONE_VIEWPORT)
+  await page.setViewportSize(viewport)
   await page.goto(`/appliances/${applianceId}/plan`)
 }
 
@@ -220,4 +220,93 @@ test('fallback plan at 360 px shows the "no manual found" banner with the right 
   await noHorizontalScroll(page)
   await accessible(page)
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'fallback.png'), fullPage: true })
+})
+
+const SIMILAR_FIXTURE = {
+  version: 2,
+  records: [
+    {
+      appliance: {
+        id: 'app-similar',
+        manufacturer: 'Smeg',
+        model: 'DI6012-1',
+        serialNumber: null,
+        identificationConfidence: null,
+        createdAt: '2026-10-05T10:00:00Z',
+      },
+      approvedAt: null,
+      startDate: null,
+      proposalMeta: { fallback: 'similar', searchOutcome: 'ok', searchReason: null, searched: true },
+      tasks: [
+        {
+          id: 'task-similar-filter',
+          applianceId: 'app-similar',
+          name: 'Clean the filter',
+          instructions: 'Twist out the filter, rinse under warm water, refit.',
+          interval: { count: 1, unit: 'month' },
+          evidenceLevel: 'similar_model',
+          source: {
+            type: 'similar_model_manual',
+            title: 'Smeg DI6012 series manual',
+            url: 'https://www.smeg.com/di6012.pdf',
+            location: 'page 18',
+            quote: 'Clean the filter once a month under running water.',
+            coveredModel: 'DI6012-2',
+          },
+          status: 'proposed',
+          calendarEventId: null,
+        },
+        {
+          id: 'task-similar-copy',
+          applianceId: 'app-similar',
+          name: 'Run a cleaning cycle',
+          instructions: 'Run a hot cycle monthly to clear grease.',
+          interval: { count: 1, unit: 'month' },
+          evidenceLevel: 'similar_model',
+          source: {
+            type: 'similar_model_manual',
+            title: 'DI6012-1 user manual',
+            url: 'https://manualslib.com/smeg/DI6012-1.pdf',
+            location: 'page 9',
+            quote: 'Run a hot programme once a month.',
+            coveredModel: 'DI6012-1',
+          },
+          status: 'proposed',
+          calendarEventId: null,
+        },
+      ],
+    },
+  ],
+}
+
+test('similar-model plan at 375 px shows the badge, covered model, host, page, quote and honest wording', async ({
+  page,
+}) => {
+  await seedAndOpen(page, SIMILAR_FIXTURE, 'app-similar', { width: 375, height: 812 })
+
+  const family = page.getByRole('article', { name: 'Clean the filter' })
+  await expect(family.getByText('Similar-model guidance')).toBeVisible()
+  await expect(family.getByText('Manufacturer verified')).toHaveCount(0)
+  await expect(family.locator('.evidence--similar_model')).toHaveCount(1)
+  await expect(family.getByText('Manual for a similar model (DI6012-2). Not verified for your exact model.')).toBeVisible()
+  await expect(family.locator('.covered-model')).toHaveText('DI6012-2')
+  await family.getByRole('button', { name: 'Why? / View source' }).click()
+  await expect(family.locator('.source-host')).toHaveText('www.smeg.com')
+  await expect(family.getByText(/page 18/)).toBeVisible()
+  await expect(family.getByText('“Clean the filter once a month under running water.”')).toBeVisible()
+
+  const copy = page.getByRole('article', { name: 'Run a cleaning cycle' })
+  await expect(copy.getByText('Similar-model guidance')).toBeVisible()
+  await expect(copy.getByText('Manufacturer verified')).toHaveCount(0)
+  await expect(copy.getByText('Manual for your model, found on a third-party site (not the manufacturer’s). Not verified.')).toBeVisible()
+  await expect(copy.locator('.covered-model')).toHaveText('DI6012-1')
+  await copy.getByRole('button', { name: 'Why? / View source' }).click()
+  await expect(copy.locator('.source-host')).toHaveText('manualslib.com')
+  await expect(copy.getByText(/page 9/)).toBeVisible()
+  await expect(copy.getByText('“Run a hot programme once a month.”')).toBeVisible()
+
+  await expect(page.getByText('Manufacturer verified')).toHaveCount(0)
+  await noHorizontalScroll(page)
+  await accessible(page)
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'similar-375.png'), fullPage: true })
 })

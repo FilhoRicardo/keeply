@@ -1,5 +1,6 @@
 import 'server-only'
 import { classifyEvidence } from '@/domain/evidence-check'
+import { COVER_PAGE_COUNT, matchingCoverModel, modelFamily } from '@/domain/model-family'
 import type { Source, SourceType, TaskProposal } from '@/domain/model'
 import type { ExtractedTaskCandidate } from '@/ai/extraction'
 import type { SearchResult } from '@/search/brave'
@@ -11,9 +12,9 @@ import type { ManufacturerDomainMap } from '@/search/rank'
 // Orchestrates Phase 3's manual search for a confirmed appliance: confirmed model -> Brave Search
 // -> fetchDocument + extractPages -> extractTasks -> classifyEvidence -> TaskProposal[]. The model
 // never decides the evidence level. KEE-60: any household appliance, not only dishwashers.
-// Fallbacks in order: similar-model (quotes that match the same product family) -> general
-// guidance when the appliance is a dishwasher, or "no plan found" for everything else. Manual
-// search and the existing path always work for dishwashers.
+// Fallbacks in order: similar-model (a cover-page model number in the same family, with a
+// code-checked quote) -> general guidance when the appliance is a dishwasher, or "no plan found"
+// for everything else. Manual search and the existing path always work for dishwashers.
 //
 // Every external step is in `deps`, so a test can fake Brave, the document fetch, the AI provider
 // and the durable quota counter. The route owns the time budget and an AbortSignal.
@@ -36,8 +37,8 @@ export type SourceResolver = (url: string) => {
   // The set of model identifiers the document claims to cover. classifyEvidence uses this to decide
   // Manufacturer verified (model is in the list) vs Similar-model vs General.
   documentModels: string[]
-  // The product family the document belongs to (e.g. Bosch 'SMS6' series). A manual with the same
-  // family as the requested model keeps the candidate at Similar-model (not General).
+  // Unused for classification. The family comes from model numbers on the cover pages, not from
+  // this resolver, so a URL cannot invent a product family.
   documentFamily?: string
 }
 
@@ -118,13 +119,20 @@ function manufacturerSource(args: {
   return { type, title: args.title, url: args.url, location: `page ${args.page}`, quote: args.quote }
 }
 
-function similarModelSource(args: { url: string; title: string; page: number; quote: string }): Source {
+function similarModelSource(args: {
+  url: string
+  title: string
+  page: number
+  quote: string
+  coveredModel: string
+}): Source {
   return {
     type: 'similar_model_manual',
     title: args.title,
     url: args.url,
     location: `page ${args.page}`,
     quote: args.quote,
+    coveredModel: args.coveredModel,
   }
 }
 
@@ -141,14 +149,12 @@ const MAX_MANUAL_CANDIDATES = 3
 // The source resolver cannot tell from a URL which models a document covers, so we read the cover
 // pages: a manual whose first pages name the exact model (as a whole token, not a prefix of a longer
 // model number) covers it. A model mentioned only deeper in the document does not.
-const COVER_PAGES = 2
-
 function coversModel(pages: readonly { page: number; text: string }[], model: string): boolean {
   const wanted = model.trim()
   if (!wanted) return false
   const escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const whole = new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, 'i')
-  return pages.some((p) => p.page <= COVER_PAGES && whole.test(p.text))
+  return pages.some((p) => p.page <= COVER_PAGE_COUNT && whole.test(p.text))
 }
 
 // Walks the ranked Brave candidates and tries each until one yields a manufacturer-verified plan.
@@ -159,7 +165,6 @@ async function findPlans(
   args: {
     manufacturer: string
     model: string
-    modelFamily: string | undefined
     candidates: readonly { url: string; title: string }[]
   },
   deps: PlanDeps,
@@ -193,6 +198,10 @@ async function findPlans(
     const resolved = deps.resolveSource(fetched.url)
     const documentModels = [...resolved.documentModels]
     if (coversModel(extracted.pages, args.model) && !documentModels.includes(args.model)) documentModels.push(args.model)
+    // Family is derived from the confirmed model and the cover pages. A client-sent family and
+    // the resolver's documentFamily are ignored, so neither can raise or invent a level.
+    const ownerFamily = modelFamily(args.model) ?? undefined
+    const coveredModel = matchingCoverModel(extracted.pages, args.model)
     const title = candidate.title
     for (const c of candidates) {
       const documentText = safePageText(extracted.pages, c.page)
@@ -201,9 +210,9 @@ async function findPlans(
           url: fetched.url,
           page: c.page,
           documentModels,
-          documentFamily: resolved.documentFamily,
+          documentFamily: coveredModel ? ownerFamily : undefined,
         },
-        model: { name: args.model, family: args.modelFamily },
+        model: { name: args.model, family: ownerFamily },
         manufacturerDomains: [...(deps.manufacturerDomains[args.manufacturer.toLowerCase()] ?? [])],
         quote: c.quote,
         documentText,
@@ -216,13 +225,13 @@ async function findPlans(
           evidenceLevel: 'manufacturer_verified',
           source: manufacturerSource({ url: fetched.url, title, page: c.page, quote: c.quote }),
         })
-      } else if (verdict.level === 'similar_model') {
+      } else if (verdict.level === 'similar_model' && coveredModel) {
         similar.push({
           name: c.task,
           instructions: c.instructions,
           interval: c.interval,
           evidenceLevel: 'similar_model',
-          source: similarModelSource({ url: fetched.url, title, page: c.page, quote: c.quote }),
+          source: similarModelSource({ url: fetched.url, title, page: c.page, quote: c.quote, coveredModel }),
         })
       }
       // General guidance items from a manual go to /dev/null — we already have `generalGuidance()`
@@ -242,6 +251,8 @@ async function findPlans(
 // can hand the client a guaranteed plan; the searchOutcome carries the reason for the funnel.
 // KEE-60: only dishwashers use the general-guidance fallback. Other appliance types return an
 // empty plan with searchOutcome 'no_plan' when the search yields nothing.
+// `modelFamily`, when present, is ignored. The family used for Similar-model comes from the
+// confirmed model number, so a client cannot choose the evidence level.
 export async function proposePlan(
   args: { manufacturer: string; model: string; modelFamily?: string; applianceType?: string | null },
   deps: PlanDeps,
@@ -288,7 +299,7 @@ export async function proposePlan(
     return { proposals: [], fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
   }
   const find = await findPlans(
-    { manufacturer: args.manufacturer, model: args.model, modelFamily: args.modelFamily, candidates: search.candidates },
+    { manufacturer: args.manufacturer, model: args.model, candidates: search.candidates },
     deps,
   )
   if (find.proposals.length > 0) {

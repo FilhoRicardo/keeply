@@ -563,6 +563,25 @@ a {
   font-size: 13px;
 }
 
+.similar-model-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--aster-ink);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.similar-model-note p {
+  margin: 0;
+}
+
+.source-host,
+.covered-model {
+  overflow-wrap: anywhere;
+}
+
 .source-quote {
   margin: 0;
   padding-left: 10px;

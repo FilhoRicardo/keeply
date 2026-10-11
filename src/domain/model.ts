@@ -28,6 +28,9 @@ export type Source = {
   readonly location: string | null
   // The document's own words, required for Manufacturer verified.
   readonly quote: string | null
+  // Model number named on the cover when this task is Similar-model guidance.
+  // Persisted inside source_location; absent for verified and general tasks.
+  readonly coveredModel?: string
 }
 
 // What Keeply proposes, from a source. Never rewritten afterwards: the owner only accepts or rejects it.

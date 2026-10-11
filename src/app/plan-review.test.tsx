@@ -121,6 +121,82 @@ describe('PlanReview — source, page and quote', () => {
     const generalChip = within(general).getByText('General guidance').closest('.evidence')!
     expect(generalChip.className).toContain('evidence--general_guidance')
   })
+
+  it('shows similar-model wording, the covered model, host, page and quote for a family match', async () => {
+    const repo = testRepository()
+    await repo.addAppliance(
+      { manufacturer: 'Smeg', model: 'DI6012-1', serialNumber: '' },
+      [
+        {
+          name: 'Clean the filter',
+          instructions: 'Twist out the filter, rinse under warm water, refit.',
+          interval: { count: 1, unit: 'month' as const },
+          evidenceLevel: 'similar_model' as const,
+          source: {
+            type: 'similar_model_manual' as const,
+            title: 'Smeg DI6012 series manual',
+            url: 'https://www.smeg.com/di6012.pdf',
+            location: 'page 18',
+            quote: 'Clean the filter once a month under running water.',
+            coveredModel: 'DI6012-2',
+          },
+        },
+      ],
+      { fallback: 'similar', searchOutcome: 'ok', searchReason: null, searched: true },
+    )
+    stubCalendarConfigured()
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo)
+
+    const card = await screen.findByRole('article', { name: 'Clean the filter' })
+    expect(within(card).getByText('Similar-model guidance')).toBeInTheDocument()
+    expect(within(card).queryByText('Manufacturer verified')).not.toBeInTheDocument()
+    expect(within(card).getByText('Manual for a similar model (DI6012-2). Not verified for your exact model.')).toBeInTheDocument()
+    expect(within(card).getByText('DI6012-2')).toBeInTheDocument()
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Why? / View source' }))
+    expect(within(card).getByText('www.smeg.com')).toBeInTheDocument()
+    expect(within(card).getByText(/page 18/)).toBeInTheDocument()
+    expect(within(card).getByText('“Clean the filter once a month under running water.”')).toBeInTheDocument()
+  })
+
+  it('says a third-party copy of the exact model is not verified', async () => {
+    const repo = testRepository()
+    await repo.addAppliance(
+      { manufacturer: 'Smeg', model: 'DI6012-1', serialNumber: '' },
+      [
+        {
+          name: 'Clean the filter',
+          instructions: 'Twist out the filter, rinse under warm water, refit.',
+          interval: { count: 1, unit: 'month' as const },
+          evidenceLevel: 'similar_model' as const,
+          source: {
+            type: 'similar_model_manual' as const,
+            title: 'DI6012-1 user manual',
+            url: 'https://manualslib.com/smeg/DI6012-1.pdf',
+            location: 'page 9',
+            quote: 'Clean the filter once a month under running water.',
+            coveredModel: 'DI6012-1',
+          },
+        },
+      ],
+      { fallback: 'similar', searchOutcome: 'ok', searchReason: null, searched: true },
+    )
+    stubCalendarConfigured()
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo)
+
+    const card = await screen.findByRole('article', { name: 'Clean the filter' })
+    expect(within(card).getByText('Similar-model guidance')).toBeInTheDocument()
+    expect(within(card).queryByText('Manufacturer verified')).not.toBeInTheDocument()
+    expect(
+      within(card).getByText('Manual for your model, found on a third-party site (not the manufacturer’s). Not verified.'),
+    ).toBeInTheDocument()
+    expect(within(card).getByText('DI6012-1')).toBeInTheDocument()
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Why? / View source' }))
+    expect(within(card).getByText('manualslib.com')).toBeInTheDocument()
+    expect(within(card).getByText(/page 9/)).toBeInTheDocument()
+    expect(within(card).getByText('“Clean the filter once a month under running water.”')).toBeInTheDocument()
+  })
 })
 
 describe('PlanReview — fallback banner when the search cannot find a manual', () => {

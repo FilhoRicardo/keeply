@@ -119,8 +119,179 @@ describe('proposePlan', () => {
     })
 
     it('is not verified when the model is only a prefix of a longer model number', async () => {
+      // SMS6ZCI49EX is a different model in the same family, so the task is Similar-model.
       const result = await verifiedWith([{ page: 1, text: `User Manual ${MODEL}X\n${QUOTE}` }])
+      expect(result.fallback).toBe('similar')
+      expect(result.proposals[0].evidenceLevel).toBe('similar_model')
+      expect(result.proposals.every((p) => p.evidenceLevel !== 'manufacturer_verified')).toBe(true)
+    })
+  })
+
+  describe('similar-model guidance from the cover pages', () => {
+    const quote = 'Clean the filter once a month under running water.'
+    const smeg = { smeg: ['smeg.com'] }
+    const exactUrl = 'https://www.smeg.com/docs/DI6012-1.pdf'
+    const thirdPartyUrl = 'https://manualslib.com/smeg/DI6012-1.pdf'
+
+    function fromManual(args: {
+      model: string
+      url: string
+      pages: { page: number; text: string }[]
+      quote?: string
+      page?: number
+      modelFamily?: string
+      domains?: Record<string, string[]>
+      resolveSource?: PlanDeps['resolveSource']
+    }) {
+      const cited = args.page ?? 5
+      return proposePlan(
+        { manufacturer: 'Smeg', model: args.model, modelFamily: args.modelFamily, applianceType: 'dishwasher' },
+        makeDeps({
+          manufacturerDomains: args.domains ?? smeg,
+          searchManuals: searchOkWith(args.url, 'Smeg manual'),
+          fetchDocument: fetchOk(new TextEncoder().encode('x')),
+          extractPages: async () => ({ ok: true, pages: args.pages }),
+          resolveSource: args.resolveSource ?? (() => ({ documentModels: [] })),
+          extractTasks: extractedTasksOk([{ ...CANDIDATE, quote: args.quote ?? quote, page: cited }]),
+        }),
+      )
+    }
+
+    it('yields similar_model tasks from a related-model manual with a quote on the cited page', async () => {
+      const result = await fromManual({
+        model: 'DI6012-1',
+        url: exactUrl,
+        pages: [
+          { page: 1, text: 'User manual DI6012-2' },
+          { page: 5, text: `Care and cleaning\n${quote}` },
+        ],
+      })
+      expect(result.fallback).toBe('similar')
+      expect(result.proposals).toHaveLength(1)
+      expect(result.proposals[0].evidenceLevel).toBe('similar_model')
+      expect(result.proposals[0].source).toMatchObject({
+        type: 'similar_model_manual',
+        url: exactUrl,
+        location: 'page 5',
+        quote,
+        coveredModel: 'DI6012-2',
+      })
+    })
+
+    it('yields no level-2 task when the quote is not on the cited page', async () => {
+      const result = await fromManual({
+        model: 'DI6012-1',
+        url: exactUrl,
+        pages: [
+          { page: 1, text: 'User manual DI6012-2' },
+          { page: 5, text: 'No maintenance schedule is printed on this page.' },
+        ],
+      })
       expect(result.fallback).toBe('general')
+      expect(result.proposals.every((p) => p.evidenceLevel !== 'similar_model')).toBe(true)
+      expect(result.proposals.every((p) => p.evidenceLevel !== 'manufacturer_verified')).toBe(true)
+    })
+
+    it('still yields manufacturer_verified for an exact-model manual on the manufacturer domain', async () => {
+      const result = await fromManual({
+        model: 'DI6012-1',
+        url: exactUrl,
+        pages: [
+          { page: 1, text: 'User manual DI6012-1' },
+          { page: 5, text: quote },
+        ],
+      })
+      expect(result.fallback).toBe('exact')
+      expect(result.proposals[0].evidenceLevel).toBe('manufacturer_verified')
+      expect(result.proposals[0].source.type).toBe('manufacturer_manual')
+    })
+
+    it('yields similar_model, never verified, for an exact-model copy on a third-party host', async () => {
+      const result = await fromManual({
+        model: 'DI6012-1',
+        url: thirdPartyUrl,
+        pages: [
+          { page: 1, text: 'User manual DI6012-1' },
+          { page: 5, text: quote },
+        ],
+      })
+      expect(result.fallback).toBe('similar')
+      expect(result.proposals).toHaveLength(1)
+      expect(result.proposals[0].evidenceLevel).toBe('similar_model')
+      expect(result.proposals[0].source.coveredModel).toBe('DI6012-1')
+      expect(result.proposals[0].source.url).toBe(thirdPartyUrl)
+      expect(result.proposals.every((p) => p.evidenceLevel !== 'manufacturer_verified')).toBe(true)
+    })
+
+    it('drops a related model from a different family', async () => {
+      const result = await fromManual({
+        model: 'KEQB7300L',
+        url: 'https://www.electrolux.com/keqc.pdf',
+        domains: { electrolux: ['electrolux.com'] },
+        pages: [
+          { page: 1, text: 'User manual KEQC7200L' },
+          { page: 5, text: quote },
+        ],
+      })
+      expect(result.fallback).toBe('general')
+      expect(result.proposals.every((p) => p.evidenceLevel === 'general_guidance')).toBe(true)
+    })
+
+    it('ignores a client-sent family and a resolver family the cover does not support', async () => {
+      const invented = await fromManual({
+        model: 'DI6012-1',
+        modelFamily: 'KEQC7200',
+        url: exactUrl,
+        resolveSource: () => ({ documentModels: [], documentFamily: 'KEQC7200' }),
+        pages: [
+          { page: 1, text: 'User manual KEQC7200L' },
+          { page: 5, text: quote },
+        ],
+      })
+      expect(invented.fallback).toBe('general')
+
+      const real = await fromManual({
+        model: 'DI6012-1',
+        modelFamily: 'NO-SUCH-FAMILY',
+        url: exactUrl,
+        pages: [
+          { page: 1, text: 'User manual DI6012-2' },
+          { page: 5, text: quote },
+        ],
+      })
+      expect(real.proposals[0].evidenceLevel).toBe('similar_model')
+      expect(real.proposals[0].source.coveredModel).toBe('DI6012-2')
+    })
+
+    it('ends on a manufacturer-verified plan even when an earlier manual was only similar', async () => {
+      const related = 'https://www.smeg.com/docs/DI6012-2.pdf'
+      const exact = exactUrl
+      const result = await proposePlan(
+        { manufacturer: 'Smeg', model: 'DI6012-1', modelFamily: 'WRONG', applianceType: 'dishwasher' },
+        makeDeps({
+          manufacturerDomains: smeg,
+          searchManuals: async () => ({
+            status: 'ok',
+            candidates: [
+              { url: related, title: 'related', snippet: '', host: 'www.smeg.com' },
+              { url: exact, title: 'exact', snippet: '', host: 'www.smeg.com' },
+            ],
+          }),
+          fetchDocument: async (url: string) => ({
+            ok: true as const,
+            bytes: new TextEncoder().encode(url === exact ? `DI6012-1\n${quote}` : `DI6012-2\n${quote}`),
+            type: 'html' as const,
+            url,
+          }),
+          extractPages: async (bytes) => ({ ok: true as const, pages: [{ page: 1, text: new TextDecoder().decode(bytes) }] }),
+          resolveSource: () => ({ documentModels: [] }),
+          extractTasks: extractedTasksOk([{ ...CANDIDATE, quote, page: 1 }]),
+        }),
+      )
+      expect(result.fallback).toBe('exact')
+      expect(result.proposals).toHaveLength(1)
+      expect(result.proposals[0].evidenceLevel).toBe('manufacturer_verified')
+      expect(result.proposals[0].source.url).toBe(exact)
     })
   })
 
