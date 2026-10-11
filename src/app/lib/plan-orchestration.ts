@@ -190,7 +190,7 @@ type PreparedCandidate =
       rank: number
       candidate: { url: string; title: string }
       url: string
-      pages: readonly { page: number; text: string }[]
+      pages: readonly { page: number; text: string; title?: string }[]
       kind: 'exact' | 'family'
       manufacturerSite: boolean
     }
