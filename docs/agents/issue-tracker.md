@@ -7,7 +7,7 @@
 - GitHub: https://github.com/FilhoRicardo/keeply
 - Setup validation: https://linear.app/rf-ai-workspace/issue/RF-338/validate-subscription-based-codex-and-cursor-workflow
 
-Use available Linear tools for scope, specs and tickets. Fetch full issue bodies and comments before implementation/review. Publish dependent tickets in dependency order using native blocking relationships. Do not duplicate the backlog in GitHub Issues or revive Paperclip.
+Use available Linear tools for scope, specs and tickets. Fetch full issue bodies and comments before implementation/review. Publish dependent tickets in dependency order using native blocking relationships. Do not duplicate the backlog in GitHub Issues. Do not use Paperclip.
 
 Create work in Backlog. Only after the workflow planning gate passes may a ticket receive ready-for-agent and move to Todo. `to-spec` and `to-tickets` upstream readiness defaults are subordinate to this project gate. Native triage is not configured; do not invent or create additional labels automatically.
 

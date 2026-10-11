@@ -24,7 +24,7 @@ Merge only with an explicit passing review of the current commit and required CI
 
 ## Budget and activation
 
-Use Codex signed in with ChatGPT; no OpenAI API key or API-backed Action. Cursor uses its separate subscription and cloud allowance, which must be verified before automation is enabled. Start with one worker and at most two automatic repair rounds, then escalate. Automation setup/validation is tracked in RF-338. No worker automation is enabled by these files.
+Use Codex signed in with ChatGPT; no OpenAI API key or API-backed Action. Cursor uses its separate subscription and cloud allowance, which must be verified before automation is enabled. Start with one worker and at most two automatic repair rounds, then escalate. No worker automation is enabled by these files. Paperclip is not part of this workflow.
 
 ## Final step: /retro
 

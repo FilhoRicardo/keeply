@@ -8,7 +8,7 @@ Route here for work on Keeply (`active/Keeply/`). Outcome: a mobile-first PWA wh
 
 - GitHub repo: https://github.com/FilhoRicardo/keeply
 - Issue tracker: [Keeply in Linear](https://linear.app/rf-ai-workspace/project/keeply-a66469c00bfb), Engineering team (RF). Linear owns specifications, tickets, dependencies and status; GitHub owns code and PRs.
-- Planning source: `docs/HANDOFF.md` preserves existing product decisions. New agreed scope is captured in Linear. Historical Paperclip records are context only; Paperclip remains parked and must not be awakened.
+- Planning source: `docs/HANDOFF.md` preserves existing product decisions. New agreed scope is captured in Linear. Historical Paperclip records are context only. Paperclip is not in use and must not be started.
 - Roles: Codex plans and reviews; Cursor implements approved tickets. Claude is reserved for professional/business work unless Ricardo explicitly assigns another role.
 
 ## Agent skills
