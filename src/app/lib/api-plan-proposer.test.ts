@@ -154,6 +154,19 @@ describe('createApiPlanProposer', () => {
     expect(JSON.parse(init.body as string)).toEqual({ manufacturer, model: '' })
   })
 
+  it('sends the appliance type so a dishwasher is not planned as an unknown appliance', async () => {
+    const calls: { url: string; init?: RequestInit }[] = []
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      return jsonResponse(FALLBACK_BODY)
+    })
+    const propose = createApiPlanProposer({ fetch: fetchMock as unknown as typeof fetch })
+    await propose({ manufacturer, model, applianceType: 'Dishwasher' })
+
+    const init = calls[0].init as RequestInit
+    expect(JSON.parse(init.body as string)).toEqual({ manufacturer, model, applianceType: 'Dishwasher' })
+  })
+
   it('rejects malformed proposals gracefully and reports an empty list', async () => {
     const fetchMock = vi.fn(async () =>
       jsonResponse({

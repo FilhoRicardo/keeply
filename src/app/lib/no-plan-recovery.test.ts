@@ -37,10 +37,23 @@ describe('no-plan recovery mapping', () => {
     },
   )
 
+  it.each(['extraction_unavailable', 'timeout'] as const)(
+    'says manuals were found but could not be read for %s',
+    (token) => {
+      const fromOutcome = recovery({ searchOutcome: token, searchReason: 'no_plan' })
+      const fromReason = recovery({ searchOutcome: 'no_plan', searchReason: token })
+      for (const result of [fromOutcome, fromReason]) {
+        expect(result.category).toBe('temporary')
+        expect(result.message).toBe('Keeply found manuals but could not read them right now. Try again later.')
+        expect(result.message).not.toMatch(NO_MANUAL_EXISTS)
+        expect(result.message).not.toMatch(/dishwasher/i)
+        expect(result.message).not.toMatch(UNSAFE)
+      }
+    },
+  )
+
   it.each([
     'quota_exhausted',
-    'timeout',
-    'extraction_unavailable',
     'network_error',
     'http_error',
     'http_408',

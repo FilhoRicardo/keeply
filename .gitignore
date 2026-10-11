@@ -1,5 +1,6 @@
 node_modules/
 .next/
+.next-scan/
 .env
 .env.*
 !.env.example

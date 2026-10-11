@@ -23,6 +23,11 @@ const COPY: Record<NoPlanCategory, string> = {
   generic: 'Keeply could not create a supported maintenance plan. Check the details or try again later.',
 }
 
+// Same honesty as the dishwasher plan banner, without calling the tasks dishwasher tasks:
+// this recovery is only shown when there is no plan to save.
+const COULD_NOT_READ = new Set(['extraction_unavailable', 'timeout'])
+const COULD_NOT_READ_COPY = 'Keeply found manuals but could not read them right now. Try again later.'
+
 const MANUAL_INFORMATION = new Set(['fetch_failed', 'unreadable', 'no_text'])
 const TEMPORARY = new Set([
   'quota_exhausted',
@@ -52,6 +57,11 @@ function categoryFor(token: string | null | undefined): NoPlanCategory | null {
 }
 
 export function noPlanRecovery(signal: NoPlanSignal | null | undefined): NoPlanRecovery {
-  const category = categoryFor(signal?.searchOutcome) ?? categoryFor(signal?.searchReason) ?? 'generic'
+  const fromOutcome = categoryFor(signal?.searchOutcome)
+  const category = fromOutcome ?? categoryFor(signal?.searchReason) ?? 'generic'
+  const token = fromOutcome ? signal?.searchOutcome : signal?.searchReason
+  if (category === 'temporary' && typeof token === 'string' && COULD_NOT_READ.has(token)) {
+    return { category, message: COULD_NOT_READ_COPY }
+  }
   return { category, message: COPY[category] }
 }

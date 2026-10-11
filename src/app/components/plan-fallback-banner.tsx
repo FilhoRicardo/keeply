@@ -35,11 +35,8 @@ export function planFallbackReason(meta: ProposalMeta | null): PlanFallbackReaso
   return 'no_search_key'
 }
 
-// KEE-60: the body copy is appliance-agnostic. The general-guidance list is dishwasher-specific
-// (GENERAL_DISHWASHER_TASKS) and only used for dishwashers — the body still calls the tasks
-// "general guidance" so the same banner wording works whether the appliance is a dishwasher or
-// any other category that happens to surface general tasks. (Other categories today get an
-// empty plan with the no-plan banner; this banner only appears when every task is general.)
+// This banner only appears when every task is the dishwasher general-guidance list. Other
+// appliances never get that list; they stay on the entry screen with no-plan recovery.
 const REASON_COPY: Record<PlanFallbackReason, { eyebrow: string; title: string; body: string }> = {
   no_search_key: {
     eyebrow: 'General guidance',
@@ -79,9 +76,8 @@ const REASON_COPY: Record<PlanFallbackReason, { eyebrow: string; title: string; 
   },
   extraction_unavailable: {
     eyebrow: 'General guidance',
-    title: 'Could not read the manufacturer manual',
-    body:
-      'Keeply found a manual but the AI service is not available right now. These are general guidance tasks. They are not a manufacturer recommendation.',
+    title: 'Keeply found manuals but could not read them right now',
+    body: 'These are general dishwasher tasks, not a manufacturer recommendation.',
   },
   unreadable: {
     eyebrow: 'General guidance',
@@ -97,9 +93,8 @@ const REASON_COPY: Record<PlanFallbackReason, { eyebrow: string; title: string; 
   },
   timeout: {
     eyebrow: 'General guidance',
-    title: 'Search took too long',
-    body:
-      'Keeply did not finish searching in time. These are general guidance tasks. They are not a manufacturer recommendation.',
+    title: 'Keeply found manuals but could not read them right now',
+    body: 'These are general dishwasher tasks, not a manufacturer recommendation.',
   },
   network_error: {
     eyebrow: 'General guidance',

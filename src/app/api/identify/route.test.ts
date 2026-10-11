@@ -78,14 +78,51 @@ describe('POST /api/identify', () => {
     })
   })
 
-  it('falls back to Manual when MiniMax fails', async () => {
+  it('says label reading is unavailable when the provider errors, and hides the error body', async () => {
     vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
     vi.stubEnv('MINIMAX_API_KEY', 'server-key')
     vi.stubEnv('KEEPLY_SCAN_ACCESS', 'open')
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"invalid key sk-secret-fragment"}', { status: 500 })))
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
-    expect(await (await post(new Blob(['x'], { type: 'image/jpeg' }))).json()).toEqual({ identification: null, notice: null })
+    const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
+    const text = await response.text()
+    expect(response.status).toBe(200)
+    expect(text).not.toContain('sk-secret-fragment')
+    expect(JSON.parse(text)).toEqual({ identification: null, notice: 'ai_unavailable' })
     expect(errors).not.toHaveBeenCalled()
+  })
+
+  it('says label reading is unavailable when the provider times out, and hides the error text', async () => {
+    vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
+    vi.stubEnv('MINIMAX_API_KEY', 'server-key')
+    vi.stubEnv('KEEPLY_SCAN_ACCESS', 'open')
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new Error('The operation timed out sk-secret-fragment')
+    }))
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
+    const text = await response.text()
+    expect(response.status).toBe(200)
+    expect(text).not.toContain('sk-secret-fragment')
+    expect(JSON.parse(text)).toEqual({ identification: null, notice: 'ai_unavailable' })
+    expect(errors).not.toHaveBeenCalled()
+  })
+
+  it('still proposes nothing when the provider answers that it recognised nothing', async () => {
+    vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
+    vi.stubEnv('MINIMAX_API_KEY', 'server-key')
+    vi.stubEnv('KEEPLY_SCAN_ACCESS', 'open')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          choices: [{ message: { content: '{"applianceType":"unknown","manufacturer":null,"model":null,"serialNumber":null,"confidence":0}' } }],
+        }),
+      ),
+    )
+    const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ identification: null, notice: null })
   })
 })
 
@@ -167,7 +204,9 @@ describe('POST /api/identify for invited testers (default access mode)', () => {
     }))
     const response = await post(photo(), session)
     expect(calls).toHaveLength(1)
-    expect(await response.json()).toEqual({ identification: null, notice: null })
+    const text = await response.text()
+    expect(text).not.toContain('owners-private-key')
+    expect(JSON.parse(text)).toEqual({ identification: null, notice: 'ai_unavailable' })
   })
 
   it.each(['no_invite', 'tester_limit', 'daily_limit', 'signed_out'])('refuses %s without calling MiniMax', async (reason) => {

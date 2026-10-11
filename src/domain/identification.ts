@@ -22,13 +22,15 @@ export type ApplianceIdentification = {
 export type RecognitionResult = {
   // A proposal for the owner to confirm, edit or rescan; null when nothing usable was read.
   identification: ApplianceIdentification | null
-  // Why there is no proposal: AI reading was not allowed (no invite, or a scan limit reached).
-  // KEE-60: an "other" appliance is a valid appliance, not a refusal — the proposal is shown
-  // and the owner confirms. Only access denials come through here.
+  // Why there is no proposal. Invite and limit refusals mean nothing was sent to a provider.
+  // `ai_unavailable` also covers a provider error or timeout after the photo was sent: the
+  // browser gets this notice only, never the provider's error. KEE-60: an "other" appliance
+  // is a valid appliance, not a refusal — the proposal is shown and the owner confirms.
   notice: AccessDenial | null
 }
 
-// Access refusals (nothing was sent to a provider). 'not_a_dishwasher' was retired in KEE-60.
+// 'not_a_dishwasher' was retired in KEE-60. `ai_unavailable` is the honest "the AI service
+// did not answer" notice, including a thrown or timed-out provider call (RF-348).
 export const ACCESS_DENIALS = ['no_invite', 'tester_limit', 'daily_limit', 'ai_unavailable'] as const
 export type AccessDenial = (typeof ACCESS_DENIALS)[number]
 export type RecognitionNotice = AccessDenial

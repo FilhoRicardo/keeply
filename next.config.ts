@@ -31,6 +31,8 @@ export const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // E2E builds a second server with scanning on, into its own output directory.
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]
   },

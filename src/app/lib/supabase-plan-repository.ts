@@ -14,6 +14,21 @@ import type { ProposalMeta } from '@/domain/model'
 import type { PlanRepository } from './plan-repository'
 import { validateNewAppliance, type PlanState } from './plan-state'
 
+// Supabase does not store proposalMeta (no column; schema stays out of scope). Remember the
+// outcome for this browser session so the plan banner can still say why the tasks are general.
+export function rememberProposalMeta(state: PlanState, remembered: ReadonlyMap<string, ProposalMeta>): PlanState {
+  if (remembered.size === 0) return state
+  let changed = false
+  const records = state.records.map((record) => {
+    if (record.proposalMeta) return record
+    const meta = remembered.get(record.appliance.id)
+    if (!meta) return record
+    changed = true
+    return { ...record, proposalMeta: meta }
+  })
+  return changed ? { ...state, records } : state
+}
+
 // PlanRepository backed by Supabase. `ensureSession` signs the visitor in (anonymously until they
 // sign in with Google) before the first call; row-level security and the schema's rules do the rest.
 export function createSupabasePlanRepository({
@@ -26,12 +41,13 @@ export function createSupabasePlanRepository({
   now?: () => string
 }): PlanRepository {
   let session: Promise<void> | null = null
+  const rememberedMeta = new Map<string, ProposalMeta>()
   // Shared only while in flight: after a sign-out the next call starts a fresh session.
   const ready = () => (session ??= ensureSession().finally(() => (session = null)))
 
   async function load(): Promise<PlanState> {
     await ready()
-    return { version: 2, records: (await loadApplianceTrees(db)).map(toApplianceRecord) }
+    return rememberProposalMeta({ version: 2, records: (await loadApplianceTrees(db)).map(toApplianceRecord) }, rememberedMeta)
   }
 
   return {
@@ -43,10 +59,9 @@ export function createSupabasePlanRepository({
       return data.session?.access_token ?? null
     },
     async addAppliance(input, proposals, _meta?: ProposalMeta | null) {
-      // KEE-43: the Supabase adapter does not persist proposalMeta yet (no column). The plan
-      // page falls back to a generic banner in that case. The live proposer still runs; the
-      // outcome is recorded in the funnel event by the orchestration's `plan_search` write.
-      void _meta
+      // KEE-43: there is still no proposalMeta column. Remember the outcome on this repository
+      // so the plan the owner just opened can name the real reason. A later full reload, which
+      // builds a new repository, falls back to the generic banner again.
       const error = validateNewAppliance(input)
       if (error) throw new Error(error)
       await ready()
@@ -55,6 +70,7 @@ export function createSupabasePlanRepository({
         { manufacturer: input.manufacturer.trim(), model: input.model, serialNumber: input.serialNumber, confidence: input.confidence ?? null },
         proposals,
       )
+      if (_meta) rememberedMeta.set(applianceId, _meta)
       return { state: await load(), applianceId }
     },
     async decide(_applianceId, taskId, decision) {
@@ -81,6 +97,7 @@ export function createSupabasePlanRepository({
     },
     async deleteAppliance(applianceId) {
       await ready()
+      rememberedMeta.delete(applianceId)
       await deleteAppliance(db, applianceId)
       return load()
     },

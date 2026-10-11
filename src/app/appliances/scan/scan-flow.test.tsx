@@ -146,6 +146,56 @@ describe('ScanFlow privacy', () => {
   })
 })
 
+describe('ScanFlow when AI label reading is unavailable', () => {
+  it('shows the manual form and does not ask for a clearer photo', async () => {
+    const unavailable: ApplianceRecognizer = {
+      recognise: async () => ({ identification: null, notice: 'ai_unavailable' }),
+    }
+    renderWithPlan(<ScanFlow recognizer={unavailable} />, repo)
+    await takePhoto()
+    expect(screen.getByText('AI label reading is unavailable right now. Enter the details below.')).toBeInTheDocument()
+    expect(screen.queryByText(/clearer photo/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Manufacturer')).toHaveValue('')
+    expect(screen.getByLabelText('Appliance', { exact: false })).toBeInTheDocument()
+  })
+})
+
+describe('ScanFlow when no plan can be built', () => {
+  const fridge: ApplianceRecognizer = {
+    recognise: async () => ({
+      identification: {
+        category: 'fridge',
+        manufacturer: 'Bosch',
+        model: 'KGN39VLEB',
+        serialNumber: '',
+        confidence: 0.8,
+        source: 'photo_recognition',
+      },
+      notice: null,
+    }),
+  }
+
+  it.each([
+    ['extraction_unavailable', /Keeply found manuals but could not read them right now/],
+    ['timeout', /Keeply found manuals but could not read them right now/],
+    ['no_results', /could not find suitable manufacturer guidance/i],
+  ] as const)('a fridge with %s stays on the confirm screen and says why', async (outcome, copy) => {
+    const propose = vi.fn(async () => ({
+      proposals: [],
+      meta: { fallback: 'general' as const, searchOutcome: outcome, searchReason: null, searched: true },
+    }))
+    renderWithPlan(<ScanFlow recognizer={fridge} />, repo, undefined, { proposer: propose })
+    await takePhoto()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm' })))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(copy)
+    expect(alert).not.toHaveTextContent(/no manufacturer manual found/i)
+    expect(alert).not.toHaveTextContent(/general dishwasher tasks/i)
+    expect(screen.getByText('Bosch')).toBeInTheDocument()
+    expect(push).not.toHaveBeenCalled()
+  })
+})
+
 describe('ScanFlow for invited testers', () => {
   it.each([
     ['no_invite', /AI label reading is for invited testers, so the photo was not sent to the AI service/],
