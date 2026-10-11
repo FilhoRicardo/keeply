@@ -438,41 +438,71 @@ describe('manufacturer guidance on the plan screen', () => {
   })
 })
 
-describe('non-dishwasher with no manual (KEE-60)', () => {
-  // KEE-60: when the proposer honestly returns no plan (a fridge with no manual), the
-  // provider's error banner must NOT appear and the form must not navigate. The form shows
-  // exactly one plain message and re-enables the button so the owner can change the category.
-  it('manual-entry path: shows a plain message, no banner, and does not navigate', async () => {
-    const events: FunnelEvent[] = []
-    renderWithPlan(<NewApplianceForm />, repo, (e) => void events.push(e), {
-      proposer: async () => ({
-        proposals: [],
-        meta: { fallback: 'general', searchOutcome: 'no_results', searchReason: 'no_plan', searched: false },
-      }),
+describe('non-dishwasher no-plan recovery', () => {
+  function emptyPlan(searchOutcome: string, searchReason: string | null = null) {
+    return async () => ({
+      proposals: [],
+      meta: { fallback: 'general' as const, searchOutcome: searchOutcome as 'no_results', searchReason, searched: false },
     })
+  }
+
+  async function enterFridge() {
     fireEvent.change(screen.getByLabelText('Appliance', { exact: false }), { target: { value: 'Fridge' } })
     fireEvent.change(screen.getByLabelText('Manufacturer'), { target: { value: 'Bosch' } })
     fireEvent.change(screen.getByLabelText(/Model number/), { target: { value: 'KGN39VLEB' } })
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue to maintenance plan' })))
+  }
 
-    // The form shows exactly one message — the local "No plan could be built" line.
+  it.each([
+    ['no_results', /could not find suitable manufacturer guidance/i],
+    ['fetch_failed', /couldn’t create a supported plan from this manual/i],
+    ['timeout', /could not create a supported plan right now/i],
+    ['no_plan', /could not create a supported maintenance plan/i],
+  ] as const)('manual entry maps %s to one recovery callout and keeps the form', async (outcome, copy) => {
+    const events: FunnelEvent[] = []
+    renderWithPlan(<NewApplianceForm />, repo, (e) => void events.push(e), { proposer: emptyPlan(outcome, outcome) })
+    await enterFridge()
+
     const alerts = await screen.findAllByRole('alert')
     expect(alerts).toHaveLength(1)
-    expect(alerts[0]).toHaveTextContent(/no plan could be built for this appliance/i)
-    // The provider's "could not reach your plan" banner is NOT set.
+    expect(alerts[0]).toHaveTextContent(copy)
+    expect(alerts[0]).not.toHaveTextContent(/unsafe/i)
     expect(screen.queryByText(/could not reach your plan/i)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
-    // The form unlocks so the owner can change the category and try again.
-    expect(screen.getByRole('button', { name: 'Continue to maintenance plan' })).toBeEnabled()
-    // No navigation, no save.
+    expect(screen.getByLabelText('Manufacturer')).toHaveValue('Bosch')
+    expect(screen.getByLabelText(/Model number/)).toHaveValue('KGN39VLEB')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeEnabled()
     expect(push).not.toHaveBeenCalled()
     expect((await repo.load()).records).toEqual([])
-    // The funnel only fires `appliance_added` with `plan: 'none'`; no `plan_proposed` (no plan).
-    expect(events.map((e) => e.name)).toEqual(['appliance_added'])
-    expect(events[0]).toMatchObject({ scanned: false, plan: 'none' })
+    expect(events.map((e) => e.name)).not.toContain('appliance_added')
+    expect(events.map((e) => e.name)).not.toContain('plan_proposed')
   })
 
-  it('scan confirm path: shows a plain message, no banner, and does not navigate', async () => {
+  it('clears the callout while a retry is in flight and calls the proposer once per press', async () => {
+    let release: (value: typeof pending) => void = () => {}
+    const pending = {
+      proposals: [] as [],
+      meta: { fallback: 'general' as const, searchOutcome: 'timeout' as const, searchReason: 'timeout', searched: true },
+    }
+    const propose = vi.fn()
+      .mockResolvedValueOnce(pending)
+      .mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
+    renderWithPlan(<NewApplianceForm />, repo, undefined, { proposer: propose })
+    await enterFridge()
+    expect(await screen.findByRole('alert')).toHaveTextContent(/right now/i)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Looking for your manual…' })).toBeDisabled()
+    await act(async () => {
+      release(pending)
+    })
+    expect(await screen.findByRole('alert')).toHaveTextContent(/right now/i)
+    expect(propose).toHaveBeenCalledTimes(2)
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('scan confirm keeps the recognised details and offers Try again', async () => {
     const events: FunnelEvent[] = []
     const fridge: ApplianceRecognizer = {
       recognise: async () => ({
@@ -487,34 +517,28 @@ describe('non-dishwasher with no manual (KEE-60)', () => {
         notice: null,
       }),
     }
-    renderWithPlan(<ScanFlow recognizer={fridge} />, repo, (e) => void events.push(e), {
-      proposer: async () => ({
-        proposals: [],
-        meta: { fallback: 'general', searchOutcome: 'no_results', searchReason: 'no_plan', searched: false },
-      }),
-    })
+    const propose = vi.fn(async () => ({
+      proposals: [],
+      meta: { fallback: 'general' as const, searchOutcome: 'unreadable' as const, searchReason: null, searched: true },
+    }))
+    renderWithPlan(<ScanFlow recognizer={fridge} />, repo, (e) => void events.push(e), { proposer: propose })
     await takePhoto()
-    // The recognised identity is shown; the owner confirms the photo read.
     expect(screen.getByText('Fridge')).toBeInTheDocument()
-    expect(screen.getByText('Bosch')).toBeInTheDocument()
-    expect(screen.getByText('KGN39VLEB')).toBeInTheDocument()
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm' })))
 
-    // The confirm form shows exactly one message — the local "No plan could be built" line.
     const alerts = await screen.findAllByRole('alert')
     expect(alerts).toHaveLength(1)
-    expect(alerts[0]).toHaveTextContent(/no plan could be built for this appliance/i)
-    // The provider's "could not reach your plan" banner is NOT set.
+    expect(alerts[0]).toHaveTextContent(/couldn’t create a supported plan from this manual/i)
     expect(screen.queryByText(/could not reach your plan/i)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
-    // The confirm button is re-enabled so the owner can change the category and try again.
-    expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled()
-    // No navigation, no save.
+    expect(screen.getByText('Bosch')).toBeInTheDocument()
+    expect(screen.getByText('KGN39VLEB')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Rescan' })).toBeEnabled()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Try again' })))
+    expect(propose).toHaveBeenCalledTimes(2)
     expect(push).not.toHaveBeenCalled()
     expect((await repo.load()).records).toEqual([])
-    // Scan funnel: scan_started, label_read, appliance_added (no_plan); no plan_proposed.
-    expect(events.map((e) => e.name)).toEqual(['scan_started', 'label_read', 'appliance_added'])
-    expect(events[events.length - 1]).toMatchObject({ scanned: true, plan: 'none' })
+    expect(events.map((e) => e.name)).toEqual(['scan_started', 'label_read'])
   })
 })
 

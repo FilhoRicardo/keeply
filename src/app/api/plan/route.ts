@@ -39,9 +39,8 @@ function parseBody(body: unknown): { manufacturer: string; model: string; modelF
 // returns a calendar event — it only proposes tasks — but it costs a billable provider call, so
 // the gate is right.
 async function gate(request: NextRequest, env: Record<string, string | undefined>): Promise<NextResponse | null> {
-  if (!planSearchLive(env)) return NextResponse.json({ error: 'not_enabled' }, { status: 404 })
-  // No reservation needed when no provider call would happen (Manual mode with no Brave key).
-  // planSearchLive already covered that case.
+  // The caller already confirmed the route is live and the body is valid. Reserve a scan
+  // only after that, so a blank model cannot spend a tester slot.
   if (!bearerToken(request.headers.get('authorization'))) {
     // The visitor must be signed in (anonymous or full) to spend a tester slot. Without a session
     // we refuse before any provider call; Manual without a session is still allowed.
@@ -60,11 +59,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (originGuard) return originGuard
   const contentTypeGuard = enforceJsonContentType(request)
   if (contentTypeGuard) return contentTypeGuard
-  const gated = await gate(request, process.env)
-  if (gated) return gated
+  if (!planSearchLive(process.env)) return NextResponse.json({ error: 'not_enabled' }, { status: 404 })
   const body = await request.json().catch(() => null)
   const parsed = parseBody(body)
   if (!parsed) return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
+  const gated = await gate(request, process.env)
+  if (gated) return gated
   const result = await runPlan(parsed)
   // Counts only — no document text, no URLs, no model name. The event is best-effort.
   await recordPlanSearch(result.searchOutcome)

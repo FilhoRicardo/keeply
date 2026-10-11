@@ -258,7 +258,7 @@ export async function proposePlan(
 
   if (timedOut(deps.signal)) {
     if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
-    return noPlan()
+    return { proposals: [], fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
   }
   // Step 1: durable counter check. Runs BEFORE searchManuals so a refused call is never started
   // (CEO directive, 2026-10-05). Once at the cap the Brave fetch is never made (asserted in tests).
@@ -269,7 +269,7 @@ export async function proposePlan(
   }
   if (timedOut(deps.signal)) {
     if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
-    return noPlan()
+    return { proposals: [], fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
   }
 
   // Step 2: discovery.
@@ -285,7 +285,7 @@ export async function proposePlan(
   // search.status === 'ok'. Walk candidates.
   if (timedOut(deps.signal)) {
     if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
-    return noPlan()
+    return { proposals: [], fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
   }
   const find = await findPlans(
     { manufacturer: args.manufacturer, model: args.model, modelFamily: args.modelFamily, candidates: search.candidates },

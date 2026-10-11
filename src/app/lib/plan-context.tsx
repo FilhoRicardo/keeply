@@ -31,16 +31,16 @@ type PlanContextValue = {
   track(event: FunnelEvent): void
   // Finds the plan for the confirmed appliance and saves it. Resolves to a typed result:
   //   - 'added'   — the appliance was saved; `applianceId` is ready for the plan screen.
-  //   - 'no_plan' — the proposer returned an honest empty plan (no manual was found, and the
-  //                 dishwasher general-guidance fallback does not apply). The owner is told in
-  //                 the form; the provider's error banner is NOT set, because this is a
-  //                 legitimate outcome of the appliance-agnostic flow (KEE-60), not a network
-  //                 or storage failure. Callers MUST handle the no_plan branch.
+  //   - 'no_plan' — the proposer returned an empty plan and the dishwasher general-guidance
+  //                 fallback does not apply. `meta` is the outcome the proposer already
+  //                 produced, or null when a stub proposer returned a bare list. Nothing is
+  //                 saved and no appliance_added event is emitted. Callers MUST handle this
+  //                 branch. The provider's error banner stays reserved for thrown failures.
   // Other failures (network, storage, validation) still throw and are surfaced by the banner.
   addAppliance(
     input: NewApplianceInput,
     scanned?: boolean,
-  ): Promise<{ kind: 'added'; applianceId: string } | { kind: 'no_plan' }>
+  ): Promise<{ kind: 'added'; applianceId: string } | { kind: 'no_plan'; meta: ProposalMeta | null }>
   decide(applianceId: string, taskId: string, decision: Decision | null): Promise<PlanState>
   approve(applianceId: string, startDate: LocalDate): Promise<PlanState>
   recordCalendarResults(applianceId: string, results: readonly WriteResult[]): Promise<PlanState>
@@ -183,8 +183,7 @@ export function PlanProvider({
           ? { proposals: raw, meta: null }
           : raw
         if (proposals.length === 0) {
-          safeTrack(sinkRef, { name: 'appliance_added', scanned, plan: 'none' })
-          return { kind: 'no_plan' as const }
+          return { kind: 'no_plan' as const, meta }
         }
         // Capture the new id through the closure so `apply` can keep its `PlanState` return
         // type; the no_plan branch above never enters this path.

@@ -151,31 +151,23 @@ test('works offline after the first visit', async ({ page, context }) => {
   await context.setOffline(false)
 })
 
-// KEE-60: when a non-dishwasher has no manual, the form must show exactly one plain message
-// and the provider's "could not reach your plan" banner must NOT appear (a no_plan outcome
-// is not a failure). This test drives the real flow against a built `next start` and saves
-// screenshots so the Lead can open them without re-running the build.
-//
-// The scan-confirm path is covered by the unit test in src/app/appliances/flow.test.tsx
-// ("non-dishwasher with no manual (KEE-60) › scan confirm path") which exercises the same
-// React tree and the same `addAppliance` plumbing. The browser path is gated behind
-// NEXT_PUBLIC_KEEPLY_SCAN, which the e2e intentionally leaves off (the existing
-// "scanning stays shut when it is off" test relies on it). Re-run this Playwright file with
-// NEXT_PUBLIC_KEEPLY_SCAN=1 to get a scan-path screenshot.
-test('fridge + no manual (manual entry): one plain message, no provider banner, no navigation', async ({ page }) => {
+// Honest no-plan recovery: a non-dishwasher with no supported tasks stays on the form,
+// shows the callout for the intercepted reason, and does not navigate. The scan-confirm
+// path is covered in src/app/appliances/flow.test.tsx. Scanning stays off here so the
+// existing "scanning stays shut" test still holds.
+test('fridge + timeout: recovery callout, retained details, try again, no navigation', async ({ page }) => {
   const problems = watchConsole(page)
-  // The live /api/plan would either return general guidance (for dishwashers) or an empty
-  // plan (for non-dishwashers with no key) — both are honest responses, but we pin the
-  // empty-plan response here so the test is hermetic.
+  let planCalls = 0
   await page.route('**/api/plan', async (route) => {
+    planCalls += 1
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
         proposals: [],
         fallback: 'general',
-        searchOutcome: 'no_results',
-        searchReason: 'no_plan',
+        searchOutcome: 'no_plan',
+        searchReason: 'timeout',
       }),
     })
   })
@@ -187,16 +179,21 @@ test('fridge + no manual (manual entry): one plain message, no provider banner, 
   await page.screenshot({ path: 'test-results/kee-60-fridge-manual-form.png' })
   await page.getByRole('button', { name: 'Continue to maintenance plan' }).click()
 
-  // Exactly one alert — the local form message — and no provider banner.
-  // A bare `page.getByRole('alert')` also matches Next.js's hidden route announcer,
-  // so scope the locator to the form before counting alerts.
   const alerts = page.locator('form').getByRole('alert')
   await expect(alerts).toHaveCount(1)
-  await expect(alerts.first()).toContainText(/no plan could be built for this appliance/i)
-  await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0)
+  await expect(alerts.first()).toContainText(/try again later/i)
+  await expect(alerts.first()).not.toContainText(/no manufacturer manual/i)
   await expect(page.getByText(/could not reach your plan/i)).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Continue to maintenance plan' })).toBeEnabled()
+  await expect(page.getByLabel('Manufacturer')).toHaveValue('Bosch')
+  await expect(page.getByLabel(/Model number/)).toHaveValue('KGN39VLEB')
   await expect(page).toHaveURL(/\/appliances\/new$/)
+  await accessible(page)
+  await noHorizontalScroll(page)
   await page.screenshot({ path: 'test-results/kee-60-fridge-manual-result.png' })
+
+  await page.getByRole('button', { name: 'Try again' }).click()
+  await expect(alerts).toHaveCount(1)
+  await expect.poll(() => planCalls).toBe(2)
+  await expect(page).toHaveURL(/\/appliances\/new$/)
   expect(problems).toEqual([])
 })

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useId, useState } from 'react'
+import { noPlanRecovery, type NoPlanRecovery } from '../../lib/no-plan-recovery'
 import { usePlan } from '../../lib/plan-context'
 import { validateNewAppliance, type NewApplianceInput } from '../../lib/plan-state'
 
@@ -16,22 +17,25 @@ export function NewApplianceForm() {
   const { addAppliance } = usePlan()
   const [input, setInput] = useState<NewApplianceInput>({ category: 'Dishwasher', manufacturer: '', model: '', serialNumber: '' })
   const [error, setError] = useState<string | null>(null)
+  const [recovery, setRecovery] = useState<NoPlanRecovery | null>(null)
 
   const [busy, setBusy] = useState(false)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     const problem = validateNewAppliance(input)
-    if (problem) return setError(problem)
+    if (problem) {
+      setRecovery(null)
+      return setError(problem)
+    }
     setBusy(true)
     setError(null)
+    setRecovery(null)
     try {
-      // KEE-60: the proposer can honestly return no plan for a non-dishwasher with no manual.
-      // The context returns a typed `no_plan` result (not a throw) so the provider's error
-      // banner — which is reserved for network and storage failures — is not triggered.
+      // A typed no_plan result is a legitimate empty plan, not a network or storage failure.
       const result = await addAppliance(input)
       if (result.kind === 'no_plan') {
-        setError('No plan could be built for this appliance because Keeply found no manufacturer manual for this model. Check the model number, or look up the manufacturer’s manual online.')
+        setRecovery(noPlanRecovery(result.meta))
         setBusy(false)
         return
       }
@@ -89,6 +93,12 @@ export function NewApplianceForm() {
         <input className="input" autoComplete="off" {...field('serialNumber')} />
       </label>
 
+      {recovery && (
+        <p className="form-callout" role="alert">
+          {recovery.message}
+        </p>
+      )}
+
       {error && (
         <p className="form-error" role="alert">
           {error}
@@ -102,7 +112,7 @@ export function NewApplianceForm() {
       )}
 
       <button type="submit" className="aster-btn aster-btn--primary full-width" disabled={busy}>
-        {busy ? 'Looking for your manual…' : 'Continue to maintenance plan'}
+        {busy ? 'Looking for your manual…' : recovery ? 'Try again' : 'Continue to maintenance plan'}
       </button>
     </form>
   )

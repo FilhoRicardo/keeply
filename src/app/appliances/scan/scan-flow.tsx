@@ -16,6 +16,7 @@ import {
 } from '@/domain/identification'
 import type { ScanAccess } from '../../api/scan-access/route'
 import { httpRecognizer } from '../../lib/identify'
+import { noPlanRecovery, type NoPlanRecovery } from '../../lib/no-plan-recovery'
 import { usePlan } from '../../lib/plan-context'
 import { prepareLabelPhoto } from '../../lib/photo'
 
@@ -116,6 +117,7 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
   const access = useScanAccess(accessToken, account ? JSON.stringify(account) : '')
   const [step, setStep] = useState<Step>({ kind: 'capture' })
   const [error, setError] = useState<string | null>(null)
+  const [recovery, setRecovery] = useState<NoPlanRecovery | null>(null)
   const [busy, setBusy] = useState(false)
   const preview = step.kind === 'capture' ? null : step.preview
   // Release the preview's object URL when the photo changes or the screen closes.
@@ -124,6 +126,7 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
   async function onPhoto(file: File | undefined) {
     if (!file) return
     setError(null)
+    setRecovery(null)
     track({ name: 'scan_started' })
     const prepared = await prepareLabelPhoto(file)
     const preview = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(prepared) : null
@@ -198,12 +201,15 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
 
   async function confirm() {
     const problem = validateIdentification(identification)
-    if (problem) return setError(problem)
+    if (problem) {
+      setRecovery(null)
+      return setError(problem)
+    }
     setBusy(true)
+    setError(null)
+    setRecovery(null)
     try {
-      // KEE-60: a non-dishwasher with no manual returns a typed `no_plan` result. Surface the
-      // honest message in the form; do not navigate, do not let the provider's error banner
-      // (which is reserved for network and storage failures) appear.
+      // A typed no_plan result stays on this screen. The provider banner is only for thrown failures.
       const result = await addAppliance(
         {
           category: identification.category,
@@ -215,7 +221,7 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
         true,
       )
       if (result.kind === 'no_plan') {
-        setError('No plan could be built for this appliance because Keeply found no manufacturer manual for this model. Check the model number, or look up the manufacturer’s manual online.')
+        setRecovery(noPlanRecovery(result.meta))
         setBusy(false)
         return
       }
@@ -308,6 +314,12 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
         </>
       )}
 
+      {recovery && (
+        <p className="form-callout" role="alert">
+          {recovery.message}
+        </p>
+      )}
+
       {error && (
         <p className="form-error" role="alert">
           {error}
@@ -315,7 +327,7 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
       )}
 
       <button type="button" className="aster-btn aster-btn--primary full-width" onClick={confirm} disabled={busy}>
-        Confirm
+        {recovery ? 'Try again' : 'Confirm'}
       </button>
       <div className="button-row">
         {recognised && !editing && (
@@ -323,7 +335,15 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
             Edit
           </button>
         )}
-        <button type="button" className="aster-btn aster-btn--ghost" onClick={() => setStep({ kind: 'capture' })}>
+        <button
+          type="button"
+          className="aster-btn aster-btn--ghost"
+          onClick={() => {
+            setRecovery(null)
+            setError(null)
+            setStep({ kind: 'capture' })
+          }}
+        >
           Rescan
         </button>
       </div>
