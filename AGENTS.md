@@ -55,3 +55,20 @@ Run `pnpm verify` (= `pnpm typecheck && pnpm lint && pnpm test && pnpm build`) b
 - Check the linked Linear acceptance criteria and agreed test seams as well as repository standards.
 - Preserve explicit owner approval before calendar writes, evidence provenance, credential isolation, and usage limits.
 - Require passing relevant checks and real-input evidence for changed user flows. A lack of review comments is not merge approval.
+
+## Cursor Cloud specific instructions
+
+- Prefix `PATH` with `/usr/local/bin` before Node or pnpm commands. Login shells resolve nvm's Node 22 ahead of that directory; `/usr/local/bin` is Node.js 24.21.0 (CI's major) and pnpm 12.9.1.
+- The dev server is already listening on port 3000. A manual appliance plan works with no `.env.local`; plans stay in the browser.
+- `pnpm build && pnpm e2e` is the phone walkthrough. Playwright Chromium is installed; the suite uses port 3123.
+- `scripts/db-test.sh` and `scripts/db-integration.sh` need Postgres, pgTAP, and PostgREST, which this environment does not start.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
