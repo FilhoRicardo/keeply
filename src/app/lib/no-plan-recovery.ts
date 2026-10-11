@@ -27,6 +27,7 @@ const COPY: Record<NoPlanCategory, string> = {
 // this recovery is only shown when there is no plan to save.
 const COULD_NOT_READ = new Set(['extraction_unavailable', 'timeout'])
 const COULD_NOT_READ_COPY = 'Keeply found manuals but could not read them right now. Try again later.'
+const SEARCH_TIMEOUT_COPY = 'Keeply could not finish searching for a manual right now. Try again.'
 
 const MANUAL_INFORMATION = new Set(['fetch_failed', 'unreadable', 'no_text'])
 const TEMPORARY = new Set([
@@ -57,6 +58,11 @@ function categoryFor(token: string | null | undefined): NoPlanCategory | null {
 }
 
 export function noPlanRecovery(signal: NoPlanSignal | null | undefined): NoPlanRecovery {
+  // searchReason `timeout` means the search step stopped before any candidate manual was found.
+  // A timeout after manuals were found leaves searchReason as something else (`no_plan` or null).
+  if (signal?.searchReason === 'timeout') {
+    return { category: 'temporary', message: SEARCH_TIMEOUT_COPY }
+  }
   const fromOutcome = categoryFor(signal?.searchOutcome)
   const category = fromOutcome ?? categoryFor(signal?.searchReason) ?? 'generic'
   const token = fromOutcome ? signal?.searchOutcome : signal?.searchReason

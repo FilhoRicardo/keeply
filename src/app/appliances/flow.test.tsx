@@ -456,7 +456,7 @@ describe('non-dishwasher no-plan recovery', () => {
   it.each([
     ['no_results', /could not find suitable manufacturer guidance/i],
     ['fetch_failed', /couldn’t create a supported plan from this manual/i],
-    ['timeout', /found manuals but could not read them right now/i],
+    ['timeout', /could not finish searching for a manual right now/i],
     ['extraction_unavailable', /found manuals but could not read them right now/i],
     ['no_plan', /could not create a supported maintenance plan/i],
   ] as const)('manual entry maps %s to one recovery callout and keeps the form', async (outcome, copy) => {

@@ -37,20 +37,38 @@ describe('no-plan recovery mapping', () => {
     },
   )
 
-  it.each(['extraction_unavailable', 'timeout'] as const)(
-    'says manuals were found but could not be read for %s',
-    (token) => {
-      const fromOutcome = recovery({ searchOutcome: token, searchReason: 'no_plan' })
-      const fromReason = recovery({ searchOutcome: 'no_plan', searchReason: token })
-      for (const result of [fromOutcome, fromReason]) {
-        expect(result.category).toBe('temporary')
-        expect(result.message).toBe('Keeply found manuals but could not read them right now. Try again later.')
-        expect(result.message).not.toMatch(NO_MANUAL_EXISTS)
-        expect(result.message).not.toMatch(/dishwasher/i)
-        expect(result.message).not.toMatch(UNSAFE)
-      }
-    },
-  )
+  it('says manuals were found but could not be read when extraction is unavailable', () => {
+    const fromOutcome = recovery({ searchOutcome: 'extraction_unavailable', searchReason: 'no_plan' })
+    const fromReason = recovery({ searchOutcome: 'no_plan', searchReason: 'extraction_unavailable' })
+    for (const result of [fromOutcome, fromReason]) {
+      expect(result.category).toBe('temporary')
+      expect(result.message).toBe('Keeply found manuals but could not read them right now. Try again later.')
+      expect(result.message).not.toMatch(NO_MANUAL_EXISTS)
+      expect(result.message).not.toMatch(/dishwasher/i)
+      expect(result.message).not.toMatch(UNSAFE)
+    }
+  })
+
+  it('says manuals were found when reading times out after a search', () => {
+    const result = recovery({ searchOutcome: 'timeout', searchReason: 'no_plan' })
+    expect(result.category).toBe('temporary')
+    expect(result.message).toBe('Keeply found manuals but could not read them right now. Try again later.')
+    expect(result.message).not.toMatch(/could not finish searching/i)
+  })
+
+  it.each([
+    { searchOutcome: 'timeout', searchReason: 'timeout' },
+    { searchOutcome: 'no_plan', searchReason: 'timeout' },
+    { searchOutcome: 'no_results', searchReason: 'timeout' },
+  ] as const)('does not say manuals were found when the search itself timed out ($searchOutcome)', (signal) => {
+    const result = recovery(signal)
+    expect(result.category).toBe('temporary')
+    expect(result.message).toBe('Keeply could not finish searching for a manual right now. Try again.')
+    expect(result.message).not.toMatch(/found manuals/i)
+    expect(result.message).not.toMatch(NO_MANUAL_EXISTS)
+    expect(result.message).not.toMatch(/dishwasher/i)
+    expect(result.message).not.toMatch(UNSAFE)
+  })
 
   it.each([
     'quota_exhausted',

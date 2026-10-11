@@ -203,6 +203,45 @@ test('verified plan at 360 px shows source, page, quote, and a level-2/3 row nev
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'verified.png'), fullPage: true })
 })
 
+const SEARCH_TIMEOUT_FIXTURE = {
+  version: 2,
+  records: [
+    {
+      ...FALLBACK_FIXTURE.records[0],
+      appliance: { ...FALLBACK_FIXTURE.records[0].appliance, id: 'app-search-timeout' },
+      proposalMeta: {
+        fallback: 'general',
+        searchOutcome: 'timeout',
+        searchReason: 'timeout',
+        searched: true,
+      },
+      tasks: FALLBACK_FIXTURE.records[0].tasks.map((task) => ({
+        ...task,
+        id: task.id.replace('fallback', 'search-timeout'),
+        applianceId: 'app-search-timeout',
+      })),
+    },
+  ],
+}
+
+test('search-timeout plan at 360 px does not say manuals were found', async ({ page }) => {
+  await seedAndOpen(page, SEARCH_TIMEOUT_FIXTURE, 'app-search-timeout')
+
+  const banner = page.getByTestId('plan-fallback-banner')
+  await expect(banner).toBeVisible()
+  await expect(banner).toHaveAttribute('data-fallback-reason', 'search_timeout')
+  await expect(banner).toContainText('Keeply could not finish searching for a manual right now')
+  await expect(banner).toContainText('Try again')
+  await expect(banner).toContainText(/not a manufacturer recommendation/i)
+  await expect(banner).not.toContainText(/found manuals/i)
+  await expect(page.getByText(/found manuals/i)).toHaveCount(0)
+  await expect(page.getByText(/found no guidance for your exact model/i)).toHaveCount(0)
+
+  await noHorizontalScroll(page)
+  await accessible(page)
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'search-timeout.png'), fullPage: true })
+})
+
 test('fallback plan at 360 px shows the "no manual found" banner with the right reason', async ({ page }) => {
   await seedAndOpen(page, FALLBACK_FIXTURE, 'app-fallback')
 
