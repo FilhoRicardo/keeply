@@ -125,7 +125,7 @@ describe('device plan reload', () => {
     },
     {
       name: 'timeout',
-      meta: { fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout', searched: true },
+      meta: { fallback: 'general', searchOutcome: 'timeout', searchReason: null, searched: true },
       proposals,
       reason: 'timeout',
     },

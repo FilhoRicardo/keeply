@@ -125,7 +125,8 @@ const STOPS: ReadonlyArray<{
     stop: 'an older plan has no proposal record',
     meta: null,
     reason: 'no_proposal_meta',
-    wording: /No manufacturer manual found for this model\./,
+    wording: /Keeply has no record of how this plan was built/,
+    absent: /No manufacturer manual found/,
   },
 ]
 

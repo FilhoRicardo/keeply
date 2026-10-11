@@ -122,7 +122,7 @@ const cases: { name: string; meta: ProposalMeta; proposals: readonly TaskProposa
   },
   {
     name: 'timeout',
-    meta: { fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout', searched: true },
+    meta: { fallback: 'general', searchOutcome: 'timeout', searchReason: null, searched: true },
     proposals: GENERAL_DISHWASHER_TASKS,
     reason: 'timeout',
   },
