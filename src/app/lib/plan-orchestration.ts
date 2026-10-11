@@ -418,10 +418,11 @@ export async function proposePlan(
     if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'no_results', searchReason: search.reason }
     return { ...noPlan(), searchReason: search.reason }
   }
-  // search.status === 'ok'. Walk candidates.
+  // search.status === 'ok'. Candidates are already in hand, so a budget timeout here is
+  // a reading timeout: searchReason stays null. A search-phase timeout keeps reason 'timeout'.
   if (timedOut(deps.signal)) {
-    if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
-    return { proposals: [], fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout' }
+    if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'timeout', searchReason: null }
+    return { proposals: [], fallback: 'general', searchOutcome: 'timeout', searchReason: null }
   }
   const find = await findPlans(
     { manufacturer: args.manufacturer, model: args.model, candidates: search.candidates },

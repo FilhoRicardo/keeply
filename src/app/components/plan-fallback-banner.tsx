@@ -10,6 +10,7 @@ export type PlanFallbackReason =
   | 'unreadable'
   | 'no_text'
   | 'timeout'
+  | 'search_timeout'
   | 'quota_exhausted'
   | 'plan_search_disabled'
   | 'plan_search_refused'
@@ -21,6 +22,10 @@ export type PlanFallbackReason =
 export function planFallbackReason(meta: ProposalMeta | null): PlanFallbackReason {
   if (!meta) return 'no_proposal_meta'
   if (meta.searchOutcome === 'quota_exhausted') return 'quota_exhausted'
+  // The search step stopped before any candidate manual was found. A later budget
+  // timeout, after manuals were already found, keeps searchOutcome 'timeout' and
+  // leaves searchReason null so it stays the reading-phase reason below.
+  if (meta.searchReason === 'timeout') return 'search_timeout'
   if (meta.searchOutcome === 'timeout') return 'timeout'
   if (meta.searchOutcome === 'fetch_failed') return 'fetch_failed'
   if (meta.searchOutcome === 'extraction_unavailable') return 'extraction_unavailable'
@@ -30,7 +35,6 @@ export function planFallbackReason(meta: ProposalMeta | null): PlanFallbackReaso
   if (meta.searchReason === 'plan_search_disabled') return 'plan_search_disabled'
   if (meta.searchReason === 'plan_search_refused') return 'plan_search_refused'
   if (meta.searchReason === 'network_error') return 'network_error'
-  if (meta.searchReason === 'timeout') return 'timeout'
   if (meta.searchOutcome === 'no_results') return 'no_results'
   return 'no_search_key'
 }
@@ -95,6 +99,11 @@ const REASON_COPY: Record<PlanFallbackReason, { eyebrow: string; title: string; 
     eyebrow: 'General guidance',
     title: 'Keeply found manuals but could not read them right now',
     body: 'These are general dishwasher tasks, not a manufacturer recommendation.',
+  },
+  search_timeout: {
+    eyebrow: 'General guidance',
+    title: 'Keeply could not finish searching for a manual right now',
+    body: 'Try again. These are general dishwasher tasks, not a manufacturer recommendation.',
   },
   network_error: {
     eyebrow: 'General guidance',

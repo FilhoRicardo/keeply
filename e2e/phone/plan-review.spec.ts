@@ -203,6 +203,66 @@ test('verified plan at 360 px shows source, page, quote, and a level-2/3 row nev
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'verified.png'), fullPage: true })
 })
 
+const SEARCH_TIMEOUT_FIXTURE = {
+  version: 2,
+  records: [
+    {
+      appliance: {
+        id: 'app-search-timeout',
+        manufacturer: 'Electrolux',
+        model: 'KEQB7300L',
+        serialNumber: null,
+        identificationConfidence: null,
+        createdAt: '2026-10-05T10:00:00Z',
+      },
+      approvedAt: null,
+      startDate: null,
+      proposalMeta: {
+        fallback: 'general',
+        searchOutcome: 'no_results',
+        searchReason: 'timeout',
+        searched: true,
+      },
+      tasks: [
+        {
+          id: 'task-search-timeout-filter',
+          applianceId: 'app-search-timeout',
+          name: 'Clean the filter',
+          instructions: 'Twist out the filter, rinse it under warm water.',
+          interval: { count: 1, unit: 'month' },
+          evidenceLevel: 'general_guidance',
+          source: {
+            type: 'general_guidance',
+            title: 'Keeply general dishwasher maintenance guidance',
+            url: null,
+            location: null,
+            quote: null,
+          },
+          status: 'proposed',
+          calendarEventId: null,
+        },
+      ],
+    },
+  ],
+}
+
+test('search-timeout plan at 360 px does not claim manuals were found', async ({ page }) => {
+  await seedAndOpen(page, SEARCH_TIMEOUT_FIXTURE, 'app-search-timeout')
+
+  const banner = page.getByTestId('plan-fallback-banner')
+  await expect(banner).toBeVisible()
+  await expect(banner).toHaveAttribute('data-fallback-reason', 'search_timeout')
+  await expect(banner).toHaveText(/could not finish searching for a manual right now/i)
+  await expect(banner).toHaveText(/try again/i)
+  await expect(banner).not.toHaveText(/found manuals/i)
+  await expect(page.getByText(/found no guidance for your exact model/i)).toHaveCount(0)
+  await expect(page.getByText('Manufacturer verified')).toHaveCount(0)
+
+  await noHorizontalScroll(page)
+  await accessible(page)
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'search-timeout.png'), fullPage: true })
+})
+
 test('fallback plan at 360 px shows the "no manual found" banner with the right reason', async ({ page }) => {
   await seedAndOpen(page, FALLBACK_FIXTURE, 'app-fallback')
 

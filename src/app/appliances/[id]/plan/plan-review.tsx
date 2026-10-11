@@ -63,6 +63,7 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
   const allGeneral = record.tasks.every((t) => t.evidenceLevel === 'general_guidance')
   const fallbackReason = planFallbackReason(record.proposalMeta)
   const couldNotReadManuals = fallbackReason === 'extraction_unavailable' || fallbackReason === 'timeout'
+  const searchTimedOut = fallbackReason === 'search_timeout'
 
   async function onApprove() {
     setBusy(true)
@@ -100,7 +101,7 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
         <p>
           Keeply proposes; you decide. Nothing reaches your calendar until you approve.{' '}
           {allGeneral
-            ? couldNotReadManuals
+            ? couldNotReadManuals || searchTimedOut
               ? 'These are general dishwasher tasks, not a manufacturer recommendation.'
               : 'These are general guidance tasks: Keeply found no guidance for your exact model.'
             : 'Each task shows where its guidance comes from and how closely it matches your model.'}

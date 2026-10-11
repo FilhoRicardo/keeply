@@ -571,6 +571,37 @@ describe('proposePlan', () => {
     expect(result.proposals).toEqual(GENERAL_DISHWASHER_TASKS)
   })
 
+  it('keeps a search timeout on the search reason when Brave finds no candidate in time', async () => {
+    const fetch = vi.fn()
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
+      searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'timeout' }),
+      fetchDocument: fetch as unknown as PlanDeps['fetchDocument'],
+    }))
+    expect(result.fallback).toBe('general')
+    expect(result.searchOutcome).toBe('no_results')
+    expect(result.searchReason).toBe('timeout')
+    expect(result.proposals).toEqual(GENERAL_DISHWASHER_TASKS)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('records a reading timeout when the budget ends after a manual candidate was found', async () => {
+    const controller = new AbortController()
+    const fetch = vi.fn()
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
+      signal: controller.signal,
+      searchManuals: async () => {
+        controller.abort()
+        return { status: 'ok' as const, candidates: [{ url: PDF_URL, title: 'manual', snippet: '', host: BOSCH_DOMAIN }] }
+      },
+      fetchDocument: fetch as unknown as PlanDeps['fetchDocument'],
+    }))
+    expect(result.fallback).toBe('general')
+    expect(result.searchOutcome).toBe('timeout')
+    expect(result.searchReason).toBe(null)
+    expect(result.proposals).toEqual(GENERAL_DISHWASHER_TASKS)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('returns general guidance with reason timeout when the route has already aborted', async () => {
     const controller = new AbortController()
     controller.abort()
