@@ -73,23 +73,54 @@ export function extractionMessages(prompt: string): ChatMessage[] {
   ]
 }
 
-// Drops reasoning the model wrapped around the answer. A separate `reasoning` field is never read.
+// Drops reasoning the model wrapped around the answer. A separate `reasoning` field,
+// `reasoning_content`, or `reasoning_details` is never read: only `message.content` is.
 function stripReasoning(content: string): string {
-  return content.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<reasoning>[\s\S]*?<\/reasoning>/g, '')
+  return content
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+}
+
+function answerText(part: unknown): string | null {
+  if (typeof part === 'string') return part
+  if (!part || typeof part !== 'object' || Array.isArray(part)) return null
+  const record = part as Record<string, unknown>
+  // Gemini marks a thought with `thought: true` even when `type` is "text". That draft is not the answer.
+  if (record.thought === true) return null
+  const type = typeof record.type === 'string' ? record.type.toLowerCase() : ''
+  if (type.startsWith('reasoning') || type === 'thinking' || type === 'thought' || type === 'redacted_thinking') return null
+  if (type && type !== 'text' && type !== 'output_text') return null
+  if (typeof record.text === 'string') return record.text
+  // Some models put the answer on `content` inside a text part. A payload's own `content`
+  // field is not that: only an explicit text part is read this way.
+  if ((type === 'text' || type === 'output_text') && typeof record.content === 'string') return record.content
+  return null
 }
 
 function messageText(content: unknown): string | null {
-  if (typeof content === 'string') return stripReasoning(content)
-  if (!Array.isArray(content)) return null
-  let text = ''
-  for (const part of content) {
-    if (!part || typeof part !== 'object') continue
-    const record = part as { type?: unknown; text?: unknown }
-    // A reasoning part can contain a JSON object. Only the text part is the answer.
-    if (record.type !== 'text' || typeof record.text !== 'string') continue
-    text += record.text
+  if (typeof content === 'string') {
+    const text = stripReasoning(content).trim()
+    return text.length > 0 ? text : null
   }
-  return text.length > 0 ? stripReasoning(text) : null
+  if (Array.isArray(content)) {
+    let text = ''
+    for (const part of content) text += answerText(part) ?? ''
+    const stripped = stripReasoning(text).trim()
+    return stripped.length > 0 ? stripped : null
+  }
+  if (!content || typeof content !== 'object') return null
+  const record = content as Record<string, unknown>
+  const text = answerText(record)
+  if (text != null) return messageText(text)
+  // A reasoning part is not an answer. A plain object is a structured payload some models return
+  // instead of a string (`openrouter/free` picks a different model each request).
+  if (typeof record.type === 'string') return null
+  try {
+    return JSON.stringify(content)
+  } catch {
+    return null
+  }
 }
 
 export async function completeChat(input: {
@@ -103,6 +134,8 @@ export async function completeChat(input: {
   extraHeaders?: Record<string, string>
   extraBody?: Record<string, unknown>
   fetchImpl?: typeof fetch
+  // When set, replaces the per-call timeout so a retry stays inside one deadline.
+  signal?: AbortSignal
 }): Promise<ChatCompletion> {
   const fetchImpl = input.fetchImpl ?? fetch
   const response = await fetchImpl(`${input.baseUrl}/chat/completions`, {
@@ -119,9 +152,17 @@ export async function completeChat(input: {
       max_tokens: input.maxTokens,
       ...input.extraBody,
     }),
-    signal: AbortSignal.timeout(input.timeoutMs),
+    signal: input.signal ?? AbortSignal.timeout(input.timeoutMs),
   })
-  if (!response.ok) return { ok: false, status: response.status, content: null }
+  if (!response.ok) {
+    // Drop the body without reading it. Error payloads can echo the prompt or the key.
+    try {
+      await response.body?.cancel()
+    } catch {
+      // The error body is discarded either way.
+    }
+    return { ok: false, status: response.status, content: null }
+  }
   const body = (await response.json()) as {
     choices?: { message?: { content?: unknown } }[]
     // MiniMax sometimes reports a failure here on HTTP 200. Callers decide whether that is fatal.

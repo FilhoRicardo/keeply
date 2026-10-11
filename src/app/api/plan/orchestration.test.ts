@@ -59,7 +59,7 @@ describe('extractTasksFromProvider', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
     expect(await extractTasksFromProvider({ OPENROUTER_API_KEY: 'or-key' }, { model: 'KEQB7300L', pages })).toBe('unavailable')
-    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('keeps using MiniMax when both keys are set', async () => {

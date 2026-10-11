@@ -1,6 +1,6 @@
 import 'server-only'
-import { parseExtractionReply, type ExtractedPage, type ExtractedTaskCandidate } from './extraction'
-import { extractJsonObject, normaliseIdentity, type ApplianceIdentity, type LabelPhoto } from './identity'
+import { normaliseExtraction, type ExtractedPage, type ExtractedTaskCandidate } from './extraction'
+import { extractJsonValues, normaliseIdentity, type ApplianceIdentity, type LabelPhoto } from './identity'
 import {
   CHAT_TEMPERATURE,
   completeChat,
@@ -16,13 +16,15 @@ import {
 } from './openai-chat'
 
 // OpenRouter adapter. OpenAI-compatible Chat Completions at https://openrouter.ai/api/v1.
-// The model is configured because the free vision list changes. Free routes may be served by
-// providers that train on prompts; every request sets provider.data_collection (default deny).
+// The model is configured. `openrouter/free` picks a free model per request (the pinned Gemma
+// free model returned 429 on every live call). Free routes may be served by providers that
+// train on prompts; every request sets provider.data_collection (default deny).
 // A deny that leaves no endpoint is a routing failure, same as a rate limit, payment error,
-// 5xx or timeout: the caller uses the honest "AI unavailable" path.
+// 5xx or timeout: the caller uses the honest "AI unavailable" path. One 429 is retried on the
+// same deadline; the retry does not start a new timeout.
 
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
-export const DEFAULT_OPENROUTER_MODEL = 'google/gemma-4-31b-it:free'
+export const DEFAULT_OPENROUTER_MODEL = 'openrouter/free'
 export const OPENROUTER_REFERER = 'https://keeply.vercel.app'
 export const OPENROUTER_TITLE = 'Keeply'
 
@@ -69,27 +71,93 @@ async function callOpenRouter(
   timeoutMs: number,
   fetchImpl: typeof fetch,
 ): Promise<string | null> {
-  let result
-  try {
-    result = await completeChat({
-      baseUrl: config.baseUrl,
-      apiKey: config.apiKey,
-      model: config.model,
-      messages,
-      temperature: CHAT_TEMPERATURE,
-      maxTokens,
-      timeoutMs,
-      extraHeaders: { 'HTTP-Referer': OPENROUTER_REFERER, 'X-Title': OPENROUTER_TITLE },
-      extraBody: { provider: { data_collection: config.dataCollection } },
-      fetchImpl,
-    })
-  } catch (error) {
-    throw asProviderFailure(error)
+  // One deadline for the attempt and, when the first response is 429, the single retry.
+  const signal = AbortSignal.timeout(timeoutMs)
+  const once = async () => {
+    try {
+      return await completeChat({
+        baseUrl: config.baseUrl,
+        apiKey: config.apiKey,
+        model: config.model,
+        messages,
+        temperature: CHAT_TEMPERATURE,
+        maxTokens,
+        timeoutMs,
+        extraHeaders: { 'HTTP-Referer': OPENROUTER_REFERER, 'X-Title': OPENROUTER_TITLE },
+        extraBody: { provider: { data_collection: config.dataCollection } },
+        fetchImpl,
+        signal,
+      })
+    } catch (error) {
+      throw asProviderFailure(error)
+    }
   }
-  // 429, 402, 5xx, and a 404 when data_collection: deny leaves no endpoint are all provider
-  // failures. The response body is not copied onto the error: it can echo the prompt.
+  let result = await once()
+  if (!result.ok && result.status === 429 && !signal.aborted) result = await once()
+  // 429 (after one retry), 402, 5xx, and a 404 when data_collection: deny leaves no endpoint
+  // are all provider failures. The response body is not copied onto the error: it can echo the prompt.
   if (!result.ok) throw new OpenRouterError(`OpenRouter rejected the request (${result.status})`, result.status)
   return result.content
+}
+
+function hasIdentityFields(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  return 'applianceType' in value || 'manufacturer' in value || 'model' in value || 'serialNumber' in value
+}
+
+// `openrouter/free` serves a different model each request. Take the last object that actually
+// carries an identity, including one nested under a wrapper, and ignore a nested fragment of
+// an object that is already an identity (a draft `model` must not replace the label read).
+function identityFromReply(content: string): ApplianceIdentity | null {
+  const matches: Record<string, unknown>[] = []
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item)
+      return
+    }
+    if (hasIdentityFields(value)) {
+      matches.push(value)
+      return
+    }
+    if (!value || typeof value !== 'object') return
+    for (const child of Object.values(value)) visit(child)
+  }
+  for (const value of extractJsonValues(content)) visit(value)
+  const match = matches[matches.length - 1]
+  return match ? normaliseIdentity(match) : null
+}
+
+function candidateList(value: unknown): unknown[] | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const list = (value as Record<string, unknown>).candidates
+  return Array.isArray(list) ? list : null
+}
+
+// Prefer the last `{candidates: [...]}` object. A bare array of objects is accepted when a
+// routed model skips the wrapper. A later list replaces an earlier one; a candidates object
+// wins over a bare array.
+function tasksFromReply(content: string, pageNumbers: ReadonlySet<number>): ExtractedTaskCandidate[] {
+  let wrapped: unknown[] | null = null
+  let bare: unknown[] | null = null
+  for (const value of extractJsonValues(content)) {
+    if (Array.isArray(value)) {
+      if (value.some((item) => item !== null && typeof item === 'object' && !Array.isArray(item))) bare = value
+      continue
+    }
+    const list = candidateList(value)
+    if (list) {
+      wrapped = list
+      continue
+    }
+    if (!value || typeof value !== 'object') continue
+    for (const child of Object.values(value)) {
+      const nested = candidateList(child)
+      if (nested) wrapped = nested
+    }
+  }
+  const list = wrapped ?? bare
+  if (!list) return []
+  return normaliseExtraction({ candidates: list }, pageNumbers)
 }
 
 export async function identifyWithOpenRouter(
@@ -100,7 +168,7 @@ export async function identifyWithOpenRouter(
   if (!labelPhotoAccepted(photo)) return null
   const content = await callOpenRouter(config, identifyMessages(photo), IDENTIFY_MAX_TOKENS, IDENTIFY_TIMEOUT_MS, fetchImpl)
   if (content == null) return null
-  return normaliseIdentity(extractJsonObject(content))
+  return identityFromReply(content)
 }
 
 export async function extractTasksWithOpenRouter(
@@ -112,5 +180,5 @@ export async function extractTasksWithOpenRouter(
   const { prompt, pageNumbers } = manualPagesPrompt(pages)
   const content = await callOpenRouter(config, extractionMessages(prompt), EXTRACT_MAX_TOKENS, EXTRACT_TIMEOUT_MS, fetchImpl)
   if (content == null) return []
-  return parseExtractionReply(content, pageNumbers)
+  return tasksFromReply(content, pageNumbers)
 }

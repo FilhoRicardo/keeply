@@ -38,8 +38,32 @@ export function extractJsonObject(reply: string): unknown {
   return null
 }
 
-// Parses the balanced {...} span starting at `start`; undefined when it is unbalanced or not JSON.
+// Outermost JSON objects and arrays, in order. A value nested inside another is not listed
+// again, so a wrapper and the object it contains stay distinguishable.
+export function extractJsonValues(reply: string): unknown[] {
+  const found: unknown[] = []
+  for (let i = 0; i < reply.length; i++) {
+    const ch = reply[i]
+    if (ch !== '{' && ch !== '[') continue
+    const parsed = balancedJsonAt(reply, i)
+    if (!parsed) continue
+    found.push(parsed.value)
+    i = parsed.end - 1
+  }
+  return found
+}
+
 function balancedObjectAt(reply: string, start: number): unknown {
+  if (reply[start] !== '{') return undefined
+  return balancedJsonAt(reply, start)?.value
+}
+
+// Parses the balanced {...} or [...] span starting at `start`. Undefined when it is unbalanced
+// or not JSON. Arrays count toward depth so a `}` inside an array is not treated as the end.
+function balancedJsonAt(reply: string, start: number): { value: unknown; end: number } | undefined {
+  const opener = reply[start]
+  const closer = opener === '{' ? '}' : opener === '[' ? ']' : ''
+  if (!closer) return undefined
   let depth = 0
   let inString = false
   for (let i = start; i < reply.length; i++) {
@@ -47,11 +71,15 @@ function balancedObjectAt(reply: string, start: number): unknown {
     if (inString) {
       if (ch === '\\') i++
       else if (ch === '"') inString = false
-    } else if (ch === '"') inString = true
-    else if (ch === '{') depth++
-    else if (ch === '}' && --depth === 0) {
+      continue
+    }
+    if (ch === '"') inString = true
+    else if (ch === '{' || ch === '[') depth++
+    else if (ch === '}' || ch === ']') {
+      if (--depth !== 0) continue
+      if (ch !== closer) return undefined
       try {
-        return JSON.parse(reply.slice(start, i + 1))
+        return { value: JSON.parse(reply.slice(start, i + 1)), end: i + 1 }
       } catch {
         return undefined
       }

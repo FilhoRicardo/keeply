@@ -30,7 +30,7 @@ Do not invent a new location; add it here first.
 | `MINIMAX_MODEL` | `.env.local` / Vercel | no (model name) |
 | `MINIMAX_BASE_URL` | `.env.local` / Vercel (optional) | no (defaults to `https://api.minimax.io/v1`; set for the mainland host) |
 | `OPENROUTER_API_KEY` | `.env.local` / Vercel | **yes** (server only; never `NEXT_PUBLIC_*`). Used when MiniMax is unset. |
-| `OPENROUTER_MODEL` | `.env.local` / Vercel | no (defaults to `google/gemma-4-31b-it:free`) |
+| `OPENROUTER_MODEL` | `.env.local` / Vercel | no (defaults to `openrouter/free`) |
 | `OPENROUTER_DATA_COLLECTION` | `.env.local` / Vercel (optional) | no (`deny` default; `allow` opts in to providers that may train on prompts) |
 | `KEEPLY_SCAN_ACCESS` | `.env.local` / Vercel | no (scan-access mode; "invite" is the safe default) |
 

@@ -112,7 +112,7 @@ describe('selectProvider', () => {
     ])
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     const body = JSON.parse(init.body as string) as { model: string }
-    expect(body.model).toBe('google/gemma-4-31b-it:free')
+    expect(body.model).toBe('openrouter/free')
     expect(JSON.stringify(body)).not.toContain('KEQB7300L')
   })
 
