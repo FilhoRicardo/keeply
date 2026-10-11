@@ -165,9 +165,10 @@ export async function runPlan(
       proposals: outcome.proposals.map(toJsonProposal),
       fallback: outcome.fallback,
       searchOutcome: outcome.searchOutcome,
-      // Saved plans already classify from searchOutcome. The reason is only needed when
-      // there is nothing to save, so an existing dishwasher fallback banner stays as it is.
-      searchReason: outcome.proposals.length === 0 ? outcome.searchReason : null,
+      // A dishwasher fallback still has tasks, so a search-phase timeout has to travel
+      // with them. Other reasons stay off saved plans; those banners read searchOutcome.
+      searchReason:
+        outcome.proposals.length === 0 || outcome.searchReason === 'timeout' ? outcome.searchReason : null,
     }
   } finally {
     clearTimeout(timer)
