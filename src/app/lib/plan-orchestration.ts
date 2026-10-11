@@ -60,6 +60,9 @@ export type PlanDeps = {
   aiModel: string
   // Signal for the overall time budget (the route sets this to a single ~25 s AbortController).
   signal: AbortSignal
+  // Each candidate download gives up after CANDIDATE_FETCH_TIMEOUT_MS. Tests replace this so
+  // they can fire that deadline without waiting on the wall clock. Default is setTimeout.
+  scheduleTimeout?: (ms: number, onFire: () => void) => () => void
 }
 
 export type SearchOutcome =
@@ -144,7 +147,111 @@ function safePageText(pages: ReadonlyArray<{ page: number; text: string }>, page
   return pages.find((p) => p.page === page)?.text ?? ''
 }
 
-const MAX_MANUAL_CANDIDATES = 3
+// Search already returns at most 5 (the ranker cap). Read all of them. AI stays capped at 3.
+const MAX_DOWNLOAD_CANDIDATES = 5
+const MAX_EXTRACT_TASKS = 3
+// Per-download deadline, inside the route's 25s plan budget. A slow file is skipped.
+export const CANDIDATE_FETCH_TIMEOUT_MS = 8_000
+
+function defaultScheduleTimeout(ms: number, onFire: () => void): () => void {
+  const id = setTimeout(onFire, ms)
+  return () => clearTimeout(id)
+}
+
+// Same https host check classifyEvidence uses, so "manufacturer domain" in the AI order is a
+// document that can actually be manufacturer-verified. Not a change to that classifier.
+function hostedByManufacturer(url: string, domains: readonly string[]): boolean {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return false
+  }
+  if (parsed.protocol !== 'https:') return false
+  const host = parsed.hostname.toLowerCase()
+  return domains.some((domain) => {
+    const wanted = domain.trim().toLowerCase()
+    return wanted !== '' && (host === wanted || host.endsWith(`.${wanted}`))
+  })
+}
+
+// Exact model on the cover, otherwise a same-family model on that same cover window.
+// Anything else is not worth an AI call.
+function coverKind(pages: readonly { page: number; text: string }[], model: string): 'exact' | 'family' | null {
+  if (coversModel(pages, model)) return 'exact'
+  if (matchingCoverModel(pages, model)) return 'family'
+  return null
+}
+
+type PreparedCandidate =
+  | { rank: number; failure: SearchOutcome }
+  | { rank: number; missedCover: true }
+  | {
+      rank: number
+      candidate: { url: string; title: string }
+      url: string
+      pages: readonly { page: number; text: string }[]
+      kind: 'exact' | 'family'
+      manufacturerSite: boolean
+    }
+
+function fetchWithinBudget(url: string, deps: PlanDeps): Promise<FetchResult> {
+  if (timedOut(deps.signal)) return Promise.resolve({ ok: false, reason: 'timeout' })
+  const schedule = deps.scheduleTimeout ?? defaultScheduleTimeout
+  return new Promise((resolve) => {
+    let settled = false
+    let cancel = () => {}
+    const finish = (result: FetchResult) => {
+      if (settled) return
+      settled = true
+      cancel()
+      deps.signal.removeEventListener('abort', onAbort)
+      resolve(result)
+    }
+    const onAbort = () => finish({ ok: false, reason: 'timeout' })
+    cancel = schedule(CANDIDATE_FETCH_TIMEOUT_MS, () => finish({ ok: false, reason: 'timeout' }))
+    deps.signal.addEventListener('abort', onAbort, { once: true })
+    deps.fetchDocument(url).then(finish, () => finish({ ok: false, reason: 'fetch_failed' }))
+  })
+}
+
+async function prepareCandidate(
+  candidate: { url: string; title: string },
+  rank: number,
+  model: string,
+  domains: readonly string[],
+  deps: PlanDeps,
+): Promise<PreparedCandidate> {
+  const fetched = await fetchWithinBudget(candidate.url, deps)
+  if (!fetched.ok) {
+    return { rank, failure: fetched.reason === 'timeout' ? 'timeout' : 'fetch_failed' }
+  }
+  let extracted: ExtractResult
+  try {
+    extracted = await deps.extractPages(fetched.bytes, fetched.type)
+  } catch {
+    return { rank, failure: 'unreadable' }
+  }
+  if (!extracted.ok) {
+    return { rank, failure: extracted.reason === 'unreadable' ? 'unreadable' : 'no_text' }
+  }
+  const kind = coverKind(extracted.pages, model)
+  if (!kind) return { rank, missedCover: true }
+  return {
+    rank,
+    candidate,
+    url: fetched.url,
+    pages: extracted.pages,
+    kind,
+    manufacturerSite: hostedByManufacturer(fetched.url, domains),
+  }
+}
+
+function aiGroup(item: Extract<PreparedCandidate, { kind: 'exact' | 'family' }>): number {
+  if (item.kind === 'exact' && item.manufacturerSite) return 0
+  if (item.kind === 'exact') return 1
+  return 2
+}
 
 // The source resolver cannot tell from a URL which models a document covers, so we read the cover:
 // a manual whose cover names the exact model (as a whole token, not a prefix of a longer model
@@ -158,10 +265,14 @@ function coversModel(pages: readonly { page: number; text: string; title?: strin
   return pages.some((p) => p.page <= COVER_PAGE_COUNT && whole.test(coverWindowText(p)))
 }
 
-// Walks the ranked Brave candidates and tries each until one yields a manufacturer-verified plan.
-// If none of the top MAX_MANUAL_CANDIDATES yields a verified plan but at least one yields
-// similar-model tasks (same family), the similar-model tasks become the plan. Otherwise nothing
-// useful came from Brave and the caller falls back to general guidance.
+function isReady(item: PreparedCandidate): item is Extract<PreparedCandidate, { kind: 'exact' | 'family' }> {
+  return 'kind' in item
+}
+
+// Downloads every candidate search returned (up to 5) in parallel, drops any whose cover does
+// not name the owner's model or the same family, then asks the AI about at most 3 that remain.
+// Order: exact model on a manufacturer domain, then exact model elsewhere, then family-only,
+// Brave's rank inside each group. The first verified plan ends the search.
 async function findPlans(
   args: {
     manufacturer: string
@@ -170,24 +281,35 @@ async function findPlans(
   },
   deps: PlanDeps,
 ): Promise<{ outcome: SearchOutcome; proposals: TaskProposal[] }> {
+  if (timedOut(deps.signal)) return { outcome: 'timeout', proposals: [] }
+  const domains = deps.manufacturerDomains[args.manufacturer.toLowerCase()] ?? []
+  const downloaded = await Promise.all(
+    args.candidates.slice(0, MAX_DOWNLOAD_CANDIDATES).map((candidate, rank) =>
+      prepareCandidate(candidate, rank, args.model, domains, deps),
+    ),
+  )
+  // The plan budget fired while downloads were in flight. A single slow file is not this case:
+  // that download is skipped above and the others are still used.
+  if (timedOut(deps.signal)) return { outcome: 'timeout', proposals: [] }
+
+  const ready = downloaded.filter(isReady).sort((a, b) => aiGroup(a) - aiGroup(b) || a.rank - b.rank)
+  if (ready.length === 0) {
+    if (downloaded.some((item) => 'missedCover' in item)) return { outcome: 'no_results', proposals: [] }
+    const failures = downloaded.filter((item): item is { rank: number; failure: SearchOutcome } => 'failure' in item)
+    const last = failures.sort((a, b) => a.rank - b.rank).at(-1)
+    return { outcome: last?.failure ?? 'no_results', proposals: [] }
+  }
+
   const exact: TaskProposal[] = []
   const similar: TaskProposal[] = []
-  let lastReason: SearchOutcome = 'no_results'
-  for (const candidate of args.candidates.slice(0, MAX_MANUAL_CANDIDATES)) {
+  const priorFailure = downloaded
+    .filter((item): item is { rank: number; failure: SearchOutcome } => 'failure' in item)
+    .sort((a, b) => a.rank - b.rank)
+    .at(-1)
+  let lastReason: SearchOutcome = priorFailure?.failure ?? 'no_results'
+  for (const item of ready.slice(0, MAX_EXTRACT_TASKS)) {
     if (timedOut(deps.signal)) return { outcome: 'timeout', proposals: [] }
-    const fetched = await deps.fetchDocument(candidate.url)
-    if (!fetched.ok) {
-      // One bad fetch must not kill the chain. Record and try the next candidate.
-      lastReason = fetched.reason === 'timeout' ? 'timeout' : 'fetch_failed'
-      continue
-    }
-    const extracted = await deps.extractPages(fetched.bytes, fetched.type)
-    if (!extracted.ok) {
-      lastReason = extracted.reason === 'unreadable' ? 'unreadable' : 'no_text'
-      continue
-    }
-    if (timedOut(deps.signal)) return { outcome: 'timeout', proposals: [] }
-    const candidates = await deps.extractTasks({ model: args.model, pages: extracted.pages })
+    const candidates = await deps.extractTasks({ model: args.model, pages: item.pages })
     if (candidates === 'unavailable') {
       lastReason = 'extraction_unavailable'
       continue
@@ -196,25 +318,25 @@ async function findPlans(
       lastReason = 'no_results'
       continue
     }
-    const resolved = deps.resolveSource(fetched.url)
+    const resolved = deps.resolveSource(item.url)
     const documentModels = [...resolved.documentModels]
-    if (coversModel(extracted.pages, args.model) && !documentModels.includes(args.model)) documentModels.push(args.model)
+    if (coversModel(item.pages, args.model) && !documentModels.includes(args.model)) documentModels.push(args.model)
     // Family is derived from the confirmed model and the cover pages. A client-sent family and
     // the resolver's documentFamily are ignored, so neither can raise or invent a level.
     const ownerFamily = modelFamily(args.model) ?? undefined
-    const coveredModel = matchingCoverModel(extracted.pages, args.model)
-    const title = candidate.title
+    const coveredModel = matchingCoverModel(item.pages, args.model)
+    const title = item.candidate.title
     for (const c of candidates) {
-      const documentText = safePageText(extracted.pages, c.page)
+      const documentText = safePageText(item.pages, c.page)
       const verdict = classifyEvidence({
         source: {
-          url: fetched.url,
+          url: item.url,
           page: c.page,
           documentModels,
           documentFamily: coveredModel ? ownerFamily : undefined,
         },
         model: { name: args.model, family: ownerFamily },
-        manufacturerDomains: [...(deps.manufacturerDomains[args.manufacturer.toLowerCase()] ?? [])],
+        manufacturerDomains: [...domains],
         quote: c.quote,
         documentText,
       })
@@ -224,7 +346,7 @@ async function findPlans(
           instructions: c.instructions,
           interval: c.interval,
           evidenceLevel: 'manufacturer_verified',
-          source: manufacturerSource({ url: fetched.url, title, page: c.page, quote: c.quote }),
+          source: manufacturerSource({ url: item.url, title, page: c.page, quote: c.quote }),
         })
       } else if (verdict.level === 'similar_model' && coveredModel) {
         similar.push({
@@ -232,7 +354,7 @@ async function findPlans(
           instructions: c.instructions,
           interval: c.interval,
           evidenceLevel: 'similar_model',
-          source: similarModelSource({ url: fetched.url, title, page: c.page, quote: c.quote, coveredModel }),
+          source: similarModelSource({ url: item.url, title, page: c.page, quote: c.quote, coveredModel }),
         })
       }
       // General guidance items from a manual go to /dev/null — we already have `generalGuidance()`
