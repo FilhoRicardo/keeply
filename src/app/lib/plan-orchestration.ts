@@ -1,4 +1,5 @@
 import 'server-only'
+import { presentInterval } from '@/domain/cadence'
 import { classifyEvidence } from '@/domain/evidence-check'
 import { COVER_PAGE_COUNT, coverWindowText, matchingCoverModel, modelFamily } from '@/domain/model-family'
 import type { Source, SourceType, TaskProposal } from '@/domain/model'
@@ -340,11 +341,12 @@ async function findPlans(
         quote: c.quote,
         documentText,
       })
+      const interval = presentInterval({ quote: c.quote, stored: c.interval, generalGuidance: false }).interval
       if (verdict.level === 'manufacturer_verified') {
         exact.push({
           name: c.task,
           instructions: c.instructions,
-          interval: c.interval,
+          interval,
           evidenceLevel: 'manufacturer_verified',
           source: manufacturerSource({ url: item.url, title, page: c.page, quote: c.quote }),
         })
@@ -352,7 +354,7 @@ async function findPlans(
         similar.push({
           name: c.task,
           instructions: c.instructions,
-          interval: c.interval,
+          interval,
           evidenceLevel: 'similar_model',
           source: similarModelSource({ url: item.url, title, page: c.page, quote: c.quote, coveredModel }),
         })

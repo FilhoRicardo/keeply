@@ -7,7 +7,15 @@ const ICON: Record<EvidenceLevel, string> = {
 }
 
 // Each level has its own colour, icon and wording, so inferred or general guidance never reads as verified.
-export function EvidenceBadge({ level, explain = false }: { level: EvidenceLevel; explain?: boolean }) {
+export function EvidenceBadge({
+  level,
+  explain = false,
+  explanation,
+}: {
+  level: EvidenceLevel
+  explain?: boolean
+  explanation?: string
+}) {
   return (
     <div className={`evidence evidence--${level}`}>
       <span className="evidence-badge">
@@ -19,7 +27,7 @@ export function EvidenceBadge({ level, explain = false }: { level: EvidenceLevel
           {evidenceLabel(level)}
         </span>
       </span>
-      {explain && <p className="evidence-explanation">{evidenceExplanation(level)}</p>}
+      {explain && <p className="evidence-explanation">{explanation ?? evidenceExplanation(level)}</p>}
     </div>
   )
 }

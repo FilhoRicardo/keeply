@@ -95,6 +95,38 @@ describe('PlanReview — source, page and quote', () => {
     expect(within(card).getByText(/page 32/)).toBeInTheDocument()
     expect(within(card).getByText('“Clean the filter once a month under running water.”')).toBeInTheDocument()
     expect(within(card).getByRole('link', { name: 'Open' })).toHaveAttribute('href', 'https://www.bosch-home.com/manual.pdf')
+    expect(within(card).getByText('Every month · from the manual')).toBeInTheDocument()
+  })
+
+  it('labels a quote with no cadence as Keeply’s suggestion and stays Manufacturer verified', async () => {
+    const repo = testRepository()
+    await repo.addAppliance(
+      { manufacturer: 'Electrolux', model: 'KEQB7300L', serialNumber: '' },
+      [
+        {
+          name: 'Clean the spray arm',
+          instructions: 'Clear the holes.',
+          interval: { count: 2, unit: 'week' as const },
+          evidenceLevel: 'manufacturer_verified' as const,
+          source: {
+            type: 'manufacturer_manual' as const,
+            title: 'Electrolux KEQB7300L user manual',
+            url: 'https://www.electrolux.com/keqb7300l.pdf',
+            location: 'page 23',
+            quote: 'We recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.',
+          },
+        },
+      ],
+      { fallback: 'exact', searchOutcome: 'ok', searchReason: null, searched: true },
+    )
+    stubCalendarConfigured()
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo)
+
+    const card = await screen.findByRole('article', { name: 'Clean the spray arm' })
+    expect(within(card).getByText('Manufacturer verified')).toBeInTheDocument()
+    expect(within(card).getByText('Every month · Keeply\'s suggestion. The manual says "regularly".')).toBeInTheDocument()
+    expect(within(card).queryByText('Every 2 weeks')).not.toBeInTheDocument()
+    expect(within(card).queryByText(/from the manual/)).not.toBeInTheDocument()
   })
 
   it('keeps a level-2 (Similar-model) row visually distinct from verified', async () => {
@@ -120,6 +152,8 @@ describe('PlanReview — source, page and quote', () => {
     expect(within(general).queryByText('Manufacturer verified')).not.toBeInTheDocument()
     const generalChip = within(general).getByText('General guidance').closest('.evidence')!
     expect(generalChip.className).toContain('evidence--general_guidance')
+    expect(within(general).getByText('Every 3 months')).toBeInTheDocument()
+    expect(within(general).queryByText(/Keeply's suggestion|from the manual/)).not.toBeInTheDocument()
   })
 
   it('shows similar-model wording, the covered model, host, page and quote for a family match', async () => {
@@ -154,6 +188,9 @@ describe('PlanReview — source, page and quote', () => {
     expect(within(card).getByText('DI6012-2')).toBeInTheDocument()
 
     fireEvent.click(within(card).getByRole('button', { name: 'Why? / View source' }))
+    const panel = within(card).getByText('www.smeg.com').closest('.source-panel') as HTMLElement
+    expect(within(panel).getByText(/Comparable models in the same product family recommend it/)).toBeInTheDocument()
+    expect(within(panel).queryByText(/third-party site/)).not.toBeInTheDocument()
     expect(within(card).getByText('www.smeg.com')).toBeInTheDocument()
     expect(within(card).getByText(/page 18/)).toBeInTheDocument()
     expect(within(card).getByText('“Clean the filter once a month under running water.”')).toBeInTheDocument()
@@ -192,7 +229,12 @@ describe('PlanReview — source, page and quote', () => {
     ).toBeInTheDocument()
     expect(within(card).getByText('DI6012-1')).toBeInTheDocument()
 
+    const thirdParty = 'Manual for your model, found on a third-party site (not the manufacturer’s). Not verified.'
     fireEvent.click(within(card).getByRole('button', { name: 'Why? / View source' }))
+    const panel = within(card).getByText('manualslib.com').closest('.source-panel') as HTMLElement
+    expect(within(panel).getByText(thirdParty)).toBeInTheDocument()
+    expect(within(panel).queryByText(/Comparable models in the same product family/)).not.toBeInTheDocument()
+    expect(within(card).getAllByText(thirdParty)).toHaveLength(2)
     expect(within(card).getByText('manualslib.com')).toBeInTheDocument()
     expect(within(card).getByText(/page 9/)).toBeInTheDocument()
     expect(within(card).getByText('“Clean the filter once a month under running water.”')).toBeInTheDocument()

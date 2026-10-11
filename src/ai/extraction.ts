@@ -10,8 +10,8 @@ export type ExtractedPage = {
 
 // One candidate the model proposed while reading a manual. Never trusted on its own: P3-1
 // (`verifyQuote` and `classifyEvidence`) decides the evidence level, and the page text decides
-// whether the quote is even real. `interval` carries the manufacturer's own cadence — Keeply
-// shows it but never rewrites it.
+// whether the quote is even real. `interval` is only the model's guess. The interval the
+// owner sees is decided from the quote by `readCadence` (`src/domain/cadence.ts`).
 export type ExtractedTaskCandidate = {
   task: string
   instructions: string
