@@ -43,6 +43,9 @@ describe('no-plan recovery mapping', () => {
     'extraction_unavailable',
     'network_error',
     'http_error',
+    'http_408',
+    'http_429',
+    'http_500',
     'http_503',
     'rate_limited',
     'malformed_response',
@@ -71,6 +74,18 @@ describe('no-plan recovery mapping', () => {
     expect(result.message).not.toMatch(NO_MANUAL_EXISTS)
     expect(result.message).not.toMatch(UNSAFE)
   })
+
+  it.each(['http_400', 'http_401', 'http_422'] as const)(
+    'maps %s to a details check the owner can correct',
+    (token) => {
+      const result = recovery({ searchOutcome: 'unavailable', searchReason: token })
+      expect(result.category).toBe('invalid_request')
+      expect(result.message).toMatch(CHECK_IDENTITY)
+      expect(result.message).not.toMatch(LATER)
+      expect(result.message).not.toMatch(NO_MANUAL_EXISTS)
+      expect(result.message).not.toMatch(UNSAFE)
+    },
+  )
 
   it('treats a missing result as generic inability', () => {
     expect(recovery(null).category).toBe('generic')

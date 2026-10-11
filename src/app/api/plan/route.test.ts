@@ -105,6 +105,15 @@ describe('POST /api/plan', () => {
     expect(response.status).toBe(400)
   })
 
+  it('rejects an empty model before reserving a scan', async () => {
+    mockPlanSearchLive.mockReturnValueOnce(true)
+    admitScanMock.mockResolvedValueOnce('allowed')
+    const response = await post({ manufacturer: 'Bosch', model: '' }, { authorization: 'Bearer user-session-token' })
+    expect(response.status).toBe(400)
+    expect(admitScanMock).not.toHaveBeenCalled()
+    expect(mockRunPlan).not.toHaveBeenCalled()
+  })
+
   it('runs the plan and records the funnel event on success', async () => {
     mockPlanSearchLive.mockReturnValueOnce(true)
     admitScanMock.mockResolvedValueOnce('allowed')
