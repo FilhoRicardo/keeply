@@ -334,6 +334,26 @@ describe('PlanReview — fallback banner when the search cannot find a manual', 
     expect(screen.queryByText(/found no guidance for your exact model/i)).not.toBeInTheDocument()
   })
 
+  it('does not say manuals were found when the search itself timed out', async () => {
+    const repo = testRepository()
+    await repo.addAppliance(
+      { manufacturer: 'Electrolux', model: 'KEQB7300L', serialNumber: '' },
+      [GENERAL_PROPOSAL],
+      { fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout', searched: true },
+    )
+    stubCalendarConfigured()
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo)
+
+    const banner = await screen.findByTestId('plan-fallback-banner')
+    expect(banner).toHaveAttribute('data-fallback-reason', 'search_timeout')
+    expect(banner).toHaveTextContent(
+      'Keeply could not finish searching for a manual right now. Try again. These are general guidance tasks. They are not a manufacturer recommendation.',
+    )
+    expect(banner).not.toHaveTextContent(/found manuals/i)
+    expect(screen.queryByText(/found no guidance for your exact model/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/found manuals/i)).not.toBeInTheDocument()
+  })
+
   it('keeps the no-manual wording when the search found nothing', async () => {
     const repo = testRepository()
     await repo.addAppliance(

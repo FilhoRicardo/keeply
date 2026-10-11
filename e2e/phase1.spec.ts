@@ -181,7 +181,9 @@ test('fridge + timeout: recovery callout, retained details, try again, no naviga
 
   const alerts = page.locator('form').getByRole('alert')
   await expect(alerts).toHaveCount(1)
-  await expect(alerts.first()).toContainText(/try again later/i)
+  await expect(alerts.first()).toContainText(/could not finish searching for a manual right now/i)
+  await expect(alerts.first()).toContainText(/try again/i)
+  await expect(alerts.first()).not.toContainText(/found manuals/i)
   await expect(alerts.first()).not.toContainText(/no manufacturer manual/i)
   await expect(page.getByText(/could not reach your plan/i)).toHaveCount(0)
   await expect(page.getByLabel('Manufacturer')).toHaveValue('Bosch')

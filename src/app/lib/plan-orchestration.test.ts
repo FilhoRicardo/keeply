@@ -586,6 +586,47 @@ describe('proposePlan', () => {
     expect(result.proposals).toEqual(GENERAL_DISHWASHER_TASKS)
   })
 
+  it('keeps a search timeout when Brave times out before any manual is found', async () => {
+    const fetch = vi.fn(async () => {
+      throw new Error('fetch must not run when search times out')
+    })
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
+      searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'timeout' }),
+      fetchDocument: fetch as unknown as PlanDeps['fetchDocument'],
+    }))
+    expect(result.searchOutcome).toBe('no_results')
+    expect(result.searchReason).toBe('timeout')
+    expect(result.proposals).toEqual(GENERAL_DISHWASHER_TASKS)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('reports a timeout after manuals were found without a search-step reason', async () => {
+    const controller = new AbortController()
+    const fetch = vi.fn(async () => ({ ok: false as const, reason: 'fetch_failed' as const }))
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
+      signal: controller.signal,
+      searchManuals: async () => {
+        controller.abort()
+        return { status: 'ok' as const, candidates: [{ url: PDF_URL, title: 'manual', snippet: '', host: BOSCH_DOMAIN }] }
+      },
+      fetchDocument: fetch,
+    }))
+    expect(result.searchOutcome).toBe('timeout')
+    expect(result.searchReason).toBe(null)
+    expect(fetch).not.toHaveBeenCalled()
+    expect(result.proposals).toEqual(GENERAL_DISHWASHER_TASKS)
+  })
+
+  it('reports a download timeout as a reading timeout once a manual link exists', async () => {
+    const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
+      searchManuals: searchOkWith(PDF_URL),
+      fetchDocument: async () => ({ ok: false, reason: 'timeout' }),
+    }))
+    expect(result.searchOutcome).toBe('timeout')
+    expect(result.searchReason).toBe(null)
+    expect(result.fallback).toBe('general')
+  })
+
   it('uses generalGuidance() verbatim as the no-AI fallback', async () => {
     // Distinctive list — proves the orchestration is not silently rewriting the proposals. Each
     // item is shallow-cloned with `generalSource()` so the UI can render its source, but the task

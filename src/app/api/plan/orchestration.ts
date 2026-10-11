@@ -137,6 +137,17 @@ export async function getBraveDailyUsage(env: Record<string, string | undefined>
 
 export type PlanRequest = { manufacturer: string; model: string; modelFamily?: string; applianceType?: string | null }
 
+// Saved dishwasher plans usually drop searchReason, because the banner classifies from
+// searchOutcome. A search-step timeout is the exception: general-guidance tasks are still saved,
+// and the banner must keep that timeout distinct from a later failure to read a found manual.
+export function searchReasonForClient(outcome: {
+  proposals: readonly unknown[]
+  searchReason: string | null
+}): string | null {
+  if (outcome.proposals.length === 0 || outcome.searchReason === 'timeout') return outcome.searchReason
+  return null
+}
+
 // The single entry point the route handler calls. Separated so tests can drive the same code path
 // without a real Supabase.
 // KEE-60: the applianceType is forwarded to the orchestration so non-dishwashers do not get the
@@ -165,9 +176,7 @@ export async function runPlan(
       proposals: outcome.proposals.map(toJsonProposal),
       fallback: outcome.fallback,
       searchOutcome: outcome.searchOutcome,
-      // Saved plans already classify from searchOutcome. The reason is only needed when
-      // there is nothing to save, so an existing dishwasher fallback banner stays as it is.
-      searchReason: outcome.proposals.length === 0 ? outcome.searchReason : null,
+      searchReason: searchReasonForClient(outcome),
     }
   } finally {
     clearTimeout(timer)
