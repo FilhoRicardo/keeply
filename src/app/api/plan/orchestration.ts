@@ -7,7 +7,7 @@ import { fetchDocument } from '@/search/fetch-document'
 import { extractPages } from '@/search/extract-pages'
 import { braveQuotaStatus, createServiceRoleDb, reserveBraveSearch } from '@/db/brave-quota'
 import { scanEnabled } from '../../lib/features'
-import { proposePlan, type PlanDeps } from '../../lib/plan-orchestration'
+import { CANDIDATE_FETCH_TIMEOUT_MS, proposePlan, type PlanDeps } from '../../lib/plan-orchestration'
 
 // The P3-5 server route. Same gate as /api/identify: scan on, a billable provider or Brave key
 // configured, the invite/limit reservation, and the per-instance/durable counters. Manual mode
@@ -97,7 +97,7 @@ function buildDeps(args: {
       return reserveBraveSearch(db)
     },
     searchManuals: ({ manufacturer, model }) => searchManuals({ manufacturer, model }),
-    fetchDocument: (url) => fetchDocument(url),
+    fetchDocument: (url) => fetchDocument(url, undefined, { timeoutMs: CANDIDATE_FETCH_TIMEOUT_MS }),
     extractPages: (bytes, type) => extractPages(bytes, type),
     extractTasks: ({ model, pages }) => {
       // MiniMax is the only implemented AI provider. The route lets it read the manual pages.

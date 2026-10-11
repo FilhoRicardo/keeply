@@ -29,6 +29,7 @@ function makeDeps(overrides: Partial<PlanDeps> = {}): PlanDeps {
     candidateTitle: overrides.candidateTitle ?? ((url) => url),
     aiModel: overrides.aiModel ?? 'MiniMax-M3',
     signal: overrides.signal ?? controller.signal,
+    scheduleTimeout: overrides.scheduleTimeout,
   }
 }
 
@@ -641,7 +642,8 @@ describe('proposePlan', () => {
         manufacturerDomains: { lg: [lgDomain] },
         searchManuals: searchOkWith(lgPdfUrl, 'LG fridge manual'),
         fetchDocument: fetchOk(new TextEncoder().encode(PAGE_TEXT)),
-        extractPages: extractPagesOk(),
+        // Cover text names this fridge, which is what lets the manual reach the AI.
+        extractPages: extractPagesOk(`User manual ${fridgeModel}\n${PAGE_TEXT}`),
         resolveSource: () => ({ documentModels: [fridgeModel], documentFamily: fridgeFamily }),
         extractTasks: extractedTasksOk([CANDIDATE]),
       }),
@@ -649,5 +651,272 @@ describe('proposePlan', () => {
     expect(result.fallback).toBe('exact')
     expect(result.proposals).toHaveLength(1)
     expect(result.proposals[0].evidenceLevel).toBe('manufacturer_verified')
+  })
+})
+
+// RF-345: a manual ranked below 3rd is still read. Cover text is checked before any AI call.
+describe('proposePlan candidate window', () => {
+  const MODEL = 'KEQB7300L'
+  const QUOTE = 'Wipe the door gasket with a damp cloth every month.'
+  const DOMAINS = { electrolux: ['electrolux.com', 'electrolux-medialibrary.com'] }
+  const EXACT_URL = 'https://api.electrolux-medialibrary.com/KEQB7300L.pdf'
+
+  function listed(url: string, title: string) {
+    return { url, title, snippet: '', host: new URL(url).host }
+  }
+
+  function textOf(bytes: Uint8Array): string {
+    return new TextDecoder().decode(bytes)
+  }
+
+  function planFor(
+    candidates: { url: string; title: string; snippet: string; host: string }[],
+    deps: Partial<PlanDeps>,
+  ) {
+    const search = vi.fn(async () => ({ status: 'ok' as const, candidates }))
+    const result = proposePlan(
+      { manufacturer: 'Electrolux', model: MODEL, applianceType: 'oven' },
+      makeDeps({
+        manufacturerDomains: DOMAINS,
+        resolveSource: () => ({ documentModels: [] }),
+        searchManuals: search,
+        ...deps,
+      }),
+    )
+    return { search, result }
+  }
+
+  const verifiedTask = {
+    task: 'Clean the door gasket',
+    instructions: 'Wipe the rubber gasket with a damp cloth.',
+    interval: { count: 1, unit: 'month' as const },
+    page: 1,
+    quote: QUOTE,
+  }
+
+  it('returns a manufacturer-verified plan when the exact manual is ranked 5th', async () => {
+    const urls = [
+      'https://api.electrolux-medialibrary.com/other.pdf',
+      'https://api.electrolux-medialibrary.com/broken.pdf',
+      'https://manualslib.com/unrelated.pdf',
+      'https://example.com/notes.pdf',
+      EXACT_URL,
+    ]
+    let inFlight = 0
+    let maxInFlight = 0
+    const extractTasks = vi.fn(async ({ pages }: { pages: readonly { page: number; text: string }[] }) => {
+      expect(pages.map((p) => p.text).join('\n')).toContain(MODEL)
+      return [verifiedTask]
+    })
+    const { search, result: pending } = planFor(
+      urls.map((url, i) => listed(url, `manual ${i + 1}`)),
+      {
+        fetchDocument: async (url) => {
+          inFlight += 1
+          maxInFlight = Math.max(maxInFlight, inFlight)
+          await Promise.resolve()
+          inFlight -= 1
+          if (url.endsWith('broken.pdf')) return { ok: false, reason: 'fetch_failed' }
+          const text = url === EXACT_URL ? `User manual ${MODEL}\n${QUOTE}` : 'User manual ZZ9999'
+          return { ok: true, bytes: new TextEncoder().encode(text), type: 'pdf', url }
+        },
+        extractPages: async (bytes) => ({ ok: true, pages: [{ page: 1, text: textOf(bytes) }] }),
+        extractTasks,
+      },
+    )
+    const result = await pending
+    expect(maxInFlight).toBe(5)
+    expect(search).toHaveBeenCalledTimes(1)
+    expect(extractTasks).toHaveBeenCalledTimes(1)
+    expect(result.fallback).toBe('exact')
+    expect(result.searchOutcome).toBe('ok')
+    expect(result.proposals).toHaveLength(1)
+    expect(result.proposals[0].evidenceLevel).toBe('manufacturer_verified')
+    expect(result.proposals[0].source.url).toBe(EXACT_URL)
+    expect(result.proposals[0].source.location).toBe('page 1')
+    expect(result.proposals[0].source.quote).toBe(QUOTE)
+  })
+
+  it('sends at most three cover matches to extractTasks, in Brave rank within the group', async () => {
+    const urls = [0, 1, 2, 3, 4].map((i) => `https://api.electrolux-medialibrary.com/${i}.pdf`)
+    const seen: string[] = []
+    const fetchDocument = vi.fn(async (url: string) => {
+      const rank = urls.indexOf(url)
+      return {
+        ok: true as const,
+        bytes: new TextEncoder().encode(`rank ${rank} User manual ${MODEL}\n${QUOTE}`),
+        type: 'pdf' as const,
+        url,
+      }
+    })
+    const { result } = planFor(
+      urls.map((url, i) => listed(url, `manual ${i}`)),
+      {
+        fetchDocument,
+        extractPages: async (bytes) => ({ ok: true, pages: [{ page: 1, text: textOf(bytes) }] }),
+        extractTasks: async ({ pages }) => {
+          seen.push(pages[0].text)
+          return []
+        },
+      },
+    )
+    await result
+    expect(fetchDocument).toHaveBeenCalledTimes(5)
+    expect(seen).toEqual([
+      `rank 0 User manual ${MODEL}\n${QUOTE}`,
+      `rank 1 User manual ${MODEL}\n${QUOTE}`,
+      `rank 2 User manual ${MODEL}\n${QUOTE}`,
+    ])
+  })
+
+  it('keeps going when the 2nd download fails and the 5th cover names the model', async () => {
+    const urls = [0, 1, 2, 3, 4].map((i) => `https://api.electrolux-medialibrary.com/${i}.pdf`)
+    const extractTasks = vi.fn(async () => [verifiedTask])
+    const { result } = planFor(
+      urls.map((url, i) => listed(url, `manual ${i}`)),
+      {
+        fetchDocument: async (url) => {
+          if (url === urls[1]) return { ok: false, reason: 'fetch_failed' }
+          const text = url === urls[4] ? `User manual ${MODEL}\n${QUOTE}` : 'User manual ZZ9999'
+          return { ok: true, bytes: new TextEncoder().encode(text), type: 'pdf', url }
+        },
+        extractPages: async (bytes) => ({ ok: true, pages: [{ page: 1, text: textOf(bytes) }] }),
+        extractTasks,
+      },
+    )
+    const resultValue = await result
+    expect(extractTasks).toHaveBeenCalledTimes(1)
+    expect(resultValue.proposals[0].evidenceLevel).toBe('manufacturer_verified')
+    expect(resultValue.proposals[0].source.url).toBe(urls[4])
+  })
+
+  it('skips a download that is still running after 8s and returns inside the plan budget', async () => {
+    const urls = [0, 1, 2, 3, 4].map((i) => `https://api.electrolux-medialibrary.com/${i}.pdf`)
+    const slow = urls[1]
+    const timers: { ms: number; fire: () => void }[] = []
+    let releaseSlow = () => {}
+    const started = Date.now()
+    const { result: pending } = planFor(
+      urls.map((url, i) => listed(url, `manual ${i}`)),
+      {
+        scheduleTimeout: (ms, onFire) => {
+          timers.push({ ms, fire: onFire })
+          return () => {}
+        },
+        fetchDocument: (url) => {
+          if (url === slow) {
+            return new Promise((resolve) => {
+              releaseSlow = () => resolve({ ok: false, reason: 'fetch_failed' })
+            })
+          }
+          const text = url === urls[4] ? `User manual ${MODEL}\n${QUOTE}` : 'User manual ZZ9999'
+          return Promise.resolve({ ok: true, bytes: new TextEncoder().encode(text), type: 'pdf', url })
+        },
+        extractPages: async (bytes) => ({ ok: true, pages: [{ page: 1, text: textOf(bytes) }] }),
+        extractTasks: async () => [verifiedTask],
+      },
+    )
+    try {
+      await vi.waitFor(() => {
+        expect(timers.some((timer) => timer.ms === 8_000)).toBe(true)
+      })
+      for (const timer of timers) {
+        if (timer.ms === 8_000) timer.fire()
+      }
+      const result = await pending
+      expect(Date.now() - started).toBeLessThan(8_000)
+      expect(result.fallback).toBe('exact')
+      expect(result.searchOutcome).toBe('ok')
+      expect(result.proposals[0].evidenceLevel).toBe('manufacturer_verified')
+      expect(result.proposals[0].source.url).toBe(urls[4])
+    } finally {
+      releaseSlow()
+    }
+  })
+
+  it('reads manufacturer-domain exact manuals before third-party exact manuals before family-only ones', async () => {
+    const family = 'https://api.electrolux-medialibrary.com/family.pdf'
+    const thirdBetter = 'https://manualslib.com/better.pdf'
+    const thirdWorse = 'https://manualslib.com/worse.pdf'
+    const makerBetter = 'https://api.electrolux-medialibrary.com/better.pdf'
+    const makerWorse = 'https://api.electrolux-medialibrary.com/worse.pdf'
+    // Brave lists these worst-group first. AI order is the reverse, and the earlier rank wins inside a group.
+    const rows = [
+      { url: family, text: 'User manual KEQB7300X' },
+      { url: thirdBetter, text: `better third User manual ${MODEL}` },
+      { url: makerBetter, text: `better maker User manual ${MODEL}` },
+      { url: thirdWorse, text: `worse third User manual ${MODEL}` },
+      { url: makerWorse, text: `worse maker User manual ${MODEL}` },
+    ]
+    const seen: string[] = []
+    const { result } = planFor(
+      rows.map((row) => listed(row.url, row.url)),
+      {
+        fetchDocument: async (url) => {
+          const row = rows.find((item) => item.url === url)
+          return { ok: true, bytes: new TextEncoder().encode(row?.text ?? ''), type: 'pdf', url }
+        },
+        extractPages: async (bytes) => ({ ok: true, pages: [{ page: 1, text: textOf(bytes) }] }),
+        extractTasks: async ({ pages }) => {
+          seen.push(pages[0].text)
+          return []
+        },
+      },
+    )
+    await result
+    // The cap of three keeps both manufacturer manuals and the better third-party, and drops the rest.
+    expect(seen).toEqual([
+      `better maker User manual ${MODEL}`,
+      `worse maker User manual ${MODEL}`,
+      `better third User manual ${MODEL}`,
+    ])
+
+    const oneOfEach = [
+      { url: family, text: 'family User manual KEQB7300X' },
+      { url: thirdBetter, text: `third User manual ${MODEL}` },
+      { url: makerBetter, text: `maker User manual ${MODEL}` },
+    ]
+    const order: string[] = []
+    const second = planFor(
+      oneOfEach.map((row) => listed(row.url, row.url)),
+      {
+        fetchDocument: async (url) => {
+          const row = oneOfEach.find((item) => item.url === url)
+          return { ok: true, bytes: new TextEncoder().encode(row?.text ?? ''), type: 'pdf', url }
+        },
+        extractPages: async (bytes) => ({ ok: true, pages: [{ page: 1, text: textOf(bytes) }] }),
+        extractTasks: async ({ pages }) => {
+          order.push(pages[0].text)
+          return []
+        },
+      },
+    )
+    await second.result
+    expect(order).toEqual([
+      `maker User manual ${MODEL}`,
+      `third User manual ${MODEL}`,
+      'family User manual KEQB7300X',
+    ])
+  })
+
+  it('reports no_results when downloads succeed but no cover names the model', async () => {
+    const urls = [0, 1, 2, 3, 4].map((i) => `https://api.electrolux-medialibrary.com/${i}.pdf`)
+    const extractTasks = vi.fn(async () => [verifiedTask])
+    const { result } = planFor(
+      urls.map((url, i) => listed(url, `manual ${i}`)),
+      {
+        fetchDocument: async (url) => {
+          if (url === urls[1]) return { ok: false, reason: 'fetch_failed' }
+          return { ok: true, bytes: new TextEncoder().encode('User manual ZZ9999'), type: 'pdf', url }
+        },
+        extractPages: async () => ({ ok: true, pages: [{ page: 1, text: 'User manual ZZ9999' }] }),
+        extractTasks,
+      },
+    )
+    const value = await result
+    expect(extractTasks).not.toHaveBeenCalled()
+    expect(value.searchOutcome).toBe('no_results')
+    expect(value.fallback).toBe('general')
+    expect(value.proposals).toEqual([])
   })
 })
