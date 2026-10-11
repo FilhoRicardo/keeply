@@ -1,6 +1,6 @@
+import { presentInterval } from './cadence'
 import { addInterval, type LocalDate } from './dates'
 import { evidenceLabel } from './evidence'
-import { formatInterval } from './format-interval'
 import type { Appliance, ApplianceRecord, MaintenanceTask } from './model'
 import { calendarBound } from './plan'
 import { toRRule } from './recurrence'
@@ -27,10 +27,15 @@ export function toCalendarEvent(task: MaintenanceTask, appliance: Appliance, sta
   if (task.applianceId !== appliance.id) throw new Error('Task and appliance do not match.')
 
   const { source } = task
+  const shown = presentInterval({
+    quote: source.quote,
+    stored: task.interval,
+    generalGuidance: task.evidenceLevel === 'general_guidance',
+  })
   const description = [
     task.instructions,
     '',
-    `${formatInterval(task.interval)} · ${evidenceLabel(task.evidenceLevel)}`,
+    `${shown.text} · ${evidenceLabel(task.evidenceLevel)}`,
     `Source: ${[source.title, source.location].filter(Boolean).join(', ')}`,
     ...(source.quote ? [`“${source.quote}”`] : []),
     ...(source.url ? [source.url] : []),
@@ -44,7 +49,7 @@ export function toCalendarEvent(task: MaintenanceTask, appliance: Appliance, sta
     description,
     date: startDate,
     endDate: addInterval(startDate, { count: 1, unit: 'day' }),
-    recurrence: [toRRule(task.interval, startDate)],
+    recurrence: [toRRule(shown.interval, startDate)],
   }
 }
 

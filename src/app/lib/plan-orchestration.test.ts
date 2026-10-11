@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { presentInterval } from '@/domain/cadence'
 import { GENERAL_DISHWASHER_TASKS } from '@/domain/general-guidance'
 import { proposePlan, type PlanDeps } from './plan-orchestration'
 
@@ -89,6 +90,50 @@ describe('proposePlan', () => {
     expect(proposal.source.location).toBe('page 1')
     expect(proposal.source.quote).toBe(QUOTE)
     expect(proposal.name).toBe('Clean the filter')
+  })
+
+  it('proposes the quote’s cadence, not the AI interval', async () => {
+    const everyThree = 'Run a cleaning cycle every 3 months to keep the interior fresh.'
+    const regularly = 'We recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.'
+    const page = `${MODEL}\n${everyThree}\n${regularly}`
+    const result = await proposePlan(
+      { manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY, applianceType: 'dishwasher' },
+      makeDeps({
+        searchManuals: searchOkWith(PDF_URL, 'Bosch SMS6 manual'),
+        fetchDocument: fetchOk(new TextEncoder().encode(page)),
+        extractPages: async () => ({ ok: true, pages: [{ page: 1, text: page }] }),
+        extractTasks: async () => [
+          {
+            task: 'Run a cleaning cycle',
+            instructions: 'Hottest cycle.',
+            interval: { count: 1, unit: 'month' as const },
+            page: 1,
+            quote: everyThree,
+          },
+          {
+            task: 'Clean the spray arm',
+            instructions: 'Clear the holes.',
+            interval: { count: 1, unit: 'month' as const },
+            page: 1,
+            quote: regularly,
+          },
+        ],
+      }),
+    )
+
+    expect(result.fallback).toBe('exact')
+    const cleaning = result.proposals.find((p) => p.name === 'Run a cleaning cycle')!
+    const spray = result.proposals.find((p) => p.name === 'Clean the spray arm')!
+    expect(cleaning.evidenceLevel).toBe('manufacturer_verified')
+    expect(cleaning.interval).toEqual({ count: 3, unit: 'month' })
+    expect(presentInterval({ quote: cleaning.source.quote, stored: cleaning.interval, generalGuidance: false }).text).toBe(
+      'Every 3 months · from the manual',
+    )
+    expect(spray.evidenceLevel).toBe('manufacturer_verified')
+    expect(spray.interval).toEqual({ count: 1, unit: 'month' })
+    expect(presentInterval({ quote: spray.source.quote, stored: spray.interval, generalGuidance: false }).text).toBe(
+      'Every month · Keeply\'s suggestion. The manual says "regularly".',
+    )
   })
 
   // The route's resolver cannot know a document's models from its URL (it returns none), so the
@@ -559,6 +604,7 @@ describe('proposePlan', () => {
     expect(result.proposals[0].instructions).toBe(general[0].instructions)
     expect(result.proposals[0].evidenceLevel).toBe('general_guidance')
     expect(result.proposals[0].source.type).toBe('general_guidance')
+    expect(result.proposals[0].interval).toEqual(general[0].interval)
   })
 
   it('cold-start durability: a fresh orchestration instance reads the durable counter first', async () => {

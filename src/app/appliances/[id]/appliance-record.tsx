@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { presentInterval } from '@/domain/cadence'
 import { applianceName } from '@/domain/calendar-event'
-import { formatInterval } from '@/domain/format-interval'
 import { pendingCalendarTasks } from '@/domain/plan'
 import { CalendarPanel } from '../../components/calendar-panel'
 import { CalendarReturnNotice } from '../../components/calendar-return-notice'
@@ -121,7 +121,15 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
             <dl>
               <div>
                 <dt>How often</dt>
-                <dd>{formatInterval(task.interval)}</dd>
+                <dd>
+                  {
+                    presentInterval({
+                      quote: task.source.quote,
+                      stored: task.interval,
+                      generalGuidance: task.evidenceLevel === 'general_guidance',
+                    }).text
+                  }
+                </dd>
               </div>
               <div>
                 <dt>Google Calendar</dt>
