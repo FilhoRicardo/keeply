@@ -116,6 +116,45 @@ describe('scanEnabled', () => {
   })
 })
 
+describe('ScanFlow when the type was not read', () => {
+  it('asks the owner to name the appliance and keeps the other details', async () => {
+    const unreadType: ApplianceRecognizer = {
+      recognise: async () => ({
+        notice: null,
+        identification: {
+          category: 'unknown',
+          manufacturer: 'Electrolux',
+          model: 'ABC123',
+          serialNumber: 'SN1',
+          confidence: 0.9,
+          source: 'photo_recognition',
+        },
+      }),
+    }
+    renderWithPlan(<ScanFlow recognizer={unreadType} />, repo)
+    await takePhoto()
+
+    expect(screen.getByText(/could not tell the appliance type from this photo/i)).toBeInTheDocument()
+    expect(screen.queryByText(/is this correct\?/i)).not.toBeInTheDocument()
+    expect(screen.queryByText('Unknown')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Appliance', { exact: false })).toHaveValue('')
+    expect(screen.getByLabelText('Manufacturer')).toHaveValue('Electrolux')
+    expect(screen.getByLabelText(/Model number/)).toHaveValue('ABC123')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByRole('alert')).toHaveTextContent(/appliance/i)
+
+    fireEvent.change(screen.getByLabelText('Appliance', { exact: false }), { target: { value: 'Dishwasher' } })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm' })))
+    expect(push).toHaveBeenCalledWith('/appliances/app-1/plan')
+    expect(findRecord(await repo.load(), 'app-1')!.appliance).toMatchObject({
+      manufacturer: 'Electrolux',
+      model: 'ABC123',
+      identificationConfidence: null,
+    })
+  })
+})
+
 describe('ScanFlow when the photo is not a dishwasher label', () => {
   it('shows the appliance type the model read, never claims it is "not a dishwasher"', async () => {
     // KEE-60: every recognised appliance is a valid proposal. A fridge is a valid appliance —

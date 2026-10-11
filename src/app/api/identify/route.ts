@@ -90,5 +90,6 @@ export function wellFormed(proposal: unknown): proposal is ApplianceIdentificati
   const strings = ['manufacturer', 'model', 'serialNumber'].every((key) => typeof p[key] === 'string')
   const confidence = p.confidence === null || (typeof p.confidence === 'number' && Number.isFinite(p.confidence))
   if (!strings || !confidence || p.source !== 'photo_recognition') return false
-  return validateIdentification(proposal as ApplianceIdentification) === null
+  // "unknown" is still a proposal: the confirm screen asks the owner to name the appliance.
+  return validateIdentification(proposal as ApplianceIdentification, { allowUnknownCategory: true }) === null
 }

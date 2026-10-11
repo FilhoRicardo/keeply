@@ -7,6 +7,7 @@ import {
   editIdentification,
   emptyIdentification,
   isAccessDenial,
+  isUnknownCategory,
   validateIdentification,
   type ApplianceIdentification,
   type ApplianceRecognizer,
@@ -30,6 +31,7 @@ type Step =
       identification: ApplianceIdentification
       recognised: boolean
       editing: boolean
+      askForType: boolean
       notice: RecognitionNotice | null
     }
 
@@ -146,13 +148,15 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
     } else {
       track({ name: 'label_read', recognised: proposal !== null })
     }
+    const typeMissing = proposal !== null && isUnknownCategory(proposal.category)
     setStep({
       kind: 'confirm',
       photo: prepared,
       preview,
       identification: proposal ?? emptyIdentification(),
       recognised: proposal !== null,
-      editing: proposal === null,
+      editing: proposal === null || typeMissing,
+      askForType: typeMissing,
       notice,
     })
   }
@@ -192,7 +196,7 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
     )
   }
 
-  const { identification, recognised, editing, notice } = step
+  const { identification, recognised, editing, notice, askForType } = step
   // Typing answers any earlier "enter the manufacturer" error, so it no longer applies.
   const set = (change: Partial<Pick<ApplianceIdentification, 'category' | 'manufacturer' | 'model' | 'serialNumber'>>) => {
     setError(null)
@@ -272,6 +276,11 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
       ) : (
         <>
           {!recognised && <p className="form-intro">{manualReasonFor(notice)}</p>}
+          {askForType && (
+            <p className="form-intro">
+              Keeply could not tell the appliance type from this photo. Enter it below, then check the other details.
+            </p>
+          )}
           <label className="field">
             <span>
               Appliance <small>(for example Dishwasher or Fridge)</small>
@@ -280,7 +289,7 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
               id={`${id}-category`}
               className="input"
               autoComplete="off"
-              value={identification.category}
+              value={isUnknownCategory(identification.category) ? '' : identification.category}
               onChange={(e) => set({ category: e.target.value })}
             />
           </label>

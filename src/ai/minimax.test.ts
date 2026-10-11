@@ -21,7 +21,7 @@ describe('minimaxConfig', () => {
 describe('identifyWithMiniMax', () => {
   it('sends the photo as an image_url data URI with thinking off, and returns Keeply’s schema', async () => {
     const fetchMock = reply(
-      '<think>The label shows Bosch…</think>```json\n{"applianceType":"dishwasher","manufacturer":"Bosch","model":"SMS6ZCI49E","serialNumber":"FD 9912","confidence":0.86}\n```',
+      '<think>The label shows Bosch…</think>```json\n{"applianceType":"dishwasher","typeEvidence":"dishwasher","manufacturer":"Bosch","model":"SMS6ZCI49E","serialNumber":"FD 9912","confidence":0.86}\n```',
     )
     const identity = await identifyWithMiniMax(config, photo, fetchMock as unknown as typeof fetch)
 
@@ -37,7 +37,7 @@ describe('identifyWithMiniMax', () => {
   })
 
   it('keeps unreadable fields null and clamps confidence', async () => {
-    const identity = await identifyWithMiniMax(config, photo, reply('{"applianceType":"Dishwasher","manufacturer":"Miele","model":"","serialNumber":null,"confidence":7}') as unknown as typeof fetch)
+    const identity = await identifyWithMiniMax(config, photo, reply('{"applianceType":"Dishwasher","typeEvidence":"Dishwasher","manufacturer":"Miele","model":"","serialNumber":null,"confidence":7}') as unknown as typeof fetch)
     expect(identity).toEqual({ applianceType: 'dishwasher', manufacturer: 'Miele', model: null, serialNumber: null, confidence: 1 })
   })
 

@@ -1,8 +1,8 @@
 // Keeply's provider-neutral appliance identity. Every AI adapter returns exactly this shape;
 // provider request/response formats never leave their adapter. KEE-60: any household appliance,
-// not only dishwashers. `applianceType` is the model's best read of the appliance category
-// (e.g. "dishwasher", "fridge", "washing machine") or "unknown". The pre-KEE-60 "other"
-// refusal signal is gone: every appliance is a valid proposal for the owner to confirm.
+// not only dishwashers. `applianceType` is a category quoted from the label, or "unknown".
+// RF-350: a category the model names without that quote is "unknown". A free model was
+// answering "oven" for dishwasher labels that never print the type. The owner still confirms.
 export type ApplianceIdentity = {
   applianceType: string
   manufacturer: string | null
@@ -15,12 +15,19 @@ export type ApplianceIdentity = {
 export type LabelPhoto = { bytes: Uint8Array; mimeType: string }
 
 // What adapters ask the model for. Kept here so every provider asks the same question.
-// KEE-60: the prompt no longer assumes a dishwasher. The model reads the rating label and
-// reports the appliance category it sees in the photo.
+// KEE-60: the prompt no longer assumes a dishwasher. RF-350: the category has to be printed
+// on the label. A list of example categories was being copied back as a guess.
 export const IDENTITY_INSTRUCTIONS = `You read the rating label of a household appliance from a photo.
 Reply with only one JSON object, no other text:
-{"applianceType": string, "manufacturer": string | null, "model": string | null, "serialNumber": string | null, "confidence": number}
-Rules: report the appliance category you can see in the photo (e.g. "dishwasher", "fridge", "washing machine", "oven", "dryer") or "unknown" if you cannot tell; copy text exactly as printed on the label; use null for anything not clearly legible; never guess a model or serial number; confidence is 0 to 1 for how sure you are of manufacturer and model together.`
+{"applianceType": string, "typeEvidence": string | null, "manufacturer": string | null, "model": string | null, "serialNumber": string | null, "confidence": number}
+Rules:
+- applianceType is a short English category, or "unknown".
+- Set a category only from printed type text or a product-category word printed on the label. Copy those exact printed words into typeEvidence.
+- A model-number prefix counts only when you are certain that prefix always means exactly one category. If you are not certain, do not use the prefix. When you use a prefix, copy the printed model number into typeEvidence.
+- If the label does not print the category, applianceType is "unknown" and typeEvidence is null.
+- Do not guess a category from the picture, the brand, or the shape of the appliance. An unrecognised appliance is "unknown".
+- Copy manufacturer, model and serialNumber exactly as printed. Use null when a field is not clearly legible. Never guess a model or serial number.
+- confidence is 0 to 1 for how sure you are of manufacturer and model together.`
 
 const text = (value: unknown, max = 80): string | null => {
   if (typeof value !== 'string') return null
@@ -88,17 +95,160 @@ function balancedJsonAt(reply: string, start: number): { value: unknown; end: nu
   return undefined
 }
 
-// KEE-60: every recognised category is a valid proposal. The category is normalised to
-// lowercase trimmed text or "unknown" so the rest of Keeply can branch on it consistently.
-export function normaliseIdentity(raw: unknown): ApplianceIdentity | null {
+// Printed category words, including the usual words on a European rating plate.
+// Longer phrases are matched first so "microwave oven" is not read as an oven.
+const CATEGORY_PHRASES: readonly { canonical: string; phrase: string }[] = (
+  [
+    ['microwave', 'microwave oven'],
+    ['microwave', 'microwave'],
+    ['microwave', 'mikrowelle'],
+    ['microwave', 'micro-ondes'],
+    ['fridge freezer', 'fridge freezer'],
+    ['dishwasher', 'dishwasher'],
+    ['dishwasher', 'dish washer'],
+    ['dishwasher', 'lavastoviglie'],
+    ['dishwasher', 'geschirrspüler'],
+    ['dishwasher', 'lave-vaisselle'],
+    ['dishwasher', 'lavavajillas'],
+    ['dishwasher', 'vaatwasser'],
+    ['dishwasher', 'diskmaskin'],
+    ['washing machine', 'washing machine'],
+    ['washing machine', 'lavatrice'],
+    ['washing machine', 'waschmaschine'],
+    ['washing machine', 'lave-linge'],
+    ['washing machine', 'lavadora'],
+    ['washing machine', 'wasmachine'],
+    ['tumble dryer', 'tumble dryer'],
+    ['dryer', 'dryer'],
+    ['dryer', 'trockner'],
+    ['dryer', 'asciugatrice'],
+    ['fridge', 'refrigerator'],
+    ['fridge', 'fridge'],
+    ['fridge', 'frigorifero'],
+    ['fridge', 'kühlschrank'],
+    ['fridge', 'réfrigérateur'],
+    ['fridge', 'koelkast'],
+    ['freezer', 'freezer'],
+    ['freezer', 'congelatore'],
+    ['oven', 'oven'],
+    ['oven', 'backofen'],
+    ['oven', 'forno'],
+    ['oven', 'horno'],
+    ['hob', 'hob'],
+    ['hob', 'kochfeld'],
+  ] as const
+)
+  .map(([canonical, phrase]) => ({ canonical: fold(canonical), phrase: fold(phrase) }))
+  .sort((a, b) => b.phrase.length - a.phrase.length)
+
+// A one-word claim such as "machine" or "product" is not a category.
+const GENERIC_CATEGORIES = new Set(['appliance', 'product', 'machine', 'unit', 'device', 'other', 'unknown', 'home', 'household', 'type', 'model'])
+
+// No prefix is certain enough to name a category by itself. A prefix belongs here only when
+// every model that starts with it is that one category. The photos from RF-350 are not entries.
+const CERTAIN_MODEL_PREFIXES: readonly { prefix: string; category: string }[] = []
+const MIN_CERTAIN_PREFIX = 3
+
+function fold(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[-_/]+/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function isWordChar(char: string): boolean {
+  return char !== '' && /[\p{L}\p{N}]/u.test(char)
+}
+
+function findSpans(haystack: string, phrase: string): { start: number; end: number }[] {
+  if (phrase.length === 0) return []
+  const spans: { start: number; end: number }[] = []
+  let from = 0
+  while (from <= haystack.length - phrase.length) {
+    const at = haystack.indexOf(phrase, from)
+    if (at < 0) break
+    const before = at > 0 ? haystack[at - 1] : ''
+    const after = at + phrase.length < haystack.length ? haystack[at + phrase.length] : ''
+    if (!isWordChar(before) && !isWordChar(after)) spans.push({ start: at, end: at + phrase.length })
+    from = at + 1
+  }
+  return spans
+}
+
+// Categories whose words actually appear in the quote. The claimed type counts only when
+// those same words are in the quote, so a bare "oven" with no quote does not survive.
+function printedCategories(evidence: string, claimed: string): string[] {
+  const quoted = fold(evidence)
+  if (!quoted) return []
+  const spans: { start: number; end: number; canonical: string }[] = []
+  for (const entry of CATEGORY_PHRASES) {
+    for (const span of findSpans(quoted, entry.phrase)) spans.push({ ...span, canonical: entry.canonical })
+  }
+  const claim = fold(claimed)
+  if (claim.length >= 3 && !GENERIC_CATEGORIES.has(claim)) {
+    const known = CATEGORY_PHRASES.find((entry) => entry.phrase === claim)
+    for (const span of findSpans(quoted, claim)) spans.push({ ...span, canonical: known?.canonical ?? claim })
+  }
+  const kept = spans.filter(
+    (span) =>
+      !spans.some(
+        (other) =>
+          other.end - other.start > span.end - span.start && other.start <= span.start && other.end >= span.end,
+      ),
+  )
+  return [...new Set(kept.map((span) => span.canonical))].filter((category) => !GENERIC_CATEGORIES.has(category))
+}
+
+function categoryFromModelPrefix(
+  model: string | null,
+  evidence: string,
+  prefixes: readonly { prefix: string; category: string }[],
+): string | null {
+  const token = fold(model ?? '')
+  const quoted = fold(evidence)
+  if (token.length < MIN_CERTAIN_PREFIX || !quoted.includes(token)) return null
+  const ordered = [...prefixes].sort((a, b) => fold(b.prefix).length - fold(a.prefix).length)
+  for (const item of ordered) {
+    const prefix = fold(item.prefix)
+    const category = fold(item.category)
+    if (prefix.length < MIN_CERTAIN_PREFIX || category === '' || GENERIC_CATEGORIES.has(category)) continue
+    if (token.startsWith(prefix)) return category
+  }
+  return null
+}
+
+function groundedApplianceType(
+  claimed: string,
+  evidence: string,
+  model: string | null,
+  prefixes: readonly { prefix: string; category: string }[],
+): string {
+  const printed = printedCategories(evidence, claimed)
+  if (printed.length === 1) return printed[0]
+  if (printed.length > 1) return 'unknown'
+  return categoryFromModelPrefix(model, evidence, prefixes) ?? 'unknown'
+}
+
+// KEE-60: every quoted category is a valid proposal. RF-350: the quote decides the category.
+// A model number is not a category unless its prefix is on the certain list, which is empty.
+export function normaliseIdentity(
+  raw: unknown,
+  prefixes: readonly { prefix: string; category: string }[] = CERTAIN_MODEL_PREFIXES,
+): ApplianceIdentity | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
-  const type = typeof r.applianceType === 'string' ? r.applianceType.trim().toLowerCase() : ''
+  const claimed = typeof r.applianceType === 'string' ? r.applianceType : ''
+  const evidence = typeof r.typeEvidence === 'string' ? r.typeEvidence : ''
+  const model = text(r.model, 40)
   const confidence = typeof r.confidence === 'number' && Number.isFinite(r.confidence) ? Math.min(1, Math.max(0, r.confidence)) : 0
   return {
-    applianceType: type.length > 0 ? type : 'unknown',
+    applianceType: groundedApplianceType(claimed, evidence, model, prefixes),
     manufacturer: text(r.manufacturer),
-    model: text(r.model, 40),
+    model,
     serialNumber: text(r.serialNumber, 40),
     confidence,
   }
