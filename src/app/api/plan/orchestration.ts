@@ -50,6 +50,18 @@ export type PlanResponse = {
 
 const PLAN_TIMEOUT_MS = 25_000
 
+// The selected provider reads the manual. Manual (no key) and a thrown provider failure both
+// become 'unavailable', which the orchestration reports as extraction_unavailable — the honest
+// "could not read the manual right now" path. The reservation is already charged.
+export function extractTasksFromProvider(
+  env: Record<string, string | undefined>,
+  input: { model: string; pages: readonly { page: number; text: string }[] },
+) {
+  const provider = selectProvider({ env })
+  if (provider.kind === 'manual') return Promise.resolve('unavailable' as const)
+  return provider.extractTasks(input).catch(() => 'unavailable' as const)
+}
+
 // Builds a serialisable TaskProposal (Date-free, plain values). The route hands them to the
 // browser exactly as the source-of-truth for Accept / Reject.
 function toJsonProposal(p: {
@@ -99,13 +111,7 @@ function buildDeps(args: {
     searchManuals: ({ manufacturer, model }) => searchManuals({ manufacturer, model }),
     fetchDocument: (url) => fetchDocument(url, undefined, { timeoutMs: CANDIDATE_FETCH_TIMEOUT_MS }),
     extractPages: (bytes, type) => extractPages(bytes, type),
-    extractTasks: ({ model, pages }) => {
-      // MiniMax is the only implemented AI provider. The route lets it read the manual pages.
-      // Manual is also reached by the orchestration's Manual fallback path (no model key set).
-      const provider = selectProvider({ env: args.env })
-      if (provider.kind === 'manual') return Promise.resolve('unavailable')
-      return provider.extractTasks({ model, pages }).catch(() => 'unavailable' as const)
-    },
+    extractTasks: ({ model, pages }) => extractTasksFromProvider(args.env, { model, pages }),
     resolveSource: resolveSourceFromUrl,
     manufacturerDomains: args.manufacturerDomains,
     generalGuidance: () => GENERAL_DISHWASHER_TASKS,

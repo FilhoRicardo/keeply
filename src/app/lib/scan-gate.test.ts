@@ -20,4 +20,9 @@ describe('aiScanLive', () => {
     expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '' }, true)).toBe(false)
     expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '1' }, false)).toBe(false)
   })
+
+  it('is live when OpenRouter is configured and MiniMax is not', () => {
+    expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '1', OPENROUTER_API_KEY: 'or-key' }, false)).toBe(true)
+    expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '1', MINIMAX_API_KEY: 'server-key' }, false)).toBe(true)
+  })
 })

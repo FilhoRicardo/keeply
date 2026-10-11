@@ -10,7 +10,7 @@ import { checkPhoto } from '../../lib/identify'
 import { scanEnabled } from '../../lib/features'
 import { admitScan, aiScanLive, userMiniMaxKey } from '../../lib/scan-gate'
 
-// The MiniMax adapter waits up to 25 s; give the function room on Vercel.
+// The vision adapter waits up to 25 s; give the function room on Vercel.
 export const maxDuration = 30
 
 export type IdentifyResponse = {

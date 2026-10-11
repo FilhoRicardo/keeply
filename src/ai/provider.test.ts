@@ -15,11 +15,22 @@ describe('selectProvider', () => {
     expect(CANDIDATES.map((c) => c.kind)).toEqual([
       'chatgpt_authorized',
       'minimax',
+      'openrouter',
       'openai_api',
       'anthropic_api',
       'keeply_hosted',
       'manual',
     ])
+  })
+
+  it('uses a BYO MiniMax key, then server MiniMax, then OpenRouter, then Manual', () => {
+    // The identify route represents a saved BYO key by passing it as the only MiniMax credential.
+    expect(selectProvider({ env: { MINIMAX_API_KEY: 'byo-key', OPENROUTER_API_KEY: 'or-key' } }).kind).toBe('minimax')
+    expect(selectProvider({ env: { MINIMAX_API_KEY: 'server-key', OPENROUTER_API_KEY: 'or-key' } }).kind).toBe('minimax')
+    expect(selectProvider({ env: { OPENROUTER_API_KEY: 'or-key' } }).kind).toBe('openrouter')
+    expect(selectProvider({ env: { MINIMAX_API_KEY: 'k', MINIMAX_MODEL: 'MiniMax-M2.7', OPENROUTER_API_KEY: 'or-key' } }).kind).toBe('openrouter')
+    expect(selectProvider({ env: {} }).kind).toBe('manual')
+    expect(selectProvider({ env: { OPENROUTER_API_KEY: '  ', MINIMAX_API_KEY: '' } }).kind).toBe('manual')
   })
 
   it('is Manual with no AI configured, whatever the Keeply login', () => {
@@ -60,6 +71,49 @@ describe('selectProvider', () => {
     expect(result).toEqual([
       { task: 'Clean the filter', instructions: 'Rinse it.', interval: { count: 1, unit: 'month' }, page: 1, quote: 'Clean the filter every month.' },
     ])
+  })
+
+  it('wires OpenRouter when MiniMax is unset, and keeps the appliance model out of the AI model field', async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                candidates: [
+                  {
+                    task: 'Clean the filter',
+                    instructions: 'Rinse it.',
+                    interval: { count: 1, unit: 'month' },
+                    page: 4,
+                    quote: 'Clean the filter every month.',
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+    )
+    const provider = selectProvider({ env: { OPENROUTER_API_KEY: 'or-key' }, fetch: fetchMock as unknown as typeof fetch })
+    expect(provider.kind).toBe('openrouter')
+    const result = await provider.extractTasks({
+      model: 'KEQB7300L',
+      pages: [{ page: 4, text: 'Clean the filter every month.' }],
+    })
+    expect(result).toEqual([
+      {
+        task: 'Clean the filter',
+        instructions: 'Rinse it.',
+        interval: { count: 1, unit: 'month' },
+        page: 4,
+        quote: 'Clean the filter every month.',
+      },
+    ])
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    const body = JSON.parse(init.body as string) as { model: string }
+    expect(body.model).toBe('google/gemma-4-31b-it:free')
+    expect(JSON.stringify(body)).not.toContain('KEQB7300L')
   })
 
   it('returns "unavailable" for the Manual provider and any provider that has not implemented extraction yet', async () => {

@@ -78,6 +78,34 @@ describe('POST /api/identify', () => {
     })
   })
 
+  it('turns an OpenRouter reading into a proposal when MiniMax is unset', async () => {
+    vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
+    vi.stubEnv('MINIMAX_API_KEY', '')
+    vi.stubEnv('OPENROUTER_API_KEY', 'or-key')
+    vi.stubEnv('KEEPLY_SCAN_ACCESS', 'open')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        expect(String(input)).toBe('https://openrouter.ai/api/v1/chat/completions')
+        return Response.json({
+          choices: [{ message: { content: '{"applianceType":"dishwasher","manufacturer":"Electrolux","model":"KEQB7300L","serialNumber":null,"confidence":0.9}' } }],
+        })
+      }),
+    )
+    const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
+    expect(await response.json()).toEqual({
+      identification: {
+        category: 'dishwasher',
+        manufacturer: 'Electrolux',
+        model: 'KEQB7300L',
+        serialNumber: '',
+        confidence: 0.9,
+        source: 'photo_recognition',
+      },
+      notice: null,
+    })
+  })
+
   it('says label reading is unavailable when the provider errors, and hides the error body', async () => {
     vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
     vi.stubEnv('MINIMAX_API_KEY', 'server-key')
@@ -171,6 +199,7 @@ describe('POST /api/identify for invited testers (default access mode)', () => {
 
   it('uses a signed-in owner key ahead of the server key', async () => {
     configure()
+    vi.stubEnv('OPENROUTER_API_KEY', 'or-key')
     personalCredential.value = 'owners-private-key'
     const seen: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -226,6 +255,35 @@ describe('POST /api/identify for invited testers (default access mode)', () => {
     expect(response.status).toBe(403)
     expect(await response.json()).toEqual({ error: 'scan_denied', reason: 'daily_limit' })
     expect([counts.rpcCalls(), counts.minimaxCalls()]).toEqual([1, 0])
+  })
+
+  it('counts a failed OpenRouter attempt and says label reading is unavailable', async () => {
+    vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
+    vi.stubEnv('MINIMAX_API_KEY', '')
+    vi.stubEnv('OPENROUTER_API_KEY', 'or-key')
+    vi.stubEnv('KEEPLY_SCAN_ACCESS', '')
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://project.supabase.example')
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key')
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input instanceof Request ? input.url : input)
+      calls.push(url)
+      if (url.includes('/auth/v1/user')) return Response.json(anonymousUser)
+      if (url.includes('/rest/v1/rpc/reserve_scan')) return Response.json('allowed')
+      if (url.includes('openrouter.ai')) {
+        expect(new Headers(init?.headers).get('authorization')).toBe('Bearer or-key')
+        return new Response('{"error":"slow down","key":"or-key"}', { status: 429 })
+      }
+      throw new Error(`unexpected ${url}`)
+    }))
+    const response = await post(photo(), session)
+    const text = await response.text()
+    expect(text).not.toContain('or-key')
+    expect(JSON.parse(text)).toEqual({ identification: null, notice: 'ai_unavailable' })
+    const reserveAt = calls.findIndex((url) => url.includes('reserve_scan'))
+    const aiAt = calls.findIndex((url) => url.includes('openrouter.ai'))
+    expect(reserveAt).toBeGreaterThanOrEqual(0)
+    expect(aiAt).toBeGreaterThan(reserveAt)
   })
 
   it('fails closed when account verification is unavailable instead of using the hosted key', async () => {
