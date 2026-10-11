@@ -96,6 +96,28 @@ describe('HTML cover window', () => {
     expect(matchingCoverModel([page], 'DI6012-1')).toBe('DI6012-2')
   })
 
+  it('does not read a model number cut at character 2,000 as a shorter model', () => {
+    const longer = 'SMS6ZCI49EX'
+    const start = HTML_BODY_LIMIT - (longer.length - 1)
+    const text = `${' '.repeat(start)}${longer}`
+    expect(text[HTML_BODY_LIMIT]).toBe('X')
+    expect(text.slice(0, HTML_BODY_LIMIT).endsWith('SMS6ZCI49E')).toBe(true)
+    const page = { page: 1, text, title: '' }
+    expect(coverModelTokens([page])).toEqual([])
+    expect(matchingCoverModel([page], 'SMS6ZCI49E')).toBeNull()
+  })
+
+  it('still matches a model that ends before character 2,000 when the next token starts there', () => {
+    const model = 'DI6012-1'
+    const start = HTML_BODY_LIMIT - model.length - 1
+    const text = `${' '.repeat(start)}${model} KEQB7300L`
+    expect(text.slice(start, HTML_BODY_LIMIT - 1)).toBe(model)
+    expect(text[HTML_BODY_LIMIT]).toBe('K')
+    const page = { page: 1, text, title: '' }
+    expect(coverModelTokens([page])).toEqual(['DI6012-1'])
+    expect(matchingCoverModel([page], 'DI6012-1')).toBe('DI6012-1')
+  })
+
   it('keeps the whole first PDF page, including a model past character 2,000', () => {
     const text = `${PAST_THE_COVER}User manual DI6012-1`
     expect(text.indexOf('DI6012-1')).toBeGreaterThanOrEqual(HTML_BODY_LIMIT)
