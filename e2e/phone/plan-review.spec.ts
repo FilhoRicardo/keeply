@@ -195,6 +195,8 @@ test('verified plan at 360 px shows source, page, quote, and a level-2/3 row nev
   await expect(verified.getByText(/page 32/)).toBeVisible()
   await expect(verified.getByText('“Clean the filter once a month under running water.”')).toBeVisible()
   await expect(verified.getByRole('link', { name: 'Open' })).toHaveAttribute('href', 'https://www.bosch-home.com/manual.pdf')
+  await expect(verified.locator('.recommended strong')).toHaveText('Every month · from the manual')
+  await expect(general.locator('.recommended strong')).toHaveText('Every 3 months')
 
   await noHorizontalScroll(page)
   await accessible(page)
@@ -274,6 +276,24 @@ const SIMILAR_FIXTURE = {
           status: 'proposed',
           calendarEventId: null,
         },
+        {
+          id: 'task-similar-regular',
+          applianceId: 'app-similar',
+          name: 'Clean the spray arm',
+          instructions: 'Clear the holes so they are not clogged.',
+          interval: { count: 2, unit: 'week' },
+          evidenceLevel: 'similar_model',
+          source: {
+            type: 'similar_model_manual',
+            title: 'Smeg DI6012 series manual',
+            url: 'https://www.smeg.com/di6012.pdf',
+            location: 'page 23',
+            quote: 'Clean the lower spray arm regularly to prevent soil from clogging the holes.',
+            coveredModel: 'DI6012-2',
+          },
+          status: 'proposed',
+          calendarEventId: null,
+        },
       ],
     },
   ],
@@ -290,7 +310,10 @@ test('similar-model plan at 375 px shows the badge, covered model, host, page, q
   await expect(family.locator('.evidence--similar_model')).toHaveCount(1)
   await expect(family.getByText('Manual for a similar model (DI6012-2). Not verified for your exact model.')).toBeVisible()
   await expect(family.locator('.covered-model')).toHaveText('DI6012-2')
+  await expect(family.locator('.recommended strong')).toHaveText('Every month · from the manual')
   await family.getByRole('button', { name: 'Why? / View source' }).click()
+  await expect(family.locator('.source-panel')).toContainText('Comparable models in the same product family recommend it.')
+  await expect(family.locator('.source-panel')).not.toContainText('third-party site')
   await expect(family.locator('.source-host')).toHaveText('www.smeg.com')
   await expect(family.getByText(/page 18/)).toBeVisible()
   await expect(family.getByText('“Clean the filter once a month under running water.”')).toBeVisible()
@@ -300,10 +323,22 @@ test('similar-model plan at 375 px shows the badge, covered model, host, page, q
   await expect(copy.getByText('Manufacturer verified')).toHaveCount(0)
   await expect(copy.getByText('Manual for your model, found on a third-party site (not the manufacturer’s). Not verified.')).toBeVisible()
   await expect(copy.locator('.covered-model')).toHaveText('DI6012-1')
+  await expect(copy.locator('.recommended strong')).toHaveText('Every month · from the manual')
   await copy.getByRole('button', { name: 'Why? / View source' }).click()
+  await expect(copy.locator('.source-panel')).toContainText(
+    'Manual for your model, found on a third-party site (not the manufacturer’s). Not verified.',
+  )
+  await expect(copy.locator('.source-panel')).not.toContainText('Comparable models in the same product family')
   await expect(copy.locator('.source-host')).toHaveText('manualslib.com')
   await expect(copy.getByText(/page 9/)).toBeVisible()
   await expect(copy.getByText('“Run a hot programme once a month.”')).toBeVisible()
+
+  const regular = page.getByRole('article', { name: 'Clean the spray arm' })
+  await expect(regular.getByText('Similar-model guidance')).toBeVisible()
+  await expect(regular.getByText('Manufacturer verified')).toHaveCount(0)
+  await expect(regular.locator('.recommended strong')).toHaveText(
+    'Every month · Keeply\'s suggestion. The manual says "regularly".',
+  )
 
   await expect(page.getByText('Manufacturer verified')).toHaveCount(0)
   await noHorizontalScroll(page)
