@@ -1,18 +1,32 @@
 import 'server-only'
-import { EXTRACTION_INSTRUCTIONS, type ExtractedPage, parseExtractionReply, type ExtractedTaskCandidate } from './extraction'
-import { extractJsonObject, IDENTITY_INSTRUCTIONS, normaliseIdentity, type ApplianceIdentity, type LabelPhoto } from './identity'
+import { parseExtractionReply, type ExtractedPage, type ExtractedTaskCandidate } from './extraction'
+import { extractJsonObject, normaliseIdentity, type ApplianceIdentity, type LabelPhoto } from './identity'
+import {
+  CHAT_TEMPERATURE,
+  completeChat,
+  EXTRACT_MAX_TOKENS,
+  EXTRACT_TIMEOUT_MS,
+  extractionMessages,
+  IDENTIFY_MAX_TOKENS,
+  IDENTIFY_TIMEOUT_MS,
+  identifyMessages,
+  labelPhotoAccepted,
+  manualPagesPrompt,
+  type ChatCompletion,
+} from './openai-chat'
 
-// MiniMax adapter. Everything MiniMax-specific stays in this file.
+// MiniMax adapter. Everything MiniMax-specific stays in this file. The HTTP call and the
+// reply parsing are shared with OpenRouter (`openai-chat.ts`).
 // Docs (2026-10-04): OpenAI-compatible Chat Completions at https://api.minimax.io/v1; image input
 // only on MiniMax-M3 and MiniMax-M3.1-Flash-Preview (the M2.x series is text-only); images as
 // image_url content parts, base64 data URI accepted, ≤10 MB, JPEG/PNG/GIF/WEBP; thinking is on by
 // default and is either split into reasoning_content or wrapped in <think> tags.
 export const MINIMAX_VISION_MODELS = ['MiniMax-M3', 'MiniMax-M3.1-Flash-Preview'] as const
 const DEFAULT_BASE_URL = 'https://api.minimax.io/v1'
-const MAX_IMAGE_BYTES = 10_000_000
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
 export type MiniMaxConfig = { apiKey: string; model: string; baseUrl: string }
+
+const MINIMAX_BODY = { thinking: { type: 'disabled' }, reasoning_split: true }
 
 // Server env only. Unset, or a model without image input, means MiniMax is not available.
 export function minimaxConfig(env: Record<string, string | undefined>): MiniMaxConfig | null {
@@ -20,12 +34,6 @@ export function minimaxConfig(env: Record<string, string | undefined>): MiniMaxC
   const model = env.MINIMAX_MODEL?.trim() || 'MiniMax-M3'
   if (!apiKey || !(MINIMAX_VISION_MODELS as readonly string[]).includes(model)) return null
   return { apiKey, model, baseUrl: (env.MINIMAX_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, '') }
-}
-
-function toDataUri({ bytes, mimeType }: LabelPhoto): string {
-  let binary = ''
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-  return `data:${mimeType};base64,${btoa(binary)}`
 }
 
 export class MiniMaxError extends Error {
@@ -38,97 +46,58 @@ export class MiniMaxError extends Error {
   }
 }
 
+function minimaxReply(result: ChatCompletion): string | null {
+  if (!result.ok) throw new MiniMaxError(`MiniMax rejected the request (${result.status})`, result.status)
+  // MiniMax reports some failures inside a 200 response.
+  if (result.baseResp?.status_code) throw new MiniMaxError(`MiniMax error ${result.baseResp.status_code}: ${result.baseResp.status_msg ?? ''}`)
+  return result.content
+}
+
 export async function identifyWithMiniMax(
   config: MiniMaxConfig,
   photo: LabelPhoto,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ApplianceIdentity | null> {
-  if (!IMAGE_TYPES.includes(photo.mimeType) || photo.bytes.length > MAX_IMAGE_BYTES) return null
-  const response = await fetchImpl(`${config.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: 'system', content: IDENTITY_INSTRUCTIONS },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: 'Read this appliance label.' },
-            { type: 'image_url', image_url: { url: toDataUri(photo), detail: 'high' } },
-          ],
-        },
-      ],
-      // Label reading needs no long reasoning; keep any that happens out of the content.
-      thinking: { type: 'disabled' },
-      reasoning_split: true,
-      temperature: 0.1,
-      max_tokens: 400,
-    }),
-    signal: AbortSignal.timeout(25_000),
-  })
-  if (!response.ok) throw new MiniMaxError(`MiniMax rejected the request (${response.status})`, response.status)
-  const body = (await response.json()) as {
-    choices?: { message?: { content?: unknown } }[]
-    base_resp?: { status_code?: number; status_msg?: string }
-  }
-  // MiniMax reports some failures inside a 200 response.
-  if (body.base_resp?.status_code) throw new MiniMaxError(`MiniMax error ${body.base_resp.status_code}: ${body.base_resp.status_msg ?? ''}`)
-  const content = body.choices?.[0]?.message?.content
-  if (typeof content !== 'string') return null
-  const reply = content.replace(/<think>[\s\S]*?<\/think>/g, '')
-  return normaliseIdentity(extractJsonObject(reply))
+  if (!labelPhotoAccepted(photo)) return null
+  const content = minimaxReply(await completeChat({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    model: config.model,
+    messages: identifyMessages(photo),
+    temperature: CHAT_TEMPERATURE,
+    maxTokens: IDENTIFY_MAX_TOKENS,
+    timeoutMs: IDENTIFY_TIMEOUT_MS,
+    extraBody: MINIMAX_BODY,
+    fetchImpl,
+  }))
+  if (content == null) return null
+  return normaliseIdentity(extractJsonObject(content))
 }
-
-// Maximum total characters of manual text we will send in one extraction call. MiniMax-M3 has a
-// large context window but a one-page at a time manual is plenty for a beta, and the smaller the
-// prompt the lower the billable token count.
-const MAX_PROMPT_CHARS = 60_000
-const MAX_PAGES = 30
 
 // Sends a manual's pages to MiniMax and returns the cleaned task candidates. The model may return
 // anything: malformed items are dropped by `parseExtractionReply` and never throw. A model reply
 // that points a candidate at a page that was not sent is also dropped. A non-2xx, an in-body
-// MiniMax error, a network timeout, or an aborted fetch throws `MiniMaxError`: the caller is
-// expected to catch and fall back to general guidance (the reservation has already been charged
-// and is never refunded, per docs/testers.md).
+// MiniMax error, a network timeout, or an aborted fetch throws `MiniMaxError` for HTTP failures
+// and lets a network error from fetch propagate: the caller catches and falls back to general
+// guidance (the reservation has already been charged and is never refunded, per docs/testers.md).
 export async function extractTasksWithMiniMax(
   config: MiniMaxConfig,
   pages: readonly ExtractedPage[],
   fetchImpl: typeof fetch = fetch,
 ): Promise<ExtractedTaskCandidate[]> {
   if (pages.length === 0) return []
-  const safePages = pages.slice(0, MAX_PAGES)
-  const pageNumbers = new Set(safePages.map((p) => p.page))
-  const pagesText = safePages
-    .map((p) => `[Page ${p.page}]\n${p.text}`)
-    .join('\n\n')
-    .slice(0, MAX_PROMPT_CHARS)
-  const response = await fetchImpl(`${config.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: 'system', content: EXTRACTION_INSTRUCTIONS },
-        { role: 'user', content: pagesText },
-      ],
-      // Manual reading needs no long reasoning; keep any that happens out of the content.
-      thinking: { type: 'disabled' },
-      reasoning_split: true,
-      temperature: 0.1,
-      max_tokens: 2000,
-    }),
-    signal: AbortSignal.timeout(60_000),
-  })
-  if (!response.ok) throw new MiniMaxError(`MiniMax rejected the request (${response.status})`, response.status)
-  const body = (await response.json()) as {
-    choices?: { message?: { content?: unknown } }[]
-    base_resp?: { status_code?: number; status_msg: string }
-  }
-  if (body.base_resp?.status_code) throw new MiniMaxError(`MiniMax error ${body.base_resp.status_code}: ${body.base_resp.status_msg ?? ''}`)
-  const content = body.choices?.[0]?.message?.content
-  if (typeof content !== 'string') return []
-  const reply = content.replace(/<think>[\s\S]*?<\/think>/g, '')
-  return parseExtractionReply(reply, pageNumbers)
+  const { prompt, pageNumbers } = manualPagesPrompt(pages)
+  const content = minimaxReply(await completeChat({
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    model: config.model,
+    messages: extractionMessages(prompt),
+    temperature: CHAT_TEMPERATURE,
+    maxTokens: EXTRACT_MAX_TOKENS,
+    timeoutMs: EXTRACT_TIMEOUT_MS,
+    extraBody: MINIMAX_BODY,
+    fetchImpl,
+  }))
+  if (content == null) return []
+  return parseExtractionReply(content, pageNumbers)
 }

@@ -2,11 +2,13 @@ import 'server-only'
 import type { ApplianceIdentity, LabelPhoto } from './identity'
 import type { ExtractedPage, ExtractedTaskCandidate } from './extraction'
 import { extractTasksWithMiniMax, identifyWithMiniMax, minimaxConfig } from './minimax'
+import { extractTasksWithOpenRouter, identifyWithOpenRouter, openrouterConfig } from './openrouter'
 
 // Where AI usage comes from (docs/HANDOFF.md §22). Separate from the Keeply account: being
 // signed in to Keeply never implies the owner authorised any AI usage.
 export type AiProviderKind =
-  | 'minimax' // MiniMax API (server key) — implemented
+  | 'minimax' // MiniMax API (server key or the owner's saved BYO key) — implemented
+  | 'openrouter' // OpenRouter API (server key, free vision model) — implemented
   | 'chatgpt_authorized' // the owner's ChatGPT plan — after OpenAI's requirements are confirmed
   | 'openai_api' // OpenAI API (server key) — optional
   | 'anthropic_api' // Anthropic API (server key) — optional
@@ -57,8 +59,10 @@ const notBuilt = (kind: AiProviderKind): AiCandidate => ({
   create: () => manualProvider,
 })
 
-// Preference order: the owner's own ChatGPT authorisation first (once built), then server-keyed
-// providers, then Keeply-funded, then Manual.
+// Preference order: ChatGPT-authorized (not built), then MiniMax, then OpenRouter, then other
+// server-keyed providers that are not built, then Manual. A saved BYO key is not its own
+// candidate: the identify route passes that key as the only MiniMax credential, so it is chosen
+// ahead of a server MiniMax key and ahead of OpenRouter.
 export const CANDIDATES: readonly AiCandidate[] = [
   notBuilt('chatgpt_authorized'), // docs/ai/chatgpt-integration-plan.md
   {
@@ -70,11 +74,26 @@ export const CANDIDATES: readonly AiCandidate[] = [
         kind: 'minimax',
         identifyAppliance: (photo) => identifyWithMiniMax(config, photo, fetchImpl),
         extractTasks: ({ model, pages }) => {
-          // MiniMax's model is part of the resolved config; `model` is accepted here so the
-          // provider's public signature is uniform across future providers (e.g. ChatGPT, where
-          // the model is selected by the user's plan, not the server).
+          // The AI model is part of the resolved config. `model` is the appliance model, kept so
+          // the provider signature stays uniform (e.g. ChatGPT, where the AI model comes from the
+          // owner's plan, not the server).
           void model
           return extractTasksWithMiniMax(config, pages, fetchImpl)
+        },
+      }
+    },
+  },
+  {
+    kind: 'openrouter',
+    available: ({ env }) => openrouterConfig(env) !== null,
+    create: ({ env, fetch: fetchImpl }) => {
+      const config = openrouterConfig(env)!
+      return {
+        kind: 'openrouter',
+        identifyAppliance: (photo) => identifyWithOpenRouter(config, photo, fetchImpl),
+        extractTasks: ({ model, pages }) => {
+          void model
+          return extractTasksWithOpenRouter(config, pages, fetchImpl)
         },
       }
     },

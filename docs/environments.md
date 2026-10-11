@@ -29,6 +29,9 @@ Do not invent a new location; add it here first.
 | `MINIMAX_API_KEY` | `.env.local` / Vercel | **yes** (server only; never `NEXT_PUBLIC_*`) |
 | `MINIMAX_MODEL` | `.env.local` / Vercel | no (model name) |
 | `MINIMAX_BASE_URL` | `.env.local` / Vercel (optional) | no (defaults to `https://api.minimax.io/v1`; set for the mainland host) |
+| `OPENROUTER_API_KEY` | `.env.local` / Vercel | **yes** (server only; never `NEXT_PUBLIC_*`). Used when MiniMax is unset. |
+| `OPENROUTER_MODEL` | `.env.local` / Vercel | no (defaults to `openrouter/free`) |
+| `OPENROUTER_DATA_COLLECTION` | `.env.local` / Vercel (optional) | no (`deny` default; `allow` opts in to providers that may train on prompts) |
 | `KEEPLY_SCAN_ACCESS` | `.env.local` / Vercel | no (scan-access mode; "invite" is the safe default) |
 
 ### Local development (`.env.local`)
@@ -52,7 +55,7 @@ Variables**. Anything without `NEXT_PUBLIC_` must be added without the
 prefix (Vercel never exposes a server-only variable to the browser).
 Sensitive values (`SUPABASE_SERVICE_ROLE_KEY`,
 `KEEPLY_AI_KEY_ENCRYPTION_KEY`, `GOOGLE_CLIENT_SECRET`,
-`BRAVE_SEARCH_API_KEY`, `MINIMAX_API_KEY`) are entered as **Sensitive**
+`BRAVE_SEARCH_API_KEY`, `MINIMAX_API_KEY`, `OPENROUTER_API_KEY`) are entered as **Sensitive**
 and are never pasted into chat or committed.
 
 Two Vercel-specific behaviours to remember:

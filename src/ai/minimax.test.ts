@@ -31,6 +31,8 @@ describe('identifyWithMiniMax', () => {
     expect(init.headers).toMatchObject({ Authorization: 'Bearer test-key' })
     const body = JSON.parse(init.body as string)
     expect(body).toMatchObject({ model: 'MiniMax-M3', thinking: { type: 'disabled' }, reasoning_split: true })
+    expect(body.provider).toBeUndefined()
+    expect(init.headers).not.toHaveProperty('HTTP-Referer')
     expect(body.messages[1].content[1]).toEqual({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,/9j/2Q==', detail: 'high' } })
   })
 
