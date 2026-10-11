@@ -50,6 +50,31 @@ describe('rows', () => {
     expect(record).toMatchObject({ approvedAt: '2026-10-04T10:00:00Z', startDate: '2026-10-05' })
   })
 
+  it('round-trips a similar-model covered model through source_location', () => {
+    const proposal = {
+      name: 'Clean the filter',
+      instructions: 'Rinse it.',
+      interval: { count: 1, unit: 'month' as const },
+      evidenceLevel: 'similar_model' as const,
+      source: {
+        type: 'similar_model_manual' as const,
+        title: 'Smeg DI6012 series',
+        url: 'https://www.smeg.com/di6012.pdf',
+        location: 'page 18',
+        quote: 'Clean the filter once a month under running water.',
+        coveredModel: 'DI6012-2',
+      },
+    }
+    const payload = fromProposal(proposal)
+    expect(payload.source_location).toBe('page 18 | covers DI6012-2')
+    const back = toApplianceRecord({
+      ...tree,
+      maintenance_tasks: [taskRow(1, { ...payload, status: 'proposed' })],
+    }).tasks[0]
+    expect(back.source).toEqual(proposal.source)
+    expect(back.evidenceLevel).toBe('similar_model')
+  })
+
   it('round-trips a proposal through the RPC payload', () => {
     const payload = fromProposal(GENERAL_DISHWASHER_TASKS[0])
     const back = toApplianceRecord({ ...tree, maintenance_tasks: [taskRow(1, { ...payload, status: 'proposed' })] }).tasks[0]

@@ -29,7 +29,14 @@ export type PlanProposalJson = {
   instructions: string
   interval: { count: number; unit: IntervalUnit }
   evidenceLevel: EvidenceLevel
-  source: { type: SourceType; title: string; url: string | null; location: string | null; quote: string | null }
+  source: {
+    type: SourceType
+    title: string
+    url: string | null
+    location: string | null
+    quote: string | null
+    coveredModel?: string
+  }
 }
 
 export type PlanResponse = {
@@ -50,7 +57,7 @@ function toJsonProposal(p: {
   instructions: string
   interval: { count: number; unit: string }
   evidenceLevel: string
-  source: { type: string; title: string; url: string | null; location: string | null; quote: string | null }
+  source: { type: string; title: string; url: string | null; location: string | null; quote: string | null; coveredModel?: string }
 }): PlanResponse['proposals'][number] {
   return {
     name: p.name,
@@ -63,20 +70,14 @@ function toJsonProposal(p: {
       url: p.source.url,
       location: p.source.location,
       quote: p.source.quote,
+      ...(p.source.coveredModel ? { coveredModel: p.source.coveredModel } : {}),
     },
   }
 }
 
-// Best-effort source metadata. The first manual page is usually the cover, and "this document
-// applies to the SMS6 family" is on the cover; we keep the model list + family conservative so we
-// never over-promise Manufacturer verified (classifyEvidence is the final authority).
-//
-// The orchestration does not parse PDFs here; the model extraction is. The model family mapping
-// is owned by the manual-search adapter that will arrive in a later KEE (Phase 3 P3-3 metadata).
-// For the KEE-42 milestone we keep the resolver a no-op so every candidate is at most
-// 'similar_model' or 'general_guidance' unless the manual itself names the model — which the AI
-// extraction step will see in the page text. classifyEvidence reads `documentModels` from this
-// call and the model extraction from the page text.
+// The URL alone cannot say which models a document covers. findPlans reads the cover pages for
+// the exact model and for a same-family model number. This stub stays empty so a URL can never
+// raise the evidence level by itself.
 function resolveSourceFromUrl(_url: string): { documentModels: string[]; documentFamily?: string } {
   void _url
   return { documentModels: [] }

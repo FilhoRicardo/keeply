@@ -10,6 +10,7 @@ Durable decisions only. One or two sentences each. Not a task log.
 
 ## Key Decisions
 
+- 2026-10-11: RF-344. A manual cover that names the same product family is Similar-model guidance, never Manufacturer verified. An exact copy on a third-party site stays Similar-model with the third-party wording (owner, 2026-10-11). An HTML cover is the page title plus the first 2,000 characters of extracted text; PDF covers stay pages 1–2.
 - 2026-10-11: Linear is the tracker (Keeply project, Engineering/RF); Codex plans and reviews, Cursor implements. Paperclip will not be used, which supersedes the 2026-10-04 exception and the 2026-10-06 retrial rule. Shared skills and grill-with-docs land with the workflow setup; cloud automation and auto-merge stay off.
 - Registered 2026-10-04. Scope follows `docs/HANDOFF.md`: dishwashers only, Phase 0 + 1 first, no AI recognition until the approval/calendar skeleton works.
 - Agent team in Paperclip until 2026-10-05 (superseded below): CEO, CTO, CFO on Opus 5.5 (`claude-opus-5-5`); Builders 1–2 on Sonnet 5.5 (`claude-sonnet-5-5`); Builders 3–4 on Codex (`gpt-5.6-sol`, medium). The Codex model was set as the closest match to "Sol 6.1"; confirm.

@@ -64,6 +64,37 @@ describe('createApiPlanProposer', () => {
     expect(result.proposals[0].source.url).toBe('https://www.bosch-home.com/manual.pdf')
   })
 
+  it('keeps the covered model on a similar-model proposal', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        proposals: [
+          {
+            name: 'Clean the filter',
+            instructions: 'Rinse it.',
+            interval: { count: 1, unit: 'month' },
+            evidenceLevel: 'similar_model',
+            source: {
+              type: 'similar_model_manual',
+              title: 'Smeg DI6012 series',
+              url: 'https://www.smeg.com/di6012.pdf',
+              location: 'page 18',
+              quote: 'Clean the filter once a month under running water.',
+              coveredModel: 'DI6012-2',
+            },
+          },
+        ],
+        fallback: 'similar',
+        searchOutcome: 'ok',
+        searchReason: null,
+      }),
+    )
+    const propose = createApiPlanProposer({ fetch: fetchMock as unknown as typeof fetch })
+    const result = await propose({ manufacturer, model })
+    expect(result.proposals[0].evidenceLevel).toBe('similar_model')
+    expect(result.proposals[0].source.coveredModel).toBe('DI6012-2')
+    expect(result.proposals[0].source.location).toBe('page 18')
+  })
+
   it('returns general-guidance proposals and the no_results outcome on fallback', async () => {
     const fetchMock = vi.fn(async () => jsonResponse(FALLBACK_BODY))
     const propose = createApiPlanProposer({ fetch: fetchMock as unknown as typeof fetch })

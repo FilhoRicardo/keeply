@@ -108,7 +108,11 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
       <ul className="plan-list">
         {record.tasks.map((task) => (
           <li key={task.id}>
-            <TaskCard task={task} onDecide={(d) => void decide(applianceId, task.id, d).catch(() => {})} />
+            <TaskCard
+              task={task}
+              ownerModel={record.appliance.model}
+              onDecide={(d) => void decide(applianceId, task.id, d).catch(() => {})}
+            />
           </li>
         ))}
       </ul>

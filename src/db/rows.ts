@@ -1,4 +1,5 @@
 import type { Appliance, ApplianceRecord, MaintenanceTask, TaskProposal } from '@/domain/model'
+import { decodeSourceLocation, encodeSourceLocation } from '@/domain/model-family'
 
 // Row shapes as stored in supabase/migrations/20261005090000_mvp_schema.sql.
 
@@ -35,6 +36,18 @@ export type TaskRow = {
 
 export type ApplianceTree = ApplianceRow & { maintenance_tasks: TaskRow[] }
 
+function sourceFromRow(row: TaskRow): MaintenanceTask['source'] {
+  const covered = decodeSourceLocation(row.source_location)
+  return {
+    type: row.source_type,
+    title: row.source_title,
+    url: row.source_url,
+    location: covered.location,
+    quote: row.source_quote,
+    ...(covered.coveredModel ? { coveredModel: covered.coveredModel } : {}),
+  }
+}
+
 export function toTask(row: TaskRow): MaintenanceTask {
   return {
     id: row.id,
@@ -43,13 +56,7 @@ export function toTask(row: TaskRow): MaintenanceTask {
     instructions: row.instructions,
     interval: { count: row.interval_count, unit: row.interval_unit },
     evidenceLevel: row.evidence_level,
-    source: {
-      type: row.source_type,
-      title: row.source_title,
-      url: row.source_url,
-      location: row.source_location,
-      quote: row.source_quote,
-    },
+    source: sourceFromRow(row),
     status: row.status,
     calendarEventId: row.calendar_event_id,
   }
@@ -90,7 +97,7 @@ export function fromProposal(p: TaskProposal) {
     source_type: p.source.type,
     source_title: p.source.title,
     source_url: p.source.url,
-    source_location: p.source.location,
+    source_location: encodeSourceLocation(p.source.location, p.source.coveredModel),
     source_quote: p.source.quote,
   }
 }
