@@ -28,16 +28,6 @@ export type LivePlanProposerResult = {
   meta: ProposalMeta
 }
 
-// Outcome returned when no plan could be built for a non-dishwasher. The proposalMeta stays
-// generic (no manufacturer manual was searched for) so the plan screen can render a plain
-// "we could not build a plan" message with the manual-entry path.
-const NO_PLAN_OUTCOME: ProposalMeta = {
-  fallback: 'general',
-  searchOutcome: 'no_results',
-  searchReason: 'no_plan',
-  searched: false,
-}
-
 const isDishwasher = (category: string | null | undefined): boolean =>
   typeof category === 'string' && category.trim().toLowerCase() === 'dishwasher'
 
@@ -58,12 +48,9 @@ export const livePlanProposer: PlanProposer = async ({ manufacturer, model: appl
     }
   }
   // Any other appliance: keep whatever the live search found; never invent dishwasher tasks.
-  // If the search returned nothing, the plan is honestly empty — the owner can use the
-  // manual-entry path or accept the appliance with no tasks.
-  if (result.proposals.length > 0) {
-    return { proposals: result.proposals, meta: toMeta(result) }
-  }
-  return { proposals: [], meta: NO_PLAN_OUTCOME }
+  // An empty plan keeps the outcome the route already returned so the entry screen can say
+  // why, instead of replacing it with a generic "no manual" result.
+  return { proposals: result.proposals, meta: toMeta(result) }
 }
 
 function toMeta(result: LiveProposalResult): ProposalMeta {

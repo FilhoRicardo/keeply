@@ -24,6 +24,7 @@ export type ProposalOutcome = {
     | 'no_text'
     | 'timeout'
     | 'unavailable'
+    | 'no_plan'
   // Optional human-readable reason, e.g. the Brave search reason or a missing key.
   searchReason: string | null
 }
@@ -79,6 +80,7 @@ function asOutcome(input: unknown): ProposalOutcome {
       'no_text',
       'timeout',
       'unavailable',
+      'no_plan',
     ] as const
   ).includes(raw as ProposalOutcome['searchOutcome'])
     ? (raw as ProposalOutcome['searchOutcome'])

@@ -65,6 +65,7 @@ export type ProposalMeta = {
     | 'no_text'
     | 'timeout'
     | 'unavailable'
+    | 'no_plan'
   readonly searchReason: string | null
   readonly searched: boolean
 }

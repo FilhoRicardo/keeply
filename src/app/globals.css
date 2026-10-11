@@ -715,6 +715,16 @@ a {
   font-weight: 600;
 }
 
+.form-callout {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: var(--aster-ink);
+  background: rgba(26, 79, 107, 0.08);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .button-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
