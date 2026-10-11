@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { formatInterval } from '@/domain/format-interval'
+import { presentInterval } from '@/domain/cadence'
 import { presentCoveredSource, similarModelNotice } from '@/domain/model-family'
 import type { MaintenanceTask } from '@/domain/model'
 import type { Decision } from '@/domain/plan'
@@ -11,6 +11,20 @@ const STATUS_COPY: Record<MaintenanceTask['status'], string> = {
   proposed: 'Not decided yet',
   accepted: 'Accepted: goes to your calendar when you approve',
   rejected: 'Rejected: will not be added',
+}
+
+function howOften(task: MaintenanceTask): string {
+  return presentInterval({
+    quote: task.source.quote,
+    stored: task.interval,
+    generalGuidance: task.evidenceLevel === 'general_guidance',
+  }).text
+}
+
+// The third-party sentence, only when the covered model is the owner's exact model.
+function exactCopyNotice(ownerModel: string | null | undefined, coveredModel: string): string | null {
+  const notice = similarModelNotice(ownerModel, coveredModel)
+  return notice === similarModelNotice(coveredModel, coveredModel) ? notice : null
 }
 
 function sourceHost(url: string | null): string | null {
@@ -50,9 +64,17 @@ export function SourceDetails({
   const { source } = task
   const presented = presentCoveredSource(source)
   const host = task.evidenceLevel === 'similar_model' ? sourceHost(source.url) : null
+  const thirdPartyNotice =
+    task.evidenceLevel === 'similar_model' && presented.coveredModel
+      ? exactCopyNotice(ownerModel, presented.coveredModel)
+      : null
   return (
     <div className="source-panel aster-inner">
-      <EvidenceBadge level={task.evidenceLevel} explain />
+      <EvidenceBadge
+        level={task.evidenceLevel}
+        explain={thirdPartyNotice === null || !note}
+        explanation={thirdPartyNotice && !note ? thirdPartyNotice : undefined}
+      />
       {note && <SimilarModelNote task={task} ownerModel={ownerModel} />}
       {host && (
         <p>
@@ -94,7 +116,7 @@ export function TaskCard({
       <h3 id={headingId}>{task.name}</h3>
       <p className="recommended">
         <span className="aster-eyebrow">How often</span>
-        <strong>{formatInterval(task.interval)}</strong>
+        <strong>{howOften(task)}</strong>
       </p>
       <EvidenceBadge level={task.evidenceLevel} />
       <SimilarModelNote task={task} ownerModel={ownerModel} />

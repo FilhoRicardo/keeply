@@ -28,17 +28,28 @@ describe('toCalendarEvent', () => {
       summary: 'Clean the filter · Bosch SMS6ZCI49E',
       date: '2026-10-05',
       endDate: '2026-10-06',
-      recurrence: ['RRULE:FREQ=DAILY;INTERVAL=14'],
+      recurrence: ['RRULE:FREQ=MONTHLY'],
     })
   })
 
   it('carries the instructions, evidence level and source, quote and link', () => {
     const { description } = toCalendarEvent(accepted, appliance, '2026-10-05')
     expect(description).toContain('Rinse the filter.')
-    expect(description).toContain('Every 14 days · Manufacturer verified')
+    expect(description).toContain(`Every month · Keeply's suggestion. The manual says "regularly". · Manufacturer verified`)
     expect(description).toContain('Source: Bosch SMS6ZCI49E user manual, page 32')
     expect(description).toContain('“Check and clean the filters regularly.”')
     expect(description).toContain('https://example.com/manual.pdf')
+  })
+
+  it('repeats a stated cadence from the quote, not the stored interval', () => {
+    const stated = task({
+      status: 'accepted',
+      interval: { count: 1, unit: 'month' },
+      source: { ...task().source, quote: 'Check and clean the filters every 14 days.' },
+    })
+    const event = toCalendarEvent(stated, appliance, '2026-10-05')
+    expect(event.recurrence).toEqual(['RRULE:FREQ=DAILY;INTERVAL=14'])
+    expect(event.description).toContain('Every 14 days · from the manual · Manufacturer verified')
   })
 
   it('never labels general guidance as verified in the event', () => {
@@ -47,7 +58,11 @@ describe('toCalendarEvent', () => {
       evidenceLevel: 'general_guidance',
       source: { type: 'general_guidance', title: 'General', url: null, location: null, quote: null },
     })
-    expect(toCalendarEvent(general, appliance, '2026-10-05').description).not.toMatch(/verified/i)
+    const event = toCalendarEvent(general, appliance, '2026-10-05')
+    expect(event.recurrence).toEqual(['RRULE:FREQ=DAILY;INTERVAL=14'])
+    expect(event.description).toContain('Every 14 days · General guidance')
+    expect(event.description).not.toMatch(/verified/i)
+    expect(event.description).not.toMatch(/Keeply's suggestion|from the manual/)
   })
 
   it.each(['proposed', 'rejected'] as const)('refuses a %s task', (status) => {

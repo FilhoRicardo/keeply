@@ -545,6 +545,74 @@ describe('non-dishwasher no-plan recovery', () => {
   })
 })
 
+describe('interval labels on the appliance record', () => {
+  it('shows where a manual interval comes from and keeps general-guidance intervals', async () => {
+    mockFetch({ configured: false, connected: false }, [])
+    await repo.addAppliance(
+      { manufacturer: 'Electrolux', model: 'KEQB7300L', serialNumber: '' },
+      [
+        {
+          name: 'Clean the spray arm',
+          instructions: 'Clear the holes.',
+          interval: { count: 2, unit: 'week' },
+          evidenceLevel: 'manufacturer_verified',
+          source: {
+            type: 'manufacturer_manual',
+            title: 'Electrolux KEQB7300L user manual',
+            url: 'https://www.electrolux.com/keqb7300l.pdf',
+            location: 'page 23',
+            quote: 'We recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.',
+          },
+        },
+        {
+          name: 'Descale',
+          instructions: 'Run a descaling cycle.',
+          interval: { count: 1, unit: 'month' },
+          evidenceLevel: 'manufacturer_verified',
+          source: {
+            type: 'manufacturer_manual',
+            title: 'Electrolux KEQB7300L user manual',
+            url: 'https://www.electrolux.com/keqb7300l.pdf',
+            location: 'page 24',
+            quote: 'Descale the machine every 3 months.',
+          },
+        },
+        {
+          name: 'Check the spray arms',
+          instructions: 'Spin freely.',
+          interval: { count: 3, unit: 'month' },
+          evidenceLevel: 'general_guidance',
+          source: {
+            type: 'general_guidance',
+            title: 'Keeply general dishwasher maintenance guidance',
+            url: null,
+            location: null,
+            quote: null,
+          },
+        },
+      ],
+    )
+    await repo.decide('app-1', 'task-1', 'accepted')
+    await repo.decide('app-1', 'task-2', 'accepted')
+    await repo.decide('app-1', 'task-3', 'accepted')
+    await repo.approve('app-1', '2026-10-05')
+    renderWithPlan(<ApplianceRecordView applianceId="app-1" />, repo)
+
+    const spray = (await screen.findByRole('heading', { name: 'Clean the spray arm' })).closest('li') as HTMLElement
+    expect(within(spray).getByText('Every month · Keeply\'s suggestion. The manual says "regularly".')).toBeInTheDocument()
+    expect(spray.querySelector(':scope > .evidence--manufacturer_verified')).toBeTruthy()
+
+    const descale = screen.getByRole('heading', { name: 'Descale' }).closest('li') as HTMLElement
+    expect(within(descale).getByText('Every 3 months · from the manual')).toBeInTheDocument()
+    expect(descale.querySelector(':scope > .evidence--manufacturer_verified')).toBeTruthy()
+
+    const general = screen.getByRole('heading', { name: 'Check the spray arms' }).closest('li') as HTMLElement
+    expect(within(general).getByText('Every 3 months')).toBeInTheDocument()
+    expect(within(general).queryByText(/Keeply's suggestion|from the manual/)).not.toBeInTheDocument()
+    expect(general.querySelector(':scope > .evidence--general_guidance')).toBeTruthy()
+  })
+})
+
 describe('account panel', () => {
   const service = (account: Account, result = { ok: true } as SignInResult) => ({
     current: vi.fn(async () => account),

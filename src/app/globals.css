@@ -485,8 +485,14 @@ a {
 
 .recommended {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
+}
+
+.recommended strong {
+  flex: 1 1 12rem;
+  min-width: 0;
 }
 
 .plan-card-description {
@@ -769,6 +775,10 @@ a {
   gap: 6px;
 }
 
+.summary-item dl div {
+  flex-wrap: wrap;
+}
+
 .summary-item dl div,
 .identity div {
   display: flex;
@@ -786,6 +796,11 @@ a {
 .identity dd {
   font-weight: 600;
   text-align: right;
+}
+
+.summary-item dd {
+  flex: 1 1 10rem;
+  min-width: 0;
 }
 
 .identity {

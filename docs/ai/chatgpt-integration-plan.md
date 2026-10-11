@@ -4,6 +4,21 @@ Status: **research only, no code** (per `docs/HANDOFF.md` §22 and `AGENTS.md` r
 
 **How this was researched:** the cloud session that wrote this could not open `developers.openai.com` or `help.openai.com` (blocked by its network policy). Findings come from OpenAI's own pages as quoted by web search, restricted to openai.com domains. Before coding, someone with normal network access must read the linked pages in full and confirm each item marked *(confirm)*.
 
+## Verified 2026-10-11 (pages read in full, normal network access)
+
+These replace the *(confirm)* items below where they differ.
+
+- **Plan usage needs a loopback callback.** The open-source flow (the only documented way to use a user's ChatGPT plan) registers `http://127.0.0.1:<port>/auth/callback`; "only the port may vary" and "Do not substitute with `localhost`". The user's browser must reach a Keeply running on their own computer. A public site such as `keeply.vercel.app` cannot use this flow. ([Registration and sign-in](https://developers.openai.com/siwc/token-sharing-open-source/sign-in))
+- **Hosted website integration is identity only**, in a limited trial: "Sign in with ChatGPT is currently available to selected commercial partners through a limited trial." It uses an `oaiapp_` client ID and scopes `openid profile email`; plan usage "has a separate authorization and registration flow". ([On your website](https://developers.openai.com/siwc/website))
+- **Paid or remotely hosted apps** that want plan usage: "complete the interest form". ([Overview](https://developers.openai.com/siwc/token-sharing-open-source), [interest form](https://openai.com/form/sign-in-with-chatgpt-interest/))
+- **Scopes and resource** for plan usage: `offline_access resource.invoke chatgpt.tokens.use.direct`, resource `https://api.openai.com/v1`; check `chatgpt.tokens.use.direct` was granted before inference. Per-host `ext_agent_host_id`; issued `client_id` saved per ChatGPT account. ([Registration and sign-in](https://developers.openai.com/siwc/token-sharing-open-source/sign-in))
+- **Inference:** `POST https://api.openai.com/v1/responses` with `Authorization: Bearer <access token>`, `store: false`, `stream: true`; models from `GET /v1/models` (`visibility == "list"`). Limit errors arrive as `subscription_sharing_usage_limit_exceeded` / `subscription_sharing_usage_unavailable`. ([Models and inference](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference))
+- **Images are supported**: "Text, images, and files are supported when the selected model accepts them." Not supported on this route: the Files upload API, `temperature`, `max_output_tokens`, `metadata`, `user`, system-role items (use `instructions`). ([Preview limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations))
+- **User plans:** Plus and Pro per the developer quickstart; OpenAI's help search snippet also names Go. Users can set a weekly per-app limit in Settings → Usage. ([Quickstart](https://developers.openai.com/siwc/quickstart), [help](https://help.openai.com/en/articles/20001542-using-your-chatgpt-plan-in-other-apps-and-sites))
+- Not readable from this machine (HTTP 403): the help article body and the [terms](https://openai.com/policies/sign-in-with-chatgpt-terms/). Read them before launch.
+
+**Consequence for Keeply:** the hosted app cannot use ChatGPT plan usage until OpenAI accepts it through the interest form (provider A2 below). Self-hosted, run-on-your-own-computer Keeply (A1) is technically possible now. Hosted users need another provider (B/C) or Manual (D) in the meantime.
+
 ## Primary sources
 
 - Product overview: [Sign in with ChatGPT](https://developers.openai.com/siwc) · [Quickstart](https://developers.openai.com/siwc/quickstart)
