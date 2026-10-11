@@ -7,10 +7,16 @@ Route here for work on Keeply (`active/Keeply/`). Outcome: a mobile-first PWA wh
 ## Source of Truth
 
 - GitHub repo: https://github.com/FilhoRicardo/keeply
-- Issue tracker: Paperclip was used 2026-10-04..06 and is **parked** since 2026-10-06 (all agents paused, nothing to wake). Do not create Paperclip tickets or wake its agents; track work as GitHub PRs. Not Linear (project decision 2026-10-04). Project "Keeply v0.1" (`fa36ca0b-e4ca-4c61-a7b2-2fab949407de`). The 2026-10-04..05 board (KEE-1..KEE-55) is archived; new work starts as new tickets.
-- Paperclip company: Keeply (`7a57a3ab-b378-4d66-9ae3-34d68a114981`, issue prefix `KEE`) owns scope, issues and the agent team. Team (lean, from 2026-10-06): **Lead** and **Builder** active; **Researcher**, **UX** and **UI** paused until a ticket needs them; CEO, CFO and Intern retired. The Lead runs on Claude Sonnet 5.5 (`claude_local`); Builder, Researcher, UX and UI run on MiniMax-M3 (`hermes_local`). Budgets are set but inactive on the token plan. Playbook: `/Users/ricardofilho/Documents/Projects/resources/project-templates/paperclip-lean/README.md`.
-- Planning source: `docs/HANDOFF.md` is the authoritative plan (equivalent of `PLAN.md`). Do not expand scope beyond it without a clear reason.
-- Claude may implement authorised work directly; the separate critic-only planning role and mandatory review log are retired workspace-wide.
+- Issue tracker: [Keeply in Linear](https://linear.app/rf-ai-workspace/project/keeply-a66469c00bfb), Engineering team (RF). Linear owns specifications, tickets, dependencies and status; GitHub owns code and PRs.
+- Planning source: `docs/HANDOFF.md` preserves existing product decisions. New agreed scope is captured in Linear. Historical Paperclip records are context only. Paperclip is not in use and must not be started.
+- Roles: Codex plans and reviews; Cursor implements approved tickets. Claude is reserved for professional/business work unless Ricardo explicitly assigns another role.
+
+## Agent skills
+
+- Shared upstream skills live in `.agents/skills/`. Source and pinned revision: `docs/agents/skills-source.md`.
+- Issue tracker operations and ticket lifecycle: `docs/agents/issue-tracker.md`.
+- Mandatory planning and dispatch gate: `docs/agents/workflow.md`.
+- Domain documentation: `docs/agents/domain.md`.
 
 ## Resources
 
@@ -36,10 +42,16 @@ Route here for work on Keeply (`active/Keeply/`). Outcome: a mobile-first PWA wh
 1. Read this file, `MEMORY.md`, and `docs/HANDOFF.md` before touching code.
 2. Current state: the MVP (§24) and manual search (§23) are built and live at https://keeply.vercel.app. Ricardo chooses what is next. Where each setting lives: `docs/environments.md`.
 3. Query `codebase-memory-mcp` (`search_graph`, `trace_path`, `get_architecture`) before broad code exploration, once code exists and is indexed.
-4. Non-trivial code work: branch, PR with CI green, and a real-input check in a browser before merging. Paperclip is parked (see Source of Truth); do not wake its agents. Create it with a review stage (Lead, `reviewPolicy: not_creator`, comments required), plus a human approval stage (Ricardo) when it touches production, the schema, secrets or a calendar/email send. Done means a real-input run in a browser with evidence, not only green CI.
+4. Follow `docs/agents/workflow.md`: mandatory `grill-with-docs`, confirmed scope, ticket, branch, PR, independent Codex review, then merge. Preserve the existing human approval requirement for production, schema, secrets, or a calendar/email send. Done requires a real-input browser run with evidence and a merged PR.
 5. Verify with the checks below.
 6. Update `MEMORY.md` only when durable context changes.
 
 ## Verification
 
 Run `pnpm verify` (= `pnpm typecheck && pnpm lint && pnpm test && pnpm build`) before reporting done; add `supabase test db` for schema work. Module layout: `docs/architecture.md`.
+
+## Code Review Rules
+
+- Check the linked Linear acceptance criteria and agreed test seams as well as repository standards.
+- Preserve explicit owner approval before calendar writes, evidence provenance, credential isolation, and usage limits.
+- Require passing relevant checks and real-input evidence for changed user flows. A lack of review comments is not merge approval.
