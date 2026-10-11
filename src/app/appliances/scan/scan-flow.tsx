@@ -30,6 +30,8 @@ type Step =
       identification: ApplianceIdentification
       recognised: boolean
       editing: boolean
+      // The label was read, but it did not name the appliance. The owner has to type one.
+      askForType: boolean
       notice: RecognitionNotice | null
     }
 
@@ -59,6 +61,11 @@ function displayCategory(category: string): string {
   const trimmed = category.trim()
   if (!trimmed) return 'Appliance'
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
+}
+
+// RF-350: "unknown" is not a category the owner can confirm. They pick or type one.
+function typeWasNotRead(category: string): boolean {
+  return category.trim().toLowerCase() === 'unknown'
 }
 
 // What AI reading the visitor can expect, from /api/scan-access. Refreshed when the account changes.
@@ -146,13 +153,15 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
     } else {
       track({ name: 'label_read', recognised: proposal !== null })
     }
+    const askForType = proposal !== null && typeWasNotRead(proposal.category)
     setStep({
       kind: 'confirm',
       photo: prepared,
       preview,
-      identification: proposal ?? emptyIdentification(),
+      identification: proposal ? { ...proposal, category: askForType ? '' : proposal.category } : emptyIdentification(),
       recognised: proposal !== null,
-      editing: proposal === null,
+      editing: proposal === null || askForType,
+      askForType,
       notice,
     })
   }
@@ -192,7 +201,7 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
     )
   }
 
-  const { identification, recognised, editing, notice } = step
+  const { identification, recognised, editing, askForType, notice } = step
   // Typing answers any earlier "enter the manufacturer" error, so it no longer applies.
   const set = (change: Partial<Pick<ApplianceIdentification, 'category' | 'manufacturer' | 'model' | 'serialNumber'>>) => {
     setError(null)
@@ -200,7 +209,9 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
   }
 
   async function confirm() {
-    const problem = validateIdentification(identification)
+    const problem = validateIdentification(
+      typeWasNotRead(identification.category) ? { ...identification, category: '' } : identification,
+    )
     if (problem) {
       setRecovery(null)
       return setError(problem)
@@ -271,6 +282,11 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
         </>
       ) : (
         <>
+          {askForType && (
+            <p className="form-intro">
+              The label did not show the appliance type. Type it below, for example Dishwasher or Fridge.
+            </p>
+          )}
           {!recognised && <p className="form-intro">{manualReasonFor(notice)}</p>}
           <label className="field">
             <span>

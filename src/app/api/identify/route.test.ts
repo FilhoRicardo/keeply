@@ -68,7 +68,7 @@ describe('POST /api/identify', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
-        Response.json({ choices: [{ message: { content: '{"applianceType":"fridge","manufacturer":"LG","model":"LRFXS2503S","serialNumber":null,"confidence":0.7}' } }] }),
+        Response.json({ choices: [{ message: { content: '{"applianceType":"fridge","typeEvidence":"Refrigerator","manufacturer":"LG","model":"LRFXS2503S","serialNumber":null,"confidence":0.7}' } }] }),
       ),
     )
     const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
@@ -88,7 +88,7 @@ describe('POST /api/identify', () => {
       vi.fn(async (input: RequestInfo | URL) => {
         expect(String(input)).toBe('https://openrouter.ai/api/v1/chat/completions')
         return Response.json({
-          choices: [{ message: { content: '{"applianceType":"dishwasher","manufacturer":"Electrolux","model":"KEQB7300L","serialNumber":null,"confidence":0.9}' } }],
+          choices: [{ message: { content: '{"applianceType":"dishwasher","typeEvidence":"Dishwasher","manufacturer":"Electrolux","model":"KEQB7300L","serialNumber":null,"confidence":0.9}' } }],
         })
       }),
     )

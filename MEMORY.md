@@ -10,6 +10,7 @@ Durable decisions only. One or two sentences each. Not a task log.
 
 ## Key Decisions
 
+- 2026-10-11: RF-350. A proposed appliance category comes from words printed on the label, or from a model-number prefix that is certain for one category (Smeg `DI` means dishwasher). Anything else, including a guessed "oven", is "unknown", and the confirm screen asks the owner to type the type. The two sample model numbers are not special-cased.
 - 2026-10-11: RF-349. Keeply-funded AI is MiniMax when configured, otherwise OpenRouter (`OPENROUTER_API_KEY`, default model `openrouter/free`, `data_collection` deny unless `OPENROUTER_DATA_COLLECTION=allow`). A saved BYO MiniMax key still comes first. Manual still always works. The model's output stays a proposal. Pinned `google/gemma-4-31b-it:free` returned 429 on every live call the same day, so the default is the free router.
 - 2026-10-11: RF-344. A manual cover that names the same product family is Similar-model guidance, never Manufacturer verified. An exact copy on a third-party site stays Similar-model with the third-party wording (owner, 2026-10-11). An HTML cover is the page title plus the first 2,000 characters of extracted text; PDF covers stay pages 1–2.
 - 2026-10-11: Linear is the tracker (Keeply project, Engineering/RF); Codex plans and reviews, Cursor implements. Paperclip will not be used, which supersedes the 2026-10-04 exception and the 2026-10-06 retrial rule. Shared skills and grill-with-docs land with the workflow setup; cloud automation and auto-merge stay off.

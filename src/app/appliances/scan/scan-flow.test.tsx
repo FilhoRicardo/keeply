@@ -116,6 +116,60 @@ describe('scanEnabled', () => {
   })
 })
 
+describe('ScanFlow when the label does not name the appliance', () => {
+  it('asks the owner to type the type and will not confirm "unknown"', async () => {
+    const propose = vi.fn(async () => [
+      {
+        name: 'Clean the filter',
+        instructions: 'Rinse it.',
+        interval: { count: 1, unit: 'month' as const },
+        evidenceLevel: 'general_guidance' as const,
+        source: { type: 'general_guidance' as const, title: 'General', url: null, location: null, quote: null },
+      },
+    ])
+    const untyped: ApplianceRecognizer = {
+      recognise: async () => ({
+        identification: {
+          category: 'unknown',
+          manufacturer: 'Electrolux',
+          model: 'KEQB7300L',
+          serialNumber: 'ABC',
+          confidence: 0.9,
+          source: 'photo_recognition',
+        },
+        notice: null,
+      }),
+    }
+    renderWithPlan(<ScanFlow recognizer={untyped} />, repo, undefined, { proposer: propose })
+    await takePhoto()
+    expect(screen.getByText(/The label did not show the appliance type/)).toBeInTheDocument()
+    expect(screen.queryByText(/is this correct/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Appliance', { exact: false })).toHaveValue('')
+    expect(screen.getByLabelText('Manufacturer')).toHaveValue('Electrolux')
+    expect(screen.getByLabelText(/Model number/)).toHaveValue('KEQB7300L')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByRole('alert')).toHaveTextContent(/Name the appliance/)
+    expect(propose).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText('Appliance', { exact: false }), { target: { value: 'unknown' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(screen.getByRole('alert')).toHaveTextContent(/Name the appliance/)
+
+    fireEvent.change(screen.getByLabelText('Appliance', { exact: false }), { target: { value: 'Dishwasher' } })
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm' })))
+    expect(propose).toHaveBeenCalledWith(
+      { manufacturer: 'Electrolux', model: 'KEQB7300L', category: 'Dishwasher' },
+      expect.anything(),
+    )
+    expect(findRecord(await repo.load(), 'app-1')!.appliance).toMatchObject({
+      manufacturer: 'Electrolux',
+      model: 'KEQB7300L',
+      identificationConfidence: null,
+    })
+  })
+})
+
 describe('ScanFlow when the photo is not a dishwasher label', () => {
   it('shows the appliance type the model read, never claims it is "not a dishwasher"', async () => {
     // KEE-60: every recognised appliance is a valid proposal. A fridge is a valid appliance —
