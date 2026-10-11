@@ -269,6 +269,46 @@ describe('PlanReview — fallback banner when the search cannot find a manual', 
     expect(screen.queryByTestId('plan-fallback-banner')).not.toBeInTheDocument()
   })
 
+  it.each([
+    ['extraction_unavailable', 'extraction_unavailable'],
+    ['timeout', 'timeout'],
+  ] as const)('tells a dishwasher owner the manuals could not be read when the outcome is %s', async (outcome, reason) => {
+    const repo = testRepository()
+    await repo.addAppliance(
+      { manufacturer: 'Electrolux', model: 'KEQB7300L', serialNumber: '' },
+      [GENERAL_PROPOSAL],
+      { fallback: 'general', searchOutcome: outcome, searchReason: null, searched: true },
+    )
+    stubCalendarConfigured()
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo)
+
+    const banner = await screen.findByTestId('plan-fallback-banner')
+    expect(banner).toHaveAttribute('data-fallback-reason', reason)
+    expect(banner).toHaveTextContent(
+      'Keeply found manuals but could not read them right now. These are general dishwasher tasks, not a manufacturer recommendation.',
+    )
+    expect(banner).not.toHaveTextContent(/no manufacturer manual found/i)
+    expect(banner).not.toHaveTextContent(/could not find a manual/i)
+    expect(screen.queryByText(/found no guidance for your exact model/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps the no-manual wording when the search found nothing', async () => {
+    const repo = testRepository()
+    await repo.addAppliance(
+      { manufacturer: 'Bosch', model: 'SMS6ZCI49E', serialNumber: '' },
+      [GENERAL_PROPOSAL],
+      { fallback: 'general', searchOutcome: 'no_results', searchReason: null, searched: true },
+    )
+    stubCalendarConfigured()
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo)
+
+    const banner = await screen.findByTestId('plan-fallback-banner')
+    expect(banner).toHaveAttribute('data-fallback-reason', 'no_results')
+    expect(banner).toHaveTextContent('No manufacturer manual found for this model.')
+    expect(banner).toHaveTextContent('Keeply could not find a manual for this model.')
+    expect(screen.getByText(/found no guidance for your exact model/i)).toBeInTheDocument()
+  })
+
   it('shows a generic "no manual" banner for older records without proposalMeta', async () => {
     // Simulates a pre-KEE-43 localStorage snapshot, where proposalMeta is null and every task
     // is general-guidance. The banner must still appear so the owner is not misled.

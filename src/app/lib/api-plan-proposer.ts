@@ -53,14 +53,19 @@ const DEFAULT_OUTCOME: ProposalOutcome = {
 // The plan API takes a JSON body. Models are validated server-side. Empty model is allowed
 // (the orchestration falls back to general guidance in that case).
 async function postPlan(
-  body: { manufacturer: string; model: string | null },
+  body: { manufacturer: string; model: string | null; applianceType?: string | null },
   fetcher: typeof fetch,
   token: string | null,
 ): Promise<Response> {
+  const applianceType = typeof body.applianceType === 'string' ? body.applianceType.trim() : ''
   return fetcher('/api/plan', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ manufacturer: body.manufacturer, model: body.model ?? '' }),
+    body: JSON.stringify({
+      manufacturer: body.manufacturer,
+      model: body.model ?? '',
+      ...(applianceType ? { applianceType } : {}),
+    }),
   })
 }
 
@@ -146,12 +151,13 @@ function asProposals(input: unknown): TaskProposal[] {
 export function createApiPlanProposer(opts: ApiPlanProposerOptions = {}): (appliance: {
   manufacturer: string
   model: string | null
+  applianceType?: string | null
 }) => Promise<LiveProposalResult> {
   const fetcher = opts.fetch ?? fetch
-  return async ({ manufacturer, model }) => {
+  return async ({ manufacturer, model, applianceType }) => {
     try {
       const token = await opts.accessToken?.().catch(() => null)
-      const response = await postPlan({ manufacturer, model }, fetcher, token ?? null)
+      const response = await postPlan({ manufacturer, model, applianceType }, fetcher, token ?? null)
       if (response.status === 404 || response.status === 403) {
         // The route is disabled or the visitor was refused. Fall back to general guidance
         // without claiming we searched.

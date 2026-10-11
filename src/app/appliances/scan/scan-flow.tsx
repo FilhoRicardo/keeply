@@ -44,7 +44,7 @@ const MANUAL_REASON: Record<ManualReasonKey, string> = {
   no_invite: 'AI label reading is for invited testers, so the photo was not sent to the AI service. Enter the details below.',
   tester_limit: 'You have used today’s AI scans, so the photo was not sent to the AI service. Enter the details below, or scan again tomorrow.',
   daily_limit: 'Keeply has reached today’s AI scan limit, so the photo was not sent to the AI service. Enter the details below, or scan again tomorrow.',
-  ai_unavailable: 'AI label reading is not available right now, so the photo was not sent to the AI service. Enter the details below.',
+  ai_unavailable: 'AI label reading is unavailable right now. Enter the details below.',
 }
 
 function manualReasonFor(notice: RecognitionNotice | null): string {
@@ -139,7 +139,7 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
     const { identification: proposal, notice }: RecognitionResult = denied
       ? { identification: null, notice: denied }
       : reencoded
-        ? await recognizer.recognise(prepared).catch((): RecognitionResult => ({ identification: null, notice: null }))
+        ? await recognizer.recognise(prepared).catch((): RecognitionResult => ({ identification: null, notice: 'ai_unavailable' }))
         : { identification: null, notice: null }
     if (isAccessDenial(notice)) {
       track({ name: 'scan_denied', reason: notice })

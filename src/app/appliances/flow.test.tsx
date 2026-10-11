@@ -456,7 +456,8 @@ describe('non-dishwasher no-plan recovery', () => {
   it.each([
     ['no_results', /could not find suitable manufacturer guidance/i],
     ['fetch_failed', /couldn’t create a supported plan from this manual/i],
-    ['timeout', /could not create a supported plan right now/i],
+    ['timeout', /found manuals but could not read them right now/i],
+    ['extraction_unavailable', /found manuals but could not read them right now/i],
     ['no_plan', /could not create a supported maintenance plan/i],
   ] as const)('manual entry maps %s to one recovery callout and keeps the form', async (outcome, copy) => {
     const events: FunnelEvent[] = []
@@ -466,6 +467,8 @@ describe('non-dishwasher no-plan recovery', () => {
     const alerts = await screen.findAllByRole('alert')
     expect(alerts).toHaveLength(1)
     expect(alerts[0]).toHaveTextContent(copy)
+    expect(alerts[0]).not.toHaveTextContent(/no manufacturer manual found/i)
+    expect(alerts[0]).not.toHaveTextContent(/general dishwasher tasks/i)
     expect(alerts[0]).not.toHaveTextContent(/unsafe/i)
     expect(screen.queryByText(/could not reach your plan/i)).not.toBeInTheDocument()
     expect(screen.getByLabelText('Manufacturer')).toHaveValue('Bosch')

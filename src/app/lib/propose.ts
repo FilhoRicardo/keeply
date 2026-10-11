@@ -35,7 +35,10 @@ const isDishwasher = (category: string | null | undefined): boolean =>
 // `proposalMeta` (fallback + searchOutcome + searchReason + searched flag) that the plan
 // page reads from the record.
 export const livePlanProposer: PlanProposer = async ({ manufacturer, model: applianceModel, category }, session) => {
-  const result = await callLive({ manufacturer: manufacturer.trim(), model: applianceModel?.trim() || null }, session?.accessToken)
+  const result = await callLive(
+    { manufacturer: manufacturer.trim(), model: applianceModel?.trim() || null, applianceType: category },
+    session?.accessToken,
+  )
   // Dishwashers: existing behaviour — fall back to general guidance so the plan screen still
   // renders and the owner can still decide.
   if (isDishwasher(category)) {
@@ -70,7 +73,7 @@ export const generalGuidanceProposer: PlanProposer = async ({ category }) =>
 
 // A package-private helper for tests and for callers that want the raw outcome.
 export async function callLive(
-  input: { manufacturer: string; model: string | null },
+  input: { manufacturer: string; model: string | null; applianceType?: string | null },
   accessToken?: () => Promise<string | null>,
 ): Promise<LiveProposalResult> {
   const propose = createApiPlanProposer({ accessToken })

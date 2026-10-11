@@ -19,7 +19,8 @@ function denial(reason: unknown): AccessDenial {
 
 // Browser side: asks the server's AI provider to read the label (Manual unless one is configured),
 // sending the visitor's session so the server can check their invite and limits.
-// Any failure means "not recognised"; the owner can always type the details.
+// A provider error, timeout, or unreachable identify route is `ai_unavailable`. A valid empty
+// answer stays "nothing recognised". The owner can always type the details.
 export function httpRecognizer(accessToken: () => Promise<string | null> = async () => null): ApplianceRecognizer {
   return {
     async recognise(photo) {
@@ -36,11 +37,12 @@ export function httpRecognizer(accessToken: () => Promise<string | null> = async
           const { reason } = (await response.json().catch(() => ({}))) as { reason?: string }
           return { identification: null, notice: denial(reason) }
         }
+        if (response.status >= 500) return { identification: null, notice: 'ai_unavailable' }
         if (!response.ok) return NOTHING_RECOGNISED
         const { identification, notice } = (await response.json()) as Partial<RecognitionResult>
         return { identification: identification ?? null, notice: notice ?? null }
       } catch {
-        return NOTHING_RECOGNISED
+        return { identification: null, notice: 'ai_unavailable' }
       }
     },
   }

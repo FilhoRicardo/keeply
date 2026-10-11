@@ -68,9 +68,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'scan_denied', reason: decision }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
     }
   }
-  const identity = await provider
-    .identifyAppliance({ bytes: new Uint8Array(await file!.arrayBuffer()), mimeType: file!.type })
-    .catch(() => null)
+  // A thrown or timed-out provider call is not "nothing recognised". The notice is the only
+  // thing the browser may see: provider bodies and key fragments stay on the server.
+  let identity: ApplianceIdentity | null
+  try {
+    identity = await provider.identifyAppliance({ bytes: new Uint8Array(await file!.arrayBuffer()), mimeType: file!.type })
+  } catch {
+    return NextResponse.json(
+      { identification: null, notice: 'ai_unavailable' },
+      { headers: { 'Cache-Control': 'no-store' } },
+    )
+  }
   const body: IdentifyResponse = toProposal(identity)
   return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } })
 }
