@@ -354,6 +354,20 @@ describe('proposePlan', () => {
   // list when no manual is found. Other appliances get an empty plan with a no_plan outcome so
   // the UI can show a plain "no plan could be built" message with the manual-entry path. We
   // never invent dishwasher tasks for another appliance (non-negotiables 2 and 4).
+  it('keeps a timeout when a non-dishwasher search is already out of time', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const search = vi.fn()
+    const result = await proposePlan(
+      { manufacturer: 'LG', model: 'LRFXS2503S', applianceType: 'fridge' },
+      makeDeps({ signal: controller.signal, searchManuals: search }),
+    )
+    expect(result.proposals).toEqual([])
+    expect(result.searchOutcome).toBe('timeout')
+    expect(result.searchReason).toBe('timeout')
+    expect(search).not.toHaveBeenCalled()
+  })
+
   it('KEE-60: a non-dishwasher with no manual returns an empty plan, not dishwasher general tasks', async () => {
     const generalSpy = vi.fn(() => GENERAL_DISHWASHER_TASKS)
     const result = await proposePlan(
