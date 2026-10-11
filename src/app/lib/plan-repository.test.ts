@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { GENERAL_DISHWASHER_TASKS } from '@/domain/general-guidance'
+import type { ProposalMeta, TaskProposal } from '@/domain/model'
+import { planFallbackReason } from '../components/plan-fallback-banner'
 import { createDevicePlanRepository, DEVICE_STORAGE_KEY, memoryStorage } from './plan-repository'
 import { findRecord } from './plan-state'
 
@@ -79,6 +81,64 @@ describe('device plan repository', () => {
   it('ignores corrupt stored data', async () => {
     const repo = createDevicePlanRepository({ storage: memoryStorage({ [DEVICE_STORAGE_KEY]: '{oops' }) })
     expect((await repo.load()).records).toEqual([])
+  })
+})
+
+describe('device plan reload', () => {
+  const verified: TaskProposal = {
+    name: 'Clean the filter',
+    instructions: 'Rinse it.',
+    interval: { count: 1, unit: 'month' },
+    evidenceLevel: 'manufacturer_verified',
+    source: {
+      type: 'manufacturer_manual',
+      title: 'Manual',
+      url: 'https://www.bosch-home.com/m.pdf',
+      location: 'p. 32',
+      quote: 'Clean the filters.',
+    },
+  }
+  const cases: { name: string; meta: ProposalMeta; proposals: readonly TaskProposal[]; reason: string }[] = [
+    {
+      name: 'verified',
+      meta: { fallback: 'exact', searchOutcome: 'ok', searchReason: null, searched: true },
+      proposals: [verified],
+      reason: 'no_search_key',
+    },
+    {
+      name: 'similar-model',
+      meta: { fallback: 'similar', searchOutcome: 'ok', searchReason: null, searched: true },
+      proposals: [{ ...verified, evidenceLevel: 'similar_model', source: { ...verified.source, type: 'similar_model_manual' } }],
+      reason: 'no_search_key',
+    },
+    {
+      name: 'general-guidance',
+      meta: { fallback: 'general', searchOutcome: 'no_results', searchReason: null, searched: true },
+      proposals,
+      reason: 'no_results',
+    },
+    {
+      name: 'extraction-unavailable',
+      meta: { fallback: 'general', searchOutcome: 'extraction_unavailable', searchReason: null, searched: true },
+      proposals,
+      reason: 'extraction_unavailable',
+    },
+    {
+      name: 'timeout',
+      meta: { fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout', searched: true },
+      proposals,
+      reason: 'timeout',
+    },
+  ]
+
+  it.each(cases)('keeps the $name reason after a reload', async ({ meta, proposals: tasks, reason }) => {
+    const storage = memoryStorage()
+    const repo = createDevicePlanRepository({ storage, newId: ids(), now: () => 'now' })
+    const { applianceId } = await repo.addAppliance(input, tasks, meta)
+    const reloaded = createDevicePlanRepository({ storage })
+    const record = findRecord(await reloaded.load(), applianceId)
+    expect(record?.proposalMeta).toEqual(meta)
+    expect(planFallbackReason(record?.proposalMeta ?? null)).toBe(reason)
   })
 })
 

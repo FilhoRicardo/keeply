@@ -371,9 +371,10 @@ describe('PlanReview — fallback banner when the search cannot find a manual', 
     expect(screen.getByText(/found no guidance for your exact model/i)).toBeInTheDocument()
   })
 
-  it('shows a generic "no manual" banner for older records without proposalMeta', async () => {
-    // Simulates a pre-KEE-43 localStorage snapshot, where proposalMeta is null and every task
-    // is general-guidance. The banner must still appear so the owner is not misled.
+  it('shows a neutral banner for older records without proposalMeta', async () => {
+    // A pre-RF-352 snapshot has no proposalMeta and every task is general guidance. The owner
+    // still needs to see that these are not manufacturer recommendations, but Keeply must not
+    // claim it looked and found no manual.
     const repo = testRepository()
     await repo.addAppliance({ manufacturer: 'Bosch', model: 'SMS6ZCI49E', serialNumber: '' }, [GENERAL_PROPOSAL])
     stubCalendarConfigured()
@@ -381,6 +382,10 @@ describe('PlanReview — fallback banner when the search cannot find a manual', 
 
     const banner = await screen.findByTestId('plan-fallback-banner')
     expect(banner).toHaveAttribute('data-fallback-reason', 'no_proposal_meta')
-    expect(banner).toHaveTextContent(/could not find a manual/i)
+    expect(banner).toHaveTextContent(/general guidance/i)
+    expect(banner).toHaveTextContent(/not a manufacturer recommendation/i)
+    expect(banner).not.toHaveTextContent(/no manufacturer manual found/i)
+    expect(banner).not.toHaveTextContent(/could not find a manual/i)
+    expect(screen.queryByText(/found no guidance for your exact model/i)).not.toBeInTheDocument()
   })
 })

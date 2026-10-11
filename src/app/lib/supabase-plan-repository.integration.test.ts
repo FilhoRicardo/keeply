@@ -6,7 +6,8 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest } from 'next/server'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { GENERAL_DISHWASHER_TASKS } from '@/domain/general-guidance'
-import type { TaskProposal } from '@/domain/model'
+import type { ProposalMeta, TaskProposal } from '@/domain/model'
+import { planFallbackReason } from '../components/plan-fallback-banner'
 import { POST } from '../api/calendar/events/route'
 import { findRecord } from './plan-state'
 import { createSupabasePlanRepository } from './supabase-plan-repository'
@@ -116,6 +117,83 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase plan repository', () => {
     const { applianceId, state } = await repo.addAppliance(input, [verified])
     expect(findRecord(state, applianceId)!.tasks[0]).toMatchObject({ evidenceLevel: 'manufacturer_verified', source: verified.source })
     await expect(repo.addAppliance(input, [{ ...verified, source: { ...verified.source, quote: null } }])).rejects.toThrow(/evidence_supported/)
+  })
+
+  it.each([
+    {
+      name: 'verified',
+      meta: { fallback: 'exact', searchOutcome: 'ok', searchReason: null, searched: true } satisfies ProposalMeta,
+      proposals: [
+        {
+          name: 'Clean the filters',
+          instructions: 'Check and clean the filters.',
+          interval: { count: 1, unit: 'week' },
+          evidenceLevel: 'manufacturer_verified',
+          source: {
+            type: 'manufacturer_manual',
+            title: 'Manual',
+            url: 'https://www.bosch-home.com/m.pdf',
+            location: 'p. 32',
+            quote: 'Clean the filters.',
+          },
+        },
+      ] satisfies TaskProposal[],
+      reason: 'no_search_key',
+    },
+    {
+      name: 'similar-model',
+      meta: { fallback: 'similar', searchOutcome: 'ok', searchReason: null, searched: true } satisfies ProposalMeta,
+      proposals: [
+        {
+          name: 'Clean the filter',
+          instructions: 'Rinse it.',
+          interval: { count: 1, unit: 'month' },
+          evidenceLevel: 'similar_model',
+          source: {
+            type: 'similar_model_manual',
+            title: 'Smeg DI6012 series',
+            url: 'https://www.smeg.com/di6012.pdf',
+            location: 'page 18',
+            quote: 'Clean the filter once a month.',
+          },
+        },
+      ] satisfies TaskProposal[],
+      reason: 'no_search_key',
+    },
+    {
+      name: 'general-guidance',
+      meta: { fallback: 'general', searchOutcome: 'no_results', searchReason: null, searched: true } satisfies ProposalMeta,
+      proposals: GENERAL_DISHWASHER_TASKS,
+      reason: 'no_results',
+    },
+    {
+      name: 'extraction-unavailable',
+      meta: { fallback: 'general', searchOutcome: 'extraction_unavailable', searchReason: null, searched: true } satisfies ProposalMeta,
+      proposals: GENERAL_DISHWASHER_TASKS,
+      reason: 'extraction_unavailable',
+    },
+    {
+      name: 'timeout',
+      meta: { fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout', searched: true } satisfies ProposalMeta,
+      proposals: GENERAL_DISHWASHER_TASKS,
+      reason: 'timeout',
+    },
+  ])('keeps the $name reason when a new repository reloads the plan', async ({ meta, proposals, reason }) => {
+    const db = createClient(supabaseUrl, jwt(OWNER), { auth: { persistSession: false, autoRefreshToken: false } })
+    const built = createSupabasePlanRepository({ db })
+    const { applianceId } = await built.addAppliance(input, proposals, meta)
+    const reloaded = createSupabasePlanRepository({ db })
+    const record = findRecord(await reloaded.load(), applianceId)
+    expect(record?.proposalMeta).toEqual(meta)
+    expect(planFallbackReason(record?.proposalMeta ?? null)).toBe(reason)
+  })
+
+  it('loads an older appliance with no provenance as unknown', async () => {
+    const repo = repoFor(OWNER)
+    const { applianceId } = await repo.addAppliance(input, GENERAL_DISHWASHER_TASKS)
+    const record = findRecord(await repoFor(OWNER).load(), applianceId)
+    expect(record?.proposalMeta).toBeNull()
+    expect(planFallbackReason(record?.proposalMeta ?? null)).toBe('no_proposal_meta')
   })
 
   it('deletes a dishwasher with its tasks', async () => {

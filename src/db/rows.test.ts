@@ -32,6 +32,7 @@ const tree: ApplianceTree = {
   approved_at: '2026-10-04T10:00:00Z',
   start_date: '2026-10-05',
   created_at: '2026-10-04T00:00:00Z',
+  proposal_meta: null,
   maintenance_tasks: [taskRow(2), taskRow(1)],
 }
 
@@ -47,7 +48,17 @@ describe('rows', () => {
       location: 'page 32',
       quote: 'Clean the filters.',
     })
-    expect(record).toMatchObject({ approvedAt: '2026-10-04T10:00:00Z', startDate: '2026-10-05' })
+    expect(record).toMatchObject({ approvedAt: '2026-10-04T10:00:00Z', startDate: '2026-10-05', proposalMeta: null })
+  })
+
+  it('reads a stored plan reason back onto the record', () => {
+    const meta = { fallback: 'general' as const, searchOutcome: 'timeout' as const, searchReason: 'timeout', searched: true }
+    expect(toApplianceRecord({ ...tree, proposal_meta: meta }).proposalMeta).toEqual(meta)
+  })
+
+  it('treats a broken provenance document as unknown', () => {
+    expect(toApplianceRecord({ ...tree, proposal_meta: { fallback: 'general' } }).proposalMeta).toBeNull()
+    expect(toApplianceRecord({ ...tree, proposal_meta: { fallback: 'nope', searchOutcome: 'ok', searchReason: null, searched: true } }).proposalMeta).toBeNull()
   })
 
   it('round-trips a similar-model covered model through source_location', () => {

@@ -9,7 +9,7 @@ import { approvalBlockers } from '@/domain/plan'
 import { CalendarPanel } from '../../../components/calendar-panel'
 import { CalendarReturnNotice } from '../../../components/calendar-return-notice'
 import { DeleteAppliance } from '../../../components/delete-appliance'
-import { PlanFallbackBanner, planFallbackReason } from '../../../components/plan-fallback-banner'
+import { PlanFallbackBanner, planFallbackReason, type PlanFallbackReason } from '../../../components/plan-fallback-banner'
 import { LoadingPanel, NotFoundPanel } from '../../../components/screen'
 import { TaskCard } from '../../../components/task-card'
 import { fetchCalendarStatus, writeApprovedTasks, type CalendarStatus } from '../../../lib/calendar-client'
@@ -20,6 +20,16 @@ import { today } from '../../../lib/today'
 const BLOCKER_COPY = {
   undecided: 'Accept or reject every task.',
   nothing_accepted: 'Accept at least one task.',
+}
+
+function generalGuidanceLine(reason: PlanFallbackReason): string {
+  if (reason === 'extraction_unavailable' || reason === 'timeout') {
+    return 'These are general dishwasher tasks, not a manufacturer recommendation.'
+  }
+  if (reason === 'no_proposal_meta' || reason === 'search_timeout') {
+    return 'These are general guidance tasks. They are not a manufacturer recommendation.'
+  }
+  return 'These are general guidance tasks: Keeply found no guidance for your exact model.'
 }
 
 // The proposed plan: Accept or Reject each task, pick a start date, approve. Only then are the
@@ -62,8 +72,6 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
   const ready = blockers.length === 0 && isLocalDate(startDate) && calendar !== null && !busy
   const allGeneral = record.tasks.every((t) => t.evidenceLevel === 'general_guidance')
   const fallbackReason = planFallbackReason(record.proposalMeta)
-  const couldNotReadManuals = fallbackReason === 'extraction_unavailable' || fallbackReason === 'timeout'
-  const searchTimedOut = fallbackReason === 'search_timeout'
 
   async function onApprove() {
     setBusy(true)
@@ -101,11 +109,7 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
         <p>
           Keeply proposes; you decide. Nothing reaches your calendar until you approve.{' '}
           {allGeneral
-            ? couldNotReadManuals
-              ? 'These are general dishwasher tasks, not a manufacturer recommendation.'
-              : searchTimedOut
-                ? 'These are general guidance tasks. They are not a manufacturer recommendation.'
-                : 'These are general guidance tasks: Keeply found no guidance for your exact model.'
+            ? generalGuidanceLine(fallbackReason)
             : 'Each task shows where its guidance comes from and how closely it matches your model.'}
         </p>
       </section>

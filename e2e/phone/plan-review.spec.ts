@@ -384,3 +384,103 @@ test('similar-model plan at 375 px shows the badge, covered model, host, page, q
   await accessible(page)
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'similar-375.png'), fullPage: true })
 })
+
+// RF-352: a reload must show the same banner and reason the plan was built with.
+// Device storage is what this production build uses; the signed-in round trip is the
+// Supabase repository test. An older record with no provenance stays neutral.
+function generalPlan(id: string, meta: unknown) {
+  const fixture = JSON.parse(JSON.stringify(FALLBACK_FIXTURE)) as {
+    records: Array<{
+      appliance: { id: string }
+      proposalMeta: unknown
+      tasks: Array<{ applianceId: string }>
+    }>
+  }
+  const record = fixture.records[0]
+  record.appliance.id = id
+  record.proposalMeta = meta
+  for (const task of record.tasks) task.applianceId = id
+  return fixture
+}
+
+async function openStoredPlan(page: Page, fixture: unknown, applianceId: string) {
+  await page.setViewportSize(PHONE_VIEWPORT)
+  await page.addInitScript((value) => {
+    window.localStorage.setItem('keeply.plan.v2', value)
+  }, JSON.stringify(fixture))
+  await page.goto(`/appliances/${applianceId}/plan`)
+}
+
+const RELOAD_CASES: {
+  name: string
+  id: string
+  fixture: unknown
+  kind: 'verified' | 'similar' | 'banner'
+  reason?: string
+}[] = [
+  { name: 'verified', id: 'app-verified', fixture: VERIFIED_FIXTURE, kind: 'verified' },
+  { name: 'similar-model', id: 'app-similar', fixture: SIMILAR_FIXTURE, kind: 'similar' },
+  {
+    name: 'general-guidance',
+    id: 'app-general',
+    fixture: generalPlan('app-general', { fallback: 'general', searchOutcome: 'no_results', searchReason: null, searched: true }),
+    kind: 'banner',
+    reason: 'no_results',
+  },
+  {
+    name: 'extraction-unavailable',
+    id: 'app-unread',
+    fixture: generalPlan('app-unread', {
+      fallback: 'general',
+      searchOutcome: 'extraction_unavailable',
+      searchReason: null,
+      searched: true,
+    }),
+    kind: 'banner',
+    reason: 'extraction_unavailable',
+  },
+  {
+    name: 'timeout',
+    id: 'app-timeout',
+    fixture: generalPlan('app-timeout', { fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout', searched: true }),
+    kind: 'banner',
+    reason: 'timeout',
+  },
+  { name: 'unknown provenance', id: 'app-legacy', fixture: generalPlan('app-legacy', null), kind: 'banner', reason: 'no_proposal_meta' },
+]
+
+async function expectPlanReason(page: Page, item: (typeof RELOAD_CASES)[number]) {
+  if (item.kind === 'verified') {
+    await expect(page.getByText('Manufacturer verified').first()).toBeVisible()
+    await expect(page.getByTestId('plan-fallback-banner')).toHaveCount(0)
+    return
+  }
+  if (item.kind === 'similar') {
+    await expect(page.getByText('Similar-model guidance').first()).toBeVisible()
+    await expect(page.getByText('Manufacturer verified')).toHaveCount(0)
+    await expect(page.getByTestId('plan-fallback-banner')).toHaveCount(0)
+    return
+  }
+  const banner = page.getByTestId('plan-fallback-banner')
+  await expect(banner).toBeVisible()
+  await expect(banner).toHaveAttribute('data-fallback-reason', item.reason!)
+  if (item.reason === 'no_results') {
+    await expect(banner).toContainText('No manufacturer manual found for this model')
+    return
+  }
+  await expect(banner).not.toContainText('No manufacturer manual found')
+  await expect(banner).not.toContainText('could not find a manual')
+  await expect(page.getByText(/found no guidance for your exact model/i)).toHaveCount(0)
+}
+
+for (const item of RELOAD_CASES) {
+  test(`reload keeps the ${item.name} plan reason`, async ({ page }) => {
+    await openStoredPlan(page, item.fixture, item.id)
+    await expectPlanReason(page, item)
+    await page.reload()
+    await expectPlanReason(page, item)
+    if (item.id === 'app-timeout' || item.id === 'app-legacy') {
+      await page.screenshot({ path: path.join(SCREENSHOT_DIR, `reload-${item.id}.png`), fullPage: true })
+    }
+  })
+}
