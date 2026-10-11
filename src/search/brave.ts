@@ -1,4 +1,5 @@
 import 'server-only'
+import { withE2eFixtures } from '@/e2e-fixtures/edge-fetch'
 import { buildDefaultManufacturerDomains, hostOf, rankCandidates, type ManufacturerDomainMap, type RawCandidate, type RankedCandidate } from './rank'
 
 // Brave Search client for Keeply's manual lookup. Server-only: the API key is never exposed
@@ -156,7 +157,7 @@ export async function searchManuals(
     return { status: 'empty', candidates: [], reason: 'quota_exhausted' }
   }
 
-  const fetchImpl = options.fetchImpl ?? fetch
+  const fetchImpl = withE2eFixtures(options.fetchImpl ?? fetch)
   const now = options.now ?? defaultNow
   const sleep = options.sleep ?? defaultSleep
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS

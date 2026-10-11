@@ -33,6 +33,7 @@ Do not invent a new location; add it here first.
 | `OPENROUTER_MODEL` | `.env.local` / Vercel | no (defaults to `openrouter/free`) |
 | `OPENROUTER_DATA_COLLECTION` | `.env.local` / Vercel (optional) | no (`deny` default; `allow` opts in to providers that may train on prompts) |
 | `KEEPLY_SCAN_ACCESS` | `.env.local` / Vercel | no (scan-access mode; "invite" is the safe default) |
+| `KEEPLY_E2E_FIXTURES` | Playwright scan server only (`.env.local` if you run that server yourself) | no (`1` serves canned OpenRouter/MiniMax, Brave, manual and Google responses). Ignored when `VERCEL_ENV=production`, same rule as `KEEPLY_SCAN_ACCESS=open`. Do not set it on Vercel. |
 
 ### Local development (`.env.local`)
 
@@ -57,6 +58,9 @@ Sensitive values (`SUPABASE_SERVICE_ROLE_KEY`,
 `KEEPLY_AI_KEY_ENCRYPTION_KEY`, `GOOGLE_CLIENT_SECRET`,
 `BRAVE_SEARCH_API_KEY`, `MINIMAX_API_KEY`, `OPENROUTER_API_KEY`) are entered as **Sensitive**
 and are never pasted into chat or committed.
+
+`KEEPLY_E2E_FIXTURES` is not a Vercel setting. Production ignores it, and setting it
+on a preview would answer AI, search and Calendar from fixtures. Leave it unset.
 
 Two Vercel-specific behaviours to remember:
 

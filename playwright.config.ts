@@ -13,8 +13,12 @@ export default defineConfig({
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {},
   },
   projects: [
-    { name: 'mvp', testIgnore: /ai-unavailable-scan\.spec\.ts/ },
-    { name: 'scan', testMatch: /ai-unavailable-scan\.spec\.ts/, use: { baseURL: 'http://localhost:3124' } },
+    { name: 'mvp', testIgnore: [/ai-unavailable-scan\.spec\.ts/, /full-journey\.spec\.ts/] },
+    {
+      name: 'scan',
+      testMatch: /(?:ai-unavailable-scan|full-journey)\.spec\.ts/,
+      use: { baseURL: 'http://localhost:3124' },
+    },
   ],
   webServer: [
     {
@@ -27,8 +31,10 @@ export default defineConfig({
       // Scanning is off in the default production build. This server is built with the flag
       // so the phone scenario can open the scan screen without turning scanning on for the
       // rest of the suite.
+      // Scanning on, plus the fixture switch. Dummy provider keys select the real adapters;
+      // KEEPLY_E2E_FIXTURES answers their outbound calls. The flag is ignored in production.
       command:
-        'NEXT_DIST_DIR=.next-scan NEXT_PUBLIC_KEEPLY_SCAN=1 pnpm exec next build && NEXT_DIST_DIR=.next-scan pnpm exec next start -p 3124',
+        'NEXT_DIST_DIR=.next-scan NEXT_PUBLIC_KEEPLY_SCAN=1 pnpm exec next build && NEXT_DIST_DIR=.next-scan KEEPLY_E2E_FIXTURES=1 KEEPLY_SCAN_ACCESS=open OPENROUTER_API_KEY=e2e-fixture BRAVE_SEARCH_API_KEY=e2e-fixture GOOGLE_CLIENT_ID=e2e-google-client GOOGLE_CLIENT_SECRET=e2e-google-secret GOOGLE_REDIRECT_URI=http://localhost:3124/auth/google/callback pnpm exec next start -p 3124',
       url: 'http://localhost:3124',
       reuseExistingServer: false,
       timeout: 180_000,

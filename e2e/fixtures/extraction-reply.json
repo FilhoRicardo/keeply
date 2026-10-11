@@ -1,0 +1,18 @@
+{
+  "candidates": [
+    {
+      "task": "Clean the filter",
+      "instructions": "Rinse the filter under warm water and refit it.",
+      "interval": { "count": 1, "unit": "year" },
+      "page": 1,
+      "quote": "Clean the filter every month under running water."
+    },
+    {
+      "task": "Check the spray arms",
+      "instructions": "Clear blocked holes in the spray arms and refit them.",
+      "interval": { "count": 1, "unit": "year" },
+      "page": 1,
+      "quote": "Check the spray arms every 3 months and clear any blocked holes."
+    }
+  ]
+}
