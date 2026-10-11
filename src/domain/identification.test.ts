@@ -20,6 +20,11 @@ describe('identification', () => {
     expect(validateIdentification(emptyIdentification())).toMatch(/manufacturer/)
     expect(validateIdentification({ ...emptyIdentification(), manufacturer: 'Bosch', confidence: 1.4 })).toMatch(/Confidence/)
     expect(validateIdentification({ ...emptyIdentification(), manufacturer: 'Bosch' })).toBeNull()
+    expect(validateIdentification({ ...emptyIdentification(), category: 'unknown', manufacturer: 'Bosch' })).toMatch(/appliance/i)
+    expect(validateIdentification({ ...emptyIdentification(), category: 'Unknown', manufacturer: 'Bosch' })).toMatch(/appliance/i)
+    expect(
+      validateIdentification({ ...emptyIdentification(), category: 'unknown', manufacturer: 'Bosch' }, { allowUnknownCategory: true }),
+    ).toBeNull()
   })
 })
 

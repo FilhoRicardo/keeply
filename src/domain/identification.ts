@@ -7,6 +7,11 @@ export type ApplianceCategory = string
 
 export const UNKNOWN_CATEGORY: ApplianceCategory = 'unknown'
 
+// True when the photo did not yield a category the owner can confirm as-is.
+export function isUnknownCategory(category: string | null | undefined): boolean {
+  return !category || category.trim().toLowerCase() === UNKNOWN_CATEGORY
+}
+
 export type IdentificationSource = 'manual' | 'photo_recognition'
 
 export type ApplianceIdentification = {
@@ -65,8 +70,16 @@ export function editIdentification(
   return { ...current, ...change, confidence: null, source: 'manual' }
 }
 
-export function validateIdentification(id: ApplianceIdentification): string | null {
-  if (id.category.trim().length === 0) return 'Name the appliance, for example Dishwasher or Fridge.'
+// `allowUnknownCategory` is only for a proposal still on its way to the confirm screen.
+// Saving requires the owner to name the appliance.
+export function validateIdentification(
+  id: ApplianceIdentification,
+  options?: { allowUnknownCategory?: boolean },
+): string | null {
+  const category = id.category.trim()
+  if (category.length === 0 || (!options?.allowUnknownCategory && isUnknownCategory(category))) {
+    return 'Name the appliance, for example Dishwasher or Fridge.'
+  }
   if (id.manufacturer.trim().length === 0) return 'Enter the manufacturer, for example Bosch.'
   if (id.confidence !== null && (id.confidence < 0 || id.confidence > 1)) return 'Confidence must be between 0 and 1.'
   return null

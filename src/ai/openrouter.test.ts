@@ -39,7 +39,7 @@ describe('openrouterConfig', () => {
 describe('identifyWithOpenRouter', () => {
   it('sends the model, the image part, data_collection deny, and the attribution headers', async () => {
     const fetchMock = reply(
-      '<think>The label shows Electrolux…</think><reasoning>draft</reasoning>{"applianceType":"dishwasher","manufacturer":"Electrolux","model":"KEQB7300L","serialNumber":null,"confidence":0.91}',
+      '<think>The label shows Electrolux…</think><reasoning>draft</reasoning>{"applianceType":"dishwasher","typeEvidence":"dishwasher","manufacturer":"Electrolux","model":"KEQB7300L","serialNumber":null,"confidence":0.91}',
     )
     const identity = await identifyWithOpenRouter(config, photo, fetchMock as unknown as typeof fetch)
 
