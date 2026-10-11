@@ -10,27 +10,14 @@ import {
 } from '@/db/queries'
 import { toApplianceRecord } from '@/db/rows'
 import { approvalBlockers } from '@/domain/plan'
-import type { ProposalMeta } from '@/domain/model'
 import type { PlanRepository } from './plan-repository'
 import { validateNewAppliance, type PlanState } from './plan-state'
 
-// Supabase does not store proposalMeta (no column; schema stays out of scope). Remember the
-// outcome for this browser session so the plan banner can still say why the tasks are general.
-export function rememberProposalMeta(state: PlanState, remembered: ReadonlyMap<string, ProposalMeta>): PlanState {
-  if (remembered.size === 0) return state
-  let changed = false
-  const records = state.records.map((record) => {
-    if (record.proposalMeta) return record
-    const meta = remembered.get(record.appliance.id)
-    if (!meta) return record
-    changed = true
-    return { ...record, proposalMeta: meta }
-  })
-  return changed ? { ...state, records } : state
-}
-
 // PlanRepository backed by Supabase. `ensureSession` signs the visitor in (anonymously until they
 // sign in with Google) before the first call; row-level security and the schema's rules do the rest.
+// The proposer's outcome is written with the appliance (RF-352), so a later reload of this plan
+// still has the banner reason. A new repository is a reload: it reads the columns, it does not
+// remember them in memory.
 export function createSupabasePlanRepository({
   db,
   ensureSession = async () => {},
@@ -41,13 +28,12 @@ export function createSupabasePlanRepository({
   now?: () => string
 }): PlanRepository {
   let session: Promise<void> | null = null
-  const rememberedMeta = new Map<string, ProposalMeta>()
   // Shared only while in flight: after a sign-out the next call starts a fresh session.
   const ready = () => (session ??= ensureSession().finally(() => (session = null)))
 
   async function load(): Promise<PlanState> {
     await ready()
-    return rememberProposalMeta({ version: 2, records: (await loadApplianceTrees(db)).map(toApplianceRecord) }, rememberedMeta)
+    return { version: 2, records: (await loadApplianceTrees(db)).map(toApplianceRecord) }
   }
 
   return {
@@ -58,10 +44,7 @@ export function createSupabasePlanRepository({
       const { data } = await db.auth.getSession()
       return data.session?.access_token ?? null
     },
-    async addAppliance(input, proposals, _meta?: ProposalMeta | null) {
-      // KEE-43: there is still no proposalMeta column. Remember the outcome on this repository
-      // so the plan the owner just opened can name the real reason. A later full reload, which
-      // builds a new repository, falls back to the generic banner again.
+    async addAppliance(input, proposals, meta = null) {
       const error = validateNewAppliance(input)
       if (error) throw new Error(error)
       await ready()
@@ -69,8 +52,8 @@ export function createSupabasePlanRepository({
         db,
         { manufacturer: input.manufacturer.trim(), model: input.model, serialNumber: input.serialNumber, confidence: input.confidence ?? null },
         proposals,
+        meta,
       )
-      if (_meta) rememberedMeta.set(applianceId, _meta)
       return { state: await load(), applianceId }
     },
     async decide(_applianceId, taskId, decision) {
@@ -97,7 +80,6 @@ export function createSupabasePlanRepository({
     },
     async deleteAppliance(applianceId) {
       await ready()
-      rememberedMeta.delete(applianceId)
       await deleteAppliance(db, applianceId)
       return load()
     },

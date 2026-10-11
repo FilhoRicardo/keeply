@@ -904,7 +904,11 @@ This is the MVP and replaces earlier wording where they conflict.
 -   **Supabase holds the minimum:** users (Supabase Auth), their
     `appliances`, and each appliance's `maintenance_tasks` (the
     proposal and its source, accepted / rejected, the calendar event
-    id), plus `funnel_events`.
+    id), plus `funnel_events`. The proposer's outcome is stored on the
+    appliance (`proposal_fallback`, `proposal_search_outcome`,
+    `proposal_search_reason`, `proposal_searched`) so a reload shows
+    the same banner (RF-352). Empty outcome columns are not "no manual
+    found".
 -   **Rules changed:** "store the manufacturer recommendation separately
     from the user's chosen schedule" becomes "never rewrite a proposed
     task; the owner only accepts or rejects it". "Model completion-based

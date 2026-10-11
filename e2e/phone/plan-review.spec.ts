@@ -299,6 +299,74 @@ const SIMILAR_FIXTURE = {
   ],
 }
 
+function generalPlan(
+  id: string,
+  meta: { fallback: 'general'; searchOutcome: string; searchReason: string | null; searched: boolean } | null,
+) {
+  const source = FALLBACK_FIXTURE.records[0]
+  return {
+    version: 2,
+    records: [
+      {
+        ...source,
+        appliance: { ...source.appliance, id },
+        proposalMeta: meta,
+        tasks: source.tasks.map((task) => ({ ...task, applianceId: id, id: `${id}-${task.id}` })),
+      },
+    ],
+  }
+}
+
+async function expectPlanReason(page: Page, reason: string | null, text: RegExp | string) {
+  if (reason) {
+    const banner = page.getByTestId('plan-fallback-banner')
+    await expect(banner).toHaveAttribute('data-fallback-reason', reason)
+    await expect(banner).toContainText(text)
+    return
+  }
+  await expect(page.getByTestId('plan-fallback-banner')).toHaveCount(0)
+  await expect(page.getByText(text).first()).toBeVisible()
+  await expect(page.getByText('No manufacturer manual found')).toHaveCount(0)
+}
+
+test('a reload keeps the banner and reason', async ({ page }) => {
+  const cases: { id: string; fixture: unknown; reason: string | null; text: RegExp | string }[] = [
+    { id: 'app-verified', fixture: VERIFIED_FIXTURE, reason: null, text: 'Manufacturer verified' },
+    { id: 'app-similar', fixture: SIMILAR_FIXTURE, reason: null, text: 'Similar-model guidance' },
+    {
+      id: 'app-general',
+      fixture: generalPlan('app-general', { fallback: 'general', searchOutcome: 'no_results', searchReason: null, searched: true }),
+      reason: 'no_results',
+      text: 'No manufacturer manual found for this model',
+    },
+    {
+      id: 'app-unread',
+      fixture: generalPlan('app-unread', { fallback: 'general', searchOutcome: 'extraction_unavailable', searchReason: null, searched: true }),
+      reason: 'extraction_unavailable',
+      text: 'could not read them right now',
+    },
+    {
+      id: 'app-timeout',
+      fixture: generalPlan('app-timeout', { fallback: 'general', searchOutcome: 'timeout', searchReason: null, searched: true }),
+      reason: 'timeout',
+      text: 'could not read them right now',
+    },
+    { id: 'app-legacy', fixture: generalPlan('app-legacy', null), reason: 'no_proposal_meta', text: 'Saved without a search result' },
+  ]
+
+  for (const item of cases) {
+    const fresh = await page.context().newPage()
+    await seedAndOpen(fresh, item.fixture, item.id)
+    await expectPlanReason(fresh, item.reason, item.text)
+    await fresh.reload()
+    await expectPlanReason(fresh, item.reason, item.text)
+    if (item.reason === 'extraction_unavailable' || item.reason === 'timeout' || item.reason === 'no_proposal_meta') {
+      await expect(fresh.getByText('No manufacturer manual found')).toHaveCount(0)
+    }
+    await fresh.close()
+  }
+})
+
 test('similar-model plan at 375 px shows the badge, covered model, host, page, quote and honest wording', async ({
   page,
 }) => {

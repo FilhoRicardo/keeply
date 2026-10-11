@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ProposalMeta, TaskProposal } from '@/domain/model'
+import { createFakeSupabasePlanDb } from './lib/fake-supabase-plan-db'
+import { createSupabasePlanRepository } from './lib/supabase-plan-repository'
 import { renderWithPlan, testRepository } from './test-utils'
 import { PlanReview } from './appliances/[id]/plan/plan-review'
 
@@ -351,9 +354,9 @@ describe('PlanReview — fallback banner when the search cannot find a manual', 
     expect(screen.getByText(/found no guidance for your exact model/i)).toBeInTheDocument()
   })
 
-  it('shows a generic "no manual" banner for older records without proposalMeta', async () => {
-    // Simulates a pre-KEE-43 localStorage snapshot, where proposalMeta is null and every task
-    // is general-guidance. The banner must still appear so the owner is not misled.
+  it('shows a neutral banner for older records without proposalMeta', async () => {
+    // A plan saved before the reason columns existed. The banner must still say these tasks
+    // are not a manufacturer recommendation, and must not claim that no manual was found.
     const repo = testRepository()
     await repo.addAppliance({ manufacturer: 'Bosch', model: 'SMS6ZCI49E', serialNumber: '' }, [GENERAL_PROPOSAL])
     stubCalendarConfigured()
@@ -361,6 +364,58 @@ describe('PlanReview — fallback banner when the search cannot find a manual', 
 
     const banner = await screen.findByTestId('plan-fallback-banner')
     expect(banner).toHaveAttribute('data-fallback-reason', 'no_proposal_meta')
-    expect(banner).toHaveTextContent(/could not find a manual/i)
+    expect(banner).toHaveTextContent('Saved without a search result.')
+    expect(banner).toHaveTextContent(/not a manufacturer recommendation/i)
+    expect(banner).not.toHaveTextContent(/no manufacturer manual found/i)
+    expect(banner).not.toHaveTextContent(/could not find a manual/i)
+    expect(screen.queryByText(/found no guidance for your exact model/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/These are general guidance tasks\. They are not a manufacturer recommendation\./)).toBeInTheDocument()
+  })
+})
+
+describe('PlanReview — a signed-in reload keeps the banner and reason', () => {
+  async function reloadPlan(proposals: readonly TaskProposal[], meta: ProposalMeta) {
+    const db = createFakeSupabasePlanDb()
+    const built = createSupabasePlanRepository({ db })
+    const { applianceId } = await built.addAppliance(
+      { manufacturer: 'Bosch', model: 'SMS6ZCI49E', serialNumber: '' },
+      proposals,
+      meta,
+    )
+    stubCalendarConfigured()
+    renderWithPlan(<PlanReview applianceId={applianceId} />, createSupabasePlanRepository({ db }))
+  }
+
+  it('keeps Manufacturer verified after reload and does not claim no manual was found', async () => {
+    await reloadPlan([VERIFIED_PROPOSAL], { fallback: 'exact', searchOutcome: 'ok', searchReason: null, searched: true })
+    expect(await screen.findByText('Manufacturer verified')).toBeInTheDocument()
+    expect(screen.queryByTestId('plan-fallback-banner')).not.toBeInTheDocument()
+    expect(screen.queryByText(/no manufacturer manual found/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps similar-model guidance after reload and does not claim no manual was found', async () => {
+    await reloadPlan([SIMILAR_PROPOSAL], { fallback: 'similar', searchOutcome: 'ok', searchReason: null, searched: true })
+    expect(await screen.findByText('Similar-model guidance')).toBeInTheDocument()
+    expect(screen.queryByTestId('plan-fallback-banner')).not.toBeInTheDocument()
+    expect(screen.queryByText(/no manufacturer manual found/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps the no-manual banner after reload when the search found nothing', async () => {
+    await reloadPlan([GENERAL_PROPOSAL], { fallback: 'general', searchOutcome: 'no_results', searchReason: null, searched: true })
+    const banner = await screen.findByTestId('plan-fallback-banner')
+    expect(banner).toHaveAttribute('data-fallback-reason', 'no_results')
+    expect(banner).toHaveTextContent('No manufacturer manual found for this model.')
+  })
+
+  it.each([
+    ['extraction_unavailable', 'extraction_unavailable'],
+    ['timeout', 'timeout'],
+  ] as const)('keeps the %s reason after reload', async (outcome, reason) => {
+    await reloadPlan([GENERAL_PROPOSAL], { fallback: 'general', searchOutcome: outcome, searchReason: null, searched: true })
+    const banner = await screen.findByTestId('plan-fallback-banner')
+    expect(banner).toHaveAttribute('data-fallback-reason', reason)
+    expect(banner).toHaveTextContent('Keeply found manuals but could not read them right now.')
+    expect(banner).not.toHaveTextContent(/no manufacturer manual found/i)
+    expect(screen.queryByText(/found no guidance for your exact model/i)).not.toBeInTheDocument()
   })
 })

@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest } from 'next/server'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { GENERAL_DISHWASHER_TASKS } from '@/domain/general-guidance'
-import type { TaskProposal } from '@/domain/model'
+import type { ProposalMeta, TaskProposal } from '@/domain/model'
 import { POST } from '../api/calendar/events/route'
 import { findRecord } from './plan-state'
 import { createSupabasePlanRepository } from './supabase-plan-repository'
@@ -116,6 +116,36 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase plan repository', () => {
     const { applianceId, state } = await repo.addAppliance(input, [verified])
     expect(findRecord(state, applianceId)!.tasks[0]).toMatchObject({ evidenceLevel: 'manufacturer_verified', source: verified.source })
     await expect(repo.addAppliance(input, [{ ...verified, source: { ...verified.source, quote: null } }])).rejects.toThrow(/evidence_supported/)
+  })
+
+  it('returns the same plan reason after a new repository loads the row', async () => {
+    const verified: TaskProposal = {
+      name: 'Clean the filters',
+      instructions: 'Check and clean the filters.',
+      interval: { count: 1, unit: 'week' },
+      evidenceLevel: 'manufacturer_verified',
+      source: { type: 'manufacturer_manual', title: 'Manual', url: 'https://www.bosch-home.com/m.pdf', location: 'p. 32', quote: 'Clean the filters.' },
+    }
+    const similar: TaskProposal = {
+      ...verified,
+      evidenceLevel: 'similar_model',
+      source: { type: 'similar_model_manual', title: 'Series manual', url: 'https://www.smeg.com/m.pdf', location: 'p. 18', quote: 'Clean the filters.', coveredModel: 'DI6012-2' },
+    }
+    const cases: { meta: ProposalMeta; proposals: readonly TaskProposal[] }[] = [
+      { meta: { fallback: 'exact', searchOutcome: 'ok', searchReason: null, searched: true }, proposals: [verified] },
+      { meta: { fallback: 'similar', searchOutcome: 'ok', searchReason: null, searched: true }, proposals: [similar] },
+      { meta: { fallback: 'general', searchOutcome: 'no_results', searchReason: null, searched: true }, proposals: GENERAL_DISHWASHER_TASKS },
+      { meta: { fallback: 'general', searchOutcome: 'extraction_unavailable', searchReason: null, searched: true }, proposals: GENERAL_DISHWASHER_TASKS },
+      { meta: { fallback: 'general', searchOutcome: 'timeout', searchReason: null, searched: true }, proposals: GENERAL_DISHWASHER_TASKS },
+    ]
+    for (const { meta, proposals } of cases) {
+      const saved = await repoFor(OWNER).addAppliance(input, proposals, meta)
+      const loaded = findRecord(await repoFor(OWNER).load(), saved.applianceId)
+      expect(loaded?.proposalMeta).toEqual(meta)
+    }
+
+    const saved = await repoFor(OWNER).addAppliance(input, GENERAL_DISHWASHER_TASKS)
+    expect(findRecord(await repoFor(OWNER).load(), saved.applianceId)?.proposalMeta).toBeNull()
   })
 
   it('deletes a dishwasher with its tasks', async () => {

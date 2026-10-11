@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { GENERAL_DISHWASHER_TASKS } from '@/domain/general-guidance'
-import { fromProposal, toApplianceRecord, type ApplianceTree, type TaskRow } from './rows'
+import type { ProposalMeta } from '@/domain/model'
+import { fromProposal, proposalMetaFromRow, proposalRpcArgs, toApplianceRecord, type ApplianceTree, type TaskRow } from './rows'
 
 const taskRow = (position: number, overrides: Partial<TaskRow> = {}): TaskRow => ({
   id: `task-${position}`,
@@ -32,6 +33,10 @@ const tree: ApplianceTree = {
   approved_at: '2026-10-04T10:00:00Z',
   start_date: '2026-10-05',
   created_at: '2026-10-04T00:00:00Z',
+  proposal_fallback: null,
+  proposal_search_outcome: null,
+  proposal_search_reason: null,
+  proposal_searched: null,
   maintenance_tasks: [taskRow(2), taskRow(1)],
 }
 
@@ -47,7 +52,28 @@ describe('rows', () => {
       location: 'page 32',
       quote: 'Clean the filters.',
     })
-    expect(record).toMatchObject({ approvedAt: '2026-10-04T10:00:00Z', startDate: '2026-10-05' })
+    expect(record).toMatchObject({ approvedAt: '2026-10-04T10:00:00Z', startDate: '2026-10-05', proposalMeta: null })
+  })
+
+  it('reads a saved plan reason and treats a missing or partial reason as none', () => {
+    const meta: ProposalMeta = { fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout', searched: true }
+    const args = proposalRpcArgs(meta)
+    const saved = toApplianceRecord({
+      ...tree,
+      proposal_fallback: args.p_proposal_fallback,
+      proposal_search_outcome: args.p_proposal_search_outcome,
+      proposal_search_reason: args.p_proposal_search_reason,
+      proposal_searched: args.p_proposal_searched,
+    })
+    expect(saved.proposalMeta).toEqual(meta)
+    expect(proposalMetaFromRow(tree)).toBeNull()
+    expect(proposalMetaFromRow({ ...tree, proposal_fallback: 'general', proposal_search_outcome: 'not-a-reason', proposal_searched: true })).toBeNull()
+    expect(proposalRpcArgs(null)).toEqual({
+      p_proposal_fallback: null,
+      p_proposal_search_outcome: null,
+      p_proposal_search_reason: null,
+      p_proposal_searched: null,
+    })
   })
 
   it('round-trips a similar-model covered model through source_location', () => {

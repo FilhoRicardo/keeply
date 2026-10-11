@@ -97,8 +97,8 @@ export function removeAppliance(state: PlanState, applianceId: string): PlanStat
 }
 
 // Plans saved by an older version of Keeply are not migrated (pre-release prototype).
-// KEE-43: older plan snapshots (pre-meta) are read as records with no proposalMeta. The plan
-// page renders the all-general banner without a reason in that case.
+// Older plan snapshots (pre-meta) are read as records with no proposalMeta. The plan page
+// shows a neutral general-guidance banner for those, never a claim that no manual was found.
 export function parseState(raw: string | null): PlanState {
   if (!raw) return EMPTY_STATE
   try {

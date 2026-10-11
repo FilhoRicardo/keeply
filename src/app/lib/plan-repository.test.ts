@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { GENERAL_DISHWASHER_TASKS } from '@/domain/general-guidance'
+import type { ProposalMeta } from '@/domain/model'
 import { createDevicePlanRepository, DEVICE_STORAGE_KEY, memoryStorage } from './plan-repository'
 import { findRecord } from './plan-state'
 
@@ -19,6 +20,20 @@ describe('device plan repository', () => {
 
     const reopened = createDevicePlanRepository({ storage })
     expect(findRecord(await reopened.load(), applianceId)?.appliance.manufacturer).toBe('Bosch')
+  })
+
+  it.each<{ name: string; meta: ProposalMeta }>([
+    { name: 'verified', meta: { fallback: 'exact', searchOutcome: 'ok', searchReason: null, searched: true } },
+    { name: 'similar-model', meta: { fallback: 'similar', searchOutcome: 'ok', searchReason: null, searched: true } },
+    { name: 'general-guidance', meta: { fallback: 'general', searchOutcome: 'no_results', searchReason: null, searched: true } },
+    { name: 'extraction-unavailable', meta: { fallback: 'general', searchOutcome: 'extraction_unavailable', searchReason: null, searched: true } },
+    { name: 'timeout', meta: { fallback: 'general', searchOutcome: 'timeout', searchReason: null, searched: true } },
+  ])('keeps the $name reason when a new repository reloads storage', async ({ meta }) => {
+    const storage = memoryStorage()
+    const repo = createDevicePlanRepository({ storage, newId: ids(), now: () => 'now' })
+    const { applianceId } = await repo.addAppliance(input, proposals, meta)
+    const reopened = createDevicePlanRepository({ storage })
+    expect(findRecord(await reopened.load(), applianceId)?.proposalMeta).toEqual(meta)
   })
 
   it('runs the plan lifecycle through the interface', async () => {

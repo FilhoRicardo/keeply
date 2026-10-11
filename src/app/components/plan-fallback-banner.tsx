@@ -104,9 +104,9 @@ const REASON_COPY: Record<PlanFallbackReason, { eyebrow: string; title: string; 
   },
   no_proposal_meta: {
     eyebrow: 'General guidance',
-    title: 'No manufacturer manual found for this model',
+    title: 'Saved without a search result',
     body:
-      'Keeply could not find a manual for this model. These are general guidance tasks. They are not a manufacturer recommendation.',
+      'Keeply does not have a saved reason for this plan. These tasks are not a manufacturer recommendation.',
   },
 }
 

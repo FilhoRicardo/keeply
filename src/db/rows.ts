@@ -1,5 +1,8 @@
-import type { Appliance, ApplianceRecord, MaintenanceTask, TaskProposal } from '@/domain/model'
+import type { Appliance, ApplianceRecord, MaintenanceTask, ProposalMeta, TaskProposal } from '@/domain/model'
 import { decodeSourceLocation, encodeSourceLocation } from '@/domain/model-family'
+
+// Matches proposal_search_reason_length in 20261011120000_proposal_meta.sql.
+export const PROPOSAL_SEARCH_REASON_MAX = 200
 
 // Row shapes as stored in supabase/migrations/20261005090000_mvp_schema.sql.
 
@@ -13,6 +16,11 @@ export type ApplianceRow = {
   approved_at: string | null
   start_date: string | null
   created_at: string
+  // Null together when the plan was saved before the reason columns existed.
+  proposal_fallback: string | null
+  proposal_search_outcome: string | null
+  proposal_search_reason: string | null
+  proposal_searched: boolean | null
 }
 
 export type TaskRow = {
@@ -74,15 +82,73 @@ export function toAppliance(row: ApplianceRow): Appliance {
   }
 }
 
+function isFallback(value: string | null | undefined): value is ProposalMeta['fallback'] {
+  return value === 'exact' || value === 'similar' || value === 'general'
+}
+
+function isSearchOutcome(value: string | null | undefined): value is ProposalMeta['searchOutcome'] {
+  return (
+    value === 'ok' ||
+    value === 'no_results' ||
+    value === 'quota_exhausted' ||
+    value === 'fetch_failed' ||
+    value === 'extraction_unavailable' ||
+    value === 'unreadable' ||
+    value === 'no_text' ||
+    value === 'timeout' ||
+    value === 'unavailable' ||
+    value === 'no_plan'
+  )
+}
+
+// Null when the row has no saved reason, or the stored values are not a complete outcome.
+// The plan page then shows a neutral banner rather than claiming no manual was found.
+export function proposalMetaFromRow(
+  row: Pick<ApplianceRow, 'proposal_fallback' | 'proposal_search_outcome' | 'proposal_search_reason' | 'proposal_searched'>,
+): ProposalMeta | null {
+  if (!isFallback(row.proposal_fallback) || !isSearchOutcome(row.proposal_search_outcome) || typeof row.proposal_searched !== 'boolean') {
+    return null
+  }
+  const reason = row.proposal_search_reason
+  return {
+    fallback: row.proposal_fallback,
+    searchOutcome: row.proposal_search_outcome,
+    searchReason: typeof reason === 'string' && reason.length > 0 ? reason : null,
+    searched: row.proposal_searched,
+  }
+}
+
+// Named arguments for add_appliance. Empty reasons are stored as null.
+export function proposalRpcArgs(meta: ProposalMeta | null): {
+  p_proposal_fallback: ProposalMeta['fallback'] | null
+  p_proposal_search_outcome: ProposalMeta['searchOutcome'] | null
+  p_proposal_search_reason: string | null
+  p_proposal_searched: boolean | null
+} {
+  if (!meta) {
+    return {
+      p_proposal_fallback: null,
+      p_proposal_search_outcome: null,
+      p_proposal_search_reason: null,
+      p_proposal_searched: null,
+    }
+  }
+  const reason = meta.searchReason?.trim() ?? ''
+  return {
+    p_proposal_fallback: meta.fallback,
+    p_proposal_search_outcome: meta.searchOutcome,
+    p_proposal_search_reason: reason ? reason.slice(0, PROPOSAL_SEARCH_REASON_MAX) : null,
+    p_proposal_searched: meta.searched,
+  }
+}
+
 export function toApplianceRecord(tree: ApplianceTree): ApplianceRecord {
   return {
     appliance: toAppliance(tree),
     tasks: [...tree.maintenance_tasks].sort((a, b) => a.position - b.position).map(toTask),
     approvedAt: tree.approved_at,
     startDate: tree.start_date,
-    // KEE-43: the Supabase schema does not yet persist proposalMeta; the plan page falls back
-    // to a generic "we could not find a manual" message in that case.
-    proposalMeta: null,
+    proposalMeta: proposalMetaFromRow(tree),
   }
 }
 

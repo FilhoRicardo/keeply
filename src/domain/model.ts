@@ -53,9 +53,9 @@ export type MaintenanceTask = TaskProposal & {
 }
 
 // What the live plan proposer learned when it built this plan. Honest provenance of why the
-// owner is looking at a general-guidance list (KEE-43). The Supabase adapter does not yet
-// persist this; the field is then null after a Supabase round-trip and the plan page falls
-// back to a generic "we could not find a manual" message.
+// owner is looking at a general-guidance list (KEE-43). Stored on the appliance (RF-352).
+// Null for the local general-guidance proposer and for rows saved before that column existed;
+// the plan page then shows a neutral banner, never a claim that no manual was found.
 export type ProposalMeta = {
   readonly fallback: 'exact' | 'similar' | 'general'
   readonly searchOutcome:
@@ -81,6 +81,6 @@ export type ApplianceRecord = {
   // First calendar date for every accepted task, chosen at Approval.
   readonly startDate: LocalDate | null
   // Set when a live search (KEE-42 /api/plan) built this plan; null for the local
-  // general-guidance proposer and for any Supabase round-trip that does not yet persist it.
+  // general-guidance proposer and for appliances saved before the reason columns existed.
   readonly proposalMeta: ProposalMeta | null
 }
