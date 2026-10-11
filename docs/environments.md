@@ -33,6 +33,7 @@ Do not invent a new location; add it here first.
 | `OPENROUTER_MODEL` | `.env.local` / Vercel | no (defaults to `openrouter/free`) |
 | `OPENROUTER_DATA_COLLECTION` | `.env.local` / Vercel (optional) | no (`deny` default; `allow` opts in to providers that may train on prompts) |
 | `KEEPLY_SCAN_ACCESS` | `.env.local` / Vercel | no (scan-access mode; "invite" is the safe default) |
+| `KEEPLY_E2E_FIXTURES` | Playwright / `.env.local` only | no (`1` fakes outbound AI, search, manual download and Google Calendar; ignored in Vercel Production) |
 
 ### Local development (`.env.local`)
 
@@ -108,3 +109,29 @@ are therefore listed in the Supabase / Google Cloud sections instead:
 
 If you change a location for any setting, update this file in the same
 PR. New env vars land in `.env.example` first, then in this table.
+
+## Test-only network fixtures
+
+`KEEPLY_E2E_FIXTURES=1` is the switch for the full-journey Playwright spec
+(`e2e/phone/full-journey.spec.ts`). It is read the same way as
+`KEEPLY_SCAN_ACCESS=open`: any value other than `1` is off, and
+`VERCEL_ENV=production` forces it off, so a Production environment variable
+cannot enable it.
+
+While it is on, the Playwright server starts Node with
+`NODE_OPTIONS=--require=./e2e/network-fixtures.cjs`. That preload replaces
+`fetch`, `https.request` and DNS lookup before the app loads. OpenRouter,
+MiniMax, Brave Search, the manual download, the Google token exchange and
+Google Calendar event creates are answered from fixtures in
+`e2e/fixtures/manuals/`. Route handlers, plan orchestration, quote checks
+and evidence classification still run. The preload is not a Vercel setting.
+Do not set `KEEPLY_E2E_FIXTURES` on Vercel, including Preview: without the
+preload the flag does not fake the network, and a Preview that also has
+`KEEPLY_SCAN_ACCESS=open` would send real provider calls.
+
+The spec also sets `KEEPLY_SCAN_ACCESS=open` and placeholder
+`OPENROUTER_API_KEY`, `BRAVE_SEARCH_API_KEY` and `GOOGLE_*` values so the
+real routes leave Manual mode. Those placeholders are not live credentials.
+Calendar writes the fake received are appended to
+`test-results/e2e-network/calendar.jsonl` (gitignored) and are empty until
+the owner approves.

@@ -24,5 +24,5 @@ export default defineConfig([
   ...nextVitals,
   ...nextTs,
   domainBoundary,
-  globalIgnores(['.next/**', 'out/**', 'build/**', 'next-env.d.ts']),
+  globalIgnores(['.next/**', '.next-scan/**', 'out/**', 'build/**', 'next-env.d.ts']),
 ])

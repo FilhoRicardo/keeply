@@ -13,8 +13,12 @@ export default defineConfig({
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {},
   },
   projects: [
-    { name: 'mvp', testIgnore: /ai-unavailable-scan\.spec\.ts/ },
-    { name: 'scan', testMatch: /ai-unavailable-scan\.spec\.ts/, use: { baseURL: 'http://localhost:3124' } },
+    { name: 'mvp', testIgnore: [/ai-unavailable-scan\.spec\.ts/, /full-journey\.spec\.ts/] },
+    {
+      name: 'scan',
+      testMatch: [/ai-unavailable-scan\.spec\.ts/, /full-journey\.spec\.ts/],
+      use: { baseURL: 'http://localhost:3124' },
+    },
   ],
   webServer: [
     {
@@ -27,11 +31,26 @@ export default defineConfig({
       // Scanning is off in the default production build. This server is built with the flag
       // so the phone scenario can open the scan screen without turning scanning on for the
       // rest of the suite.
-      command:
-        'NEXT_DIST_DIR=.next-scan NEXT_PUBLIC_KEEPLY_SCAN=1 pnpm exec next build && NEXT_DIST_DIR=.next-scan pnpm exec next start -p 3124',
+      // Same scan build as the AI-unavailable spec. Runtime flags fake OpenRouter, Brave,
+      // manual download and Google Calendar inside this process only. KEEPLY_E2E_FIXTURES
+      // is ignored when VERCEL_ENV=production; the --require preload is what installs the fakes.
+      command: [
+        'NEXT_DIST_DIR=.next-scan NEXT_PUBLIC_KEEPLY_SCAN=1 pnpm exec next build',
+        '&&',
+        'NEXT_DIST_DIR=.next-scan',
+        'KEEPLY_E2E_FIXTURES=1',
+        'KEEPLY_SCAN_ACCESS=open',
+        'OPENROUTER_API_KEY=e2e-not-a-real-key',
+        'BRAVE_SEARCH_API_KEY=e2e-not-a-real-key',
+        'GOOGLE_CLIENT_ID=e2e-client.apps.googleusercontent.com',
+        'GOOGLE_CLIENT_SECRET=e2e-secret',
+        'GOOGLE_REDIRECT_URI=http://localhost:3124/auth/google/callback',
+        'NODE_OPTIONS=--require=./e2e/network-fixtures.cjs',
+        'pnpm exec next start -p 3124',
+      ].join(' '),
       url: 'http://localhost:3124',
       reuseExistingServer: false,
-      timeout: 180_000,
+      timeout: 240_000,
     },
   ],
 })
