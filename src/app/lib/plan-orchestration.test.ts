@@ -94,7 +94,7 @@ describe('proposePlan', () => {
   // orchestration reads the cover pages: a manual whose first pages name the exact model covers it.
   describe('document model coverage from the cover pages', () => {
     const noModelsFromUrl = () => ({ documentModels: [] as string[], documentFamily: undefined })
-    const verifiedWith = (pages: { page: number; text: string }[]) =>
+    const verifiedWith = (pages: { page: number; text: string; title?: string }[]) =>
       proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
         searchManuals: searchOkWith(PDF_URL),
         fetchDocument: fetchOk(new TextEncoder().encode('x')),
@@ -125,6 +125,44 @@ describe('proposePlan', () => {
       expect(result.proposals[0].evidenceLevel).toBe('similar_model')
       expect(result.proposals.every((p) => p.evidenceLevel !== 'manufacturer_verified')).toBe(true)
     })
+
+    // HTML is one extracted page. The cover is the title plus the first 2,000 characters.
+    // A model only in a later "related manuals" list is not a cover match. A PDF page is not cut.
+    const htmlPastCover = 'lorem ipsum '.repeat(200)
+
+    it('is not verified when an HTML page names the model only after the first 2,000 characters', async () => {
+      const text = `${QUOTE} ${htmlPastCover}related manuals ${MODEL}`
+      expect(text.indexOf(MODEL)).toBeGreaterThanOrEqual(2000)
+      const result = await verifiedWith([{ page: 1, text, title: 'Bosch support' }])
+      expect(result.fallback).toBe('general')
+      expect(result.proposals.every((p) => p.evidenceLevel !== 'manufacturer_verified')).toBe(true)
+      expect(result.proposals.every((p) => p.evidenceLevel !== 'similar_model')).toBe(true)
+    })
+
+    it('is manufacturer verified when the HTML title names the model', async () => {
+      const text = `${QUOTE} ${htmlPastCover}related manuals ${MODEL}X`
+      expect(text.indexOf(MODEL)).toBeGreaterThanOrEqual(2000)
+      const result = await verifiedWith([{ page: 1, text, title: `User Manual ${MODEL}` }])
+      expect(result.fallback).toBe('exact')
+      expect(result.proposals[0].evidenceLevel).toBe('manufacturer_verified')
+    })
+
+    it('stays manufacturer verified when an HTML page names the model inside the first 2,000 characters', async () => {
+      const text = `User Manual ${MODEL}. ${htmlPastCover}${QUOTE}`
+      expect(text.indexOf(MODEL)).toBeLessThan(2000)
+      expect(text.indexOf(QUOTE)).toBeGreaterThanOrEqual(2000)
+      const result = await verifiedWith([{ page: 1, text, title: 'Bosch support' }])
+      expect(result.fallback).toBe('exact')
+      expect(result.proposals[0].evidenceLevel).toBe('manufacturer_verified')
+    })
+
+    it('stays manufacturer verified when a PDF page names the model past character 2,000', async () => {
+      const text = `${htmlPastCover}User Manual ${MODEL}\n${QUOTE}`
+      expect(text.indexOf(MODEL)).toBeGreaterThanOrEqual(2000)
+      const result = await verifiedWith([{ page: 1, text }])
+      expect(result.fallback).toBe('exact')
+      expect(result.proposals[0].evidenceLevel).toBe('manufacturer_verified')
+    })
   })
 
   describe('similar-model guidance from the cover pages', () => {
@@ -136,7 +174,7 @@ describe('proposePlan', () => {
     function fromManual(args: {
       model: string
       url: string
-      pages: { page: number; text: string }[]
+      pages: { page: number; text: string; title?: string }[]
       quote?: string
       page?: number
       modelFamily?: string
@@ -221,6 +259,22 @@ describe('proposePlan', () => {
       expect(result.proposals[0].source.coveredModel).toBe('DI6012-1')
       expect(result.proposals[0].source.url).toBe(thirdPartyUrl)
       expect(result.proposals.every((p) => p.evidenceLevel !== 'manufacturer_verified')).toBe(true)
+    })
+
+    it('yields similar_model from an HTML manual that names a related model inside the cover window', async () => {
+      const filler = 'lorem ipsum '.repeat(200)
+      const text = `User manual DI6012-2. ${filler}${quote}`
+      expect(text.indexOf('DI6012-2')).toBeLessThan(2000)
+      expect(text.indexOf(quote)).toBeGreaterThanOrEqual(2000)
+      const result = await fromManual({
+        model: 'DI6012-1',
+        url: exactUrl,
+        page: 1,
+        pages: [{ page: 1, text, title: 'Smeg support' }],
+      })
+      expect(result.fallback).toBe('similar')
+      expect(result.proposals[0].evidenceLevel).toBe('similar_model')
+      expect(result.proposals[0].source.coveredModel).toBe('DI6012-2')
     })
 
     it('drops a related model from a different family', async () => {

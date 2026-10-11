@@ -6,11 +6,21 @@ import type { DocType } from './fetch-document'
 export interface Page {
   page: number
   text: string
+  // HTML only, including "" when the document has no <title>. Cover matching treats a page
+  // with this field as HTML: the title plus the first 2,000 characters, not the whole page.
+  title?: string
 }
 export type ExtractResult = { ok: true; pages: Page[] } | { ok: false; reason: 'no_text' | 'unreadable' }
 
 const DROPPED_BLOCKS = ['head', 'script', 'style', 'noscript', 'svg', 'template', 'nav', 'header', 'footer', 'aside', 'form']
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+
+function htmlTitle(html: string): string {
+  const withoutComments = html.replace(/<!--[\s\S]*?-->/g, ' ')
+  const match = withoutComments.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i)
+  if (!match) return ''
+  return normalizeText(htmlToText(match[1]))
+}
 
 function htmlToText(html: string): string {
   let s = html.replace(/<!--[\s\S]*?-->/g, ' ')
@@ -43,8 +53,9 @@ export async function extractPages(bytes: Uint8Array, type: DocType): Promise<Ex
   try {
     if (type === 'pdf') pages = await pdfPages(bytes)
     else {
-      const text = normalizeText(htmlToText(new TextDecoder().decode(bytes)))
-      pages = text ? [{ page: 1, text }] : []
+      const raw = new TextDecoder().decode(bytes)
+      const text = normalizeText(htmlToText(raw))
+      pages = text ? [{ page: 1, text, title: htmlTitle(raw) }] : []
     }
   } catch {
     return { ok: false, reason: 'unreadable' }

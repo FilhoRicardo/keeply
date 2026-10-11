@@ -1,6 +1,6 @@
 import 'server-only'
 import { classifyEvidence } from '@/domain/evidence-check'
-import { COVER_PAGE_COUNT, matchingCoverModel, modelFamily } from '@/domain/model-family'
+import { COVER_PAGE_COUNT, coverWindowText, matchingCoverModel, modelFamily } from '@/domain/model-family'
 import type { Source, SourceType, TaskProposal } from '@/domain/model'
 import type { ExtractedTaskCandidate } from '@/ai/extraction'
 import type { SearchResult } from '@/search/brave'
@@ -146,15 +146,16 @@ function safePageText(pages: ReadonlyArray<{ page: number; text: string }>, page
 
 const MAX_MANUAL_CANDIDATES = 3
 
-// The source resolver cannot tell from a URL which models a document covers, so we read the cover
-// pages: a manual whose first pages name the exact model (as a whole token, not a prefix of a longer
-// model number) covers it. A model mentioned only deeper in the document does not.
-function coversModel(pages: readonly { page: number; text: string }[], model: string): boolean {
+// The source resolver cannot tell from a URL which models a document covers, so we read the cover:
+// a manual whose cover names the exact model (as a whole token, not a prefix of a longer model
+// number) covers it. PDF cover pages are 1–2 in full. An HTML page (title field set by
+// extract-pages) uses the title plus the first 2,000 characters. A model only deeper does not.
+function coversModel(pages: readonly { page: number; text: string; title?: string }[], model: string): boolean {
   const wanted = model.trim()
   if (!wanted) return false
   const escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const whole = new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, 'i')
-  return pages.some((p) => p.page <= COVER_PAGE_COUNT && whole.test(p.text))
+  return pages.some((p) => p.page <= COVER_PAGE_COUNT && whole.test(coverWindowText(p)))
 }
 
 // Walks the ranked Brave candidates and tries each until one yields a manufacturer-verified plan.

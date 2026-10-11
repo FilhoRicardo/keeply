@@ -57,7 +57,16 @@ describe('extractPages', () => {
       <body><nav>Menu Home</nav><main><h1>Dishwasher Care</h1><p>Clean the filter &amp; spray arms.</p></main>
       <footer>Copyright</footer></body></html>`
     const r = await extractPages(new TextEncoder().encode(html), 'html')
-    expect(r).toEqual({ ok: true, pages: [{ page: 1, text: 'dishwasher care clean the filter & spray arms.' }] })
+    expect(r).toEqual({
+      ok: true,
+      pages: [{ page: 1, text: 'dishwasher care clean the filter & spray arms.', title: 'x' }],
+    })
+  })
+
+  it('keeps an empty title when the html document has none, so the cover window still applies', async () => {
+    const html = '<html><body><p>Clean the filter monthly.</p></body></html>'
+    const r = await extractPages(new TextEncoder().encode(html), 'html')
+    expect(r).toEqual({ ok: true, pages: [{ page: 1, text: 'clean the filter monthly.', title: '' }] })
   })
 
   it('reports no_text for html with no body text', async () => {

@@ -63,6 +63,48 @@ describe('cover-page family detection', () => {
   })
 })
 
+// HTML from extract-pages is one page. Its cover is the title plus the first 2,000 characters
+// of that page, so a "related manuals" list further down does not count. PDF pages have no title
+// field and keep their full text.
+const HTML_BODY_LIMIT = 2000
+const PAST_THE_COVER = 'lorem ipsum '.repeat(200)
+
+describe('HTML cover window', () => {
+  it('ignores a model that appears only after the first 2,000 characters', () => {
+    const text = `${PAST_THE_COVER}related manuals DI6012-1`
+    expect(text.indexOf('DI6012-1')).toBeGreaterThanOrEqual(HTML_BODY_LIMIT)
+    const page = { page: 1, text, title: 'Dishwasher support' }
+    expect(coverModelTokens([page])).toEqual([])
+    expect(matchingCoverModel([page], 'DI6012-1')).toBeNull()
+    expect(matchingCoverModel([{ page: 1, text, title: '' }], 'DI6012-1')).toBeNull()
+  })
+
+  it('matches a model inside the first 2,000 characters and ignores a later related manual', () => {
+    const text = `User manual DI6012-2. ${PAST_THE_COVER}related manuals DI6012-9`
+    expect(text.indexOf('DI6012-2')).toBeLessThan(HTML_BODY_LIMIT)
+    expect(text.indexOf('DI6012-9')).toBeGreaterThanOrEqual(HTML_BODY_LIMIT)
+    const page = { page: 1, text, title: 'Care' }
+    expect(coverModelTokens([page])).toEqual(['DI6012-2'])
+    expect(matchingCoverModel([page], 'DI6012-1')).toBe('DI6012-2')
+  })
+
+  it('counts a model named in the page title even when the body mention is past the window', () => {
+    const text = `${PAST_THE_COVER}related manuals DI6012-9`
+    expect(text.indexOf('DI6012-9')).toBeGreaterThanOrEqual(HTML_BODY_LIMIT)
+    const page = { page: 1, text, title: 'Manual for DI6012-2' }
+    expect(coverModelTokens([page])).toEqual(['DI6012-2'])
+    expect(matchingCoverModel([page], 'DI6012-1')).toBe('DI6012-2')
+  })
+
+  it('keeps the whole first PDF page, including a model past character 2,000', () => {
+    const text = `${PAST_THE_COVER}User manual DI6012-1`
+    expect(text.indexOf('DI6012-1')).toBeGreaterThanOrEqual(HTML_BODY_LIMIT)
+    const page = { page: 1, text }
+    expect(coverModelTokens([page])).toEqual(['DI6012-1'])
+    expect(matchingCoverModel([page], 'DI6012-1')).toBe('DI6012-1')
+  })
+})
+
 describe('similarModelNotice', () => {
   it('names the covered model for a family-only match', () => {
     expect(similarModelNotice('DI6012-1', 'DI6012-2')).toBe(

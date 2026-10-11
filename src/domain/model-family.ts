@@ -1,8 +1,23 @@
 // Product family of a model number, and whether a manual's cover names that family.
 // The server derives both. A client-sent family is never an input.
 
-// Same window as coversModel: a model number only on a later page does not count.
+// PDF cover, shared with coversModel: a model number only on a later page does not count.
 export const COVER_PAGE_COUNT = 2
+
+// HTML from extract-pages is a single page. Its cover is the page title plus this many
+// characters of the extracted text, so a later "related manuals" list does not count.
+export const HTML_COVER_TEXT_LIMIT = 2000
+
+type CoverPage = { page: number; text: string; title?: string }
+
+// Text that may name a covered model. An HTML page carries `title` (possibly ""). A PDF page
+// does not, and its full text is the cover when the caller has already kept pages 1–2.
+export function coverWindowText(page: CoverPage): string {
+  if (page.title === undefined) return page.text
+  const body = page.text.slice(0, HTML_COVER_TEXT_LIMIT)
+  const title = page.title.trim()
+  return title ? `${title}\n${body}` : body
+}
 
 // Stored in source_location so the covered model survives without a schema change.
 const COVERED_MODEL_MARK = ' | covers '
@@ -37,13 +52,14 @@ function isModelToken(token: string): boolean {
   return token.length >= 5 && /[A-Z]/.test(token) && /\d/.test(token)
 }
 
-// Model-number tokens on the cover pages, in page order. A token is a run of letters, digits,
-// "-" or "/" with at least one letter, one digit, and 5 characters.
-export function coverModelTokens(pages: readonly { page: number; text: string }[]): string[] {
+// Model-number tokens on the cover, in page order. A token is a run of letters, digits,
+// "-" or "/" with at least one letter, one digit, and 5 characters. HTML uses the title plus
+// the first HTML_COVER_TEXT_LIMIT characters; PDF uses the full text of pages 1–2.
+export function coverModelTokens(pages: readonly CoverPage[]): string[] {
   const cover = pages.filter((p) => p.page <= COVER_PAGE_COUNT).sort((a, b) => a.page - b.page)
   const tokens: string[] = []
   for (const page of cover) {
-    for (const match of page.text.matchAll(/[A-Za-z0-9/-]+/g)) {
+    for (const match of coverWindowText(page).matchAll(/[A-Za-z0-9/-]+/g)) {
       const token = match[0].toUpperCase()
       if (isModelToken(token)) tokens.push(token)
     }
@@ -54,7 +70,7 @@ export function coverModelTokens(pages: readonly { page: number; text: string }[
 // The cover model to show when the document's family matches the owner's. Prefers the owner's
 // own model number when the cover names it (a third-party copy). Null when nothing on the cover
 // shares the family, including a token that appears only after the cover pages.
-export function matchingCoverModel(pages: readonly { page: number; text: string }[], ownerModel: string): string | null {
+export function matchingCoverModel(pages: readonly CoverPage[], ownerModel: string): string | null {
   const family = modelFamily(ownerModel)
   if (!family) return null
   const owner = normalizeModelNumber(ownerModel)
