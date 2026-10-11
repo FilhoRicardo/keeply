@@ -202,6 +202,17 @@ describe('proposePlan', () => {
       expect(result.proposals[0].evidenceLevel).toBe('manufacturer_verified')
     })
 
+    it('is not verified when an HTML cut would otherwise turn a longer model number into the owner model', async () => {
+      const longer = `${MODEL}X`
+      const start = 2000 - (longer.length - 1)
+      const text = `${QUOTE}${' '.repeat(start - QUOTE.length)}${longer}`
+      expect(text[2000]).toBe('X')
+      expect(text.slice(0, 2000).endsWith(MODEL)).toBe(true)
+      const result = await verifiedWith([{ page: 1, text, title: 'Bosch support' }])
+      expect(result.fallback).toBe('general')
+      expect(result.proposals.every((p) => p.evidenceLevel !== 'manufacturer_verified')).toBe(true)
+    })
+
     it('stays manufacturer verified when a PDF page names the model past character 2,000', async () => {
       const text = `${htmlPastCover}User Manual ${MODEL}\n${QUOTE}`
       expect(text.indexOf(MODEL)).toBeGreaterThanOrEqual(2000)

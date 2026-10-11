@@ -10,11 +10,24 @@ export const HTML_COVER_TEXT_LIMIT = 2000
 
 type CoverPage = { page: number; text: string; title?: string }
 
+const MODEL_TOKEN_CHAR = /[A-Za-z0-9/-]/
+
+// The first HTML_COVER_TEXT_LIMIT characters. A token that runs past the limit is left out,
+// so the cut cannot look like a shorter whole model number.
+function htmlCoverBody(text: string): string {
+  if (text.length <= HTML_COVER_TEXT_LIMIT) return text
+  let end = HTML_COVER_TEXT_LIMIT
+  if (MODEL_TOKEN_CHAR.test(text[end] ?? '')) {
+    while (end > 0 && MODEL_TOKEN_CHAR.test(text[end - 1] ?? '')) end -= 1
+  }
+  return text.slice(0, end)
+}
+
 // Text that may name a covered model. An HTML page carries `title` (possibly ""). A PDF page
 // does not, and its full text is the cover when the caller has already kept pages 1–2.
 export function coverWindowText(page: CoverPage): string {
   if (page.title === undefined) return page.text
-  const body = page.text.slice(0, HTML_COVER_TEXT_LIMIT)
+  const body = htmlCoverBody(page.text)
   const title = page.title.trim()
   return title ? `${title}\n${body}` : body
 }
