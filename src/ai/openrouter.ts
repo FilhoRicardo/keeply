@@ -84,7 +84,9 @@ async function callOpenRouter(
         maxTokens,
         timeoutMs,
         extraHeaders: { 'HTTP-Referer': OPENROUTER_REFERER, 'X-Title': OPENROUTER_TITLE },
-        extraBody: { provider: { data_collection: config.dataCollection } },
+        // Reasoning models routed by `openrouter/free` otherwise spend the whole token budget
+        // thinking and return no content (live: dots-3-note, finish_reason "length").
+        extraBody: { provider: { data_collection: config.dataCollection }, reasoning: { enabled: false } },
         fetchImpl,
         signal,
       })

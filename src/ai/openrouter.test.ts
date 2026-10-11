@@ -59,6 +59,7 @@ describe('identifyWithOpenRouter', () => {
     })
     expect(body.model).toBe('openrouter/free')
     expect(body.provider).toEqual({ data_collection: 'deny' })
+    expect(body.reasoning).toEqual({ enabled: false })
     expect(body).not.toHaveProperty('thinking')
     const messages = body.messages as { content: { type: string; image_url?: { url: string; detail: string } }[] }[]
     expect(messages[1]?.content[1]).toEqual({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,/9j/2Q==', detail: 'high' } })
@@ -342,6 +343,7 @@ describe('extractTasksWithOpenRouter', () => {
     expect(url).toBe('https://openrouter.ai/api/v1/chat/completions')
     expect(sent.model).toBe('openrouter/free')
     expect(sent.provider).toEqual({ data_collection: 'deny' })
+    expect(sent.reasoning).toEqual({ enabled: false })
     expect(sent.messages).toEqual(
       expect.arrayContaining([expect.objectContaining({ role: 'user', content: expect.stringContaining('[Page 12]') })]),
     )
