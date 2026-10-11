@@ -10,7 +10,7 @@ Durable decisions only. One or two sentences each. Not a task log.
 
 ## Key Decisions
 
-- Paperclip replaces Linear as Keeply's issue tracker (decided 2026-10-04); no Linear project will be created. This is a project-level exception to the root workflow.
+- 2026-10-11: Linear is the current tracker (Keeply project, Engineering/RF); Codex plans/reviews and Cursor implements. This supersedes the 2026-10-04 Paperclip exception; Paperclip stays parked. Shared skills and mandatory grill-with-docs are configured locally on chore/agent-workflow; cloud automation and auto-merge are not enabled.
 - Registered 2026-10-04. Scope follows `docs/HANDOFF.md`: dishwashers only, Phase 0 + 1 first, no AI recognition until the approval/calendar skeleton works.
 - Agent team in Paperclip until 2026-10-05 (superseded below): CEO, CTO, CFO on Opus 5.5 (`claude-opus-5-5`); Builders 1–2 on Sonnet 5.5 (`claude-sonnet-5-5`); Builders 3–4 on Codex (`gpt-5.6-sol`, medium). The Codex model was set as the closest match to "Sol 6.1"; confirm.
 
