@@ -106,6 +106,112 @@ describe('readCadence when the quote states no time cadence', () => {
   })
 })
 
+const MORE_PHRASES: readonly [string, Interval][] = [
+  ['once a day', { count: 1, unit: 'day' }],
+  ['ONCE A DAY', { count: 1, unit: 'day' }],
+  ['once-a-day', { count: 1, unit: 'day' }],
+  ['once per day', { count: 1, unit: 'day' }],
+  ['once per week', { count: 1, unit: 'week' }],
+  ['once per month', { count: 1, unit: 'month' }],
+  ['once per year', { count: 1, unit: 'year' }],
+  ['Once Per Year', { count: 1, unit: 'year' }],
+  ['once-per-day', { count: 1, unit: 'day' }],
+  ['once-per-week', { count: 1, unit: 'week' }],
+  ['once-per-month', { count: 1, unit: 'month' }],
+  ['once-per-year', { count: 1, unit: 'year' }],
+  ['every other day', { count: 2, unit: 'day' }],
+  ['every other week', { count: 2, unit: 'week' }],
+  ['every other month', { count: 2, unit: 'month' }],
+  ['every other year', { count: 2, unit: 'year' }],
+  ['Every Other Month', { count: 2, unit: 'month' }],
+  ['every-other-day', { count: 2, unit: 'day' }],
+  ['every-other-week', { count: 2, unit: 'week' }],
+  ['every-other-month', { count: 2, unit: 'month' }],
+  ['every-other-year', { count: 2, unit: 'year' }],
+  ['fortnightly', { count: 2, unit: 'week' }],
+  ['FORTNIGHTLY', { count: 2, unit: 'week' }],
+  ['every fortnight', { count: 2, unit: 'week' }],
+  ['Every Fortnight', { count: 2, unit: 'week' }],
+  ['every-fortnight', { count: 2, unit: 'week' }],
+  ['quarterly', { count: 3, unit: 'month' }],
+  ['QUARTERLY', { count: 3, unit: 'month' }],
+  ['half-yearly', { count: 6, unit: 'month' }],
+  ['half yearly', { count: 6, unit: 'month' }],
+  ['HALF-YEARLY', { count: 6, unit: 'month' }],
+  ['Half Yearly', { count: 6, unit: 'month' }],
+  ['semi-annually', { count: 6, unit: 'month' }],
+  ['semiannually', { count: 6, unit: 'month' }],
+  ['semi annually', { count: 6, unit: 'month' }],
+  ['SEMI-ANNUALLY', { count: 6, unit: 'month' }],
+  ['Semiannually', { count: 6, unit: 'month' }],
+  ['biannually', { count: 6, unit: 'month' }],
+  ['BIANNUALLY', { count: 6, unit: 'month' }],
+  ['bi-annually', { count: 6, unit: 'month' }],
+  ['bi annually', { count: 6, unit: 'month' }],
+  ['twice a month', { count: 2, unit: 'week' }],
+  ['Twice A Month', { count: 2, unit: 'week' }],
+  ['twice-a-month', { count: 2, unit: 'week' }],
+  ['twice per month', { count: 2, unit: 'week' }],
+  ['twice-per-year', { count: 6, unit: 'month' }],
+  ['2 times per year', { count: 6, unit: 'month' }],
+  ['2 times per month', { count: 2, unit: 'week' }],
+  ['two times a year', { count: 6, unit: 'month' }],
+  ['2-times-per-year', { count: 6, unit: 'month' }],
+  ['4 times per year', { count: 3, unit: 'month' }],
+  ['3 times per year', { count: 4, unit: 'month' }],
+  ['6 times a year', { count: 2, unit: 'month' }],
+  ['12 times per year', { count: 1, unit: 'month' }],
+  ['1 time per week', { count: 1, unit: 'week' }],
+  ['one time per day', { count: 1, unit: 'day' }],
+]
+
+describe('readCadence additional stated phrases', () => {
+  it.each(MORE_PHRASES)('reads "%s"', (phrase, interval) => {
+    expect(readCadence(`Care instruction: ${phrase}.`)).toEqual(stated(interval))
+  })
+
+  it('uses the earliest cadence when several appear', () => {
+    expect(readCadence('Clean it fortnightly, and descale it yearly.')).toEqual(stated({ count: 2, unit: 'week' }))
+    expect(readCadence('Descale it yearly, and clean it fortnightly.')).toEqual(stated({ count: 1, unit: 'year' }))
+    expect(readCadence('Clean twice a week and descale every 3 months.')).toEqual(unstated('twice a week'))
+    expect(readCadence('Descale every 3 months and clean twice a week.')).toEqual(stated({ count: 3, unit: 'month' }))
+  })
+
+  it('lets a stated cadence win over a vague word that comes first', () => {
+    expect(readCadence('Clean regularly, then service it quarterly.')).toEqual(stated({ count: 3, unit: 'month' }))
+  })
+})
+
+describe('readCadence frequencies the interval cannot express', () => {
+  it.each([
+    ['Clean the filter twice a week.', 'twice a week'],
+    ['Clean the filter Twice A Week.', 'Twice A Week'],
+    ['Clean the filter twice-a-week.', 'twice-a-week'],
+    ['Clean the filter twice per week.', 'twice per week'],
+    ['Rinse it 2 times per week.', '2 times per week'],
+    ['Rinse it 2-times-per-week.', '2-times-per-week'],
+    ['Rinse it TWO TIMES PER WEEK.', 'TWO TIMES PER WEEK'],
+    ['Rinse it 2 times a week.', '2 times a week'],
+    ['Rinse it 3 times per day.', '3 times per day'],
+    ['Rinse it three times per day.', 'three times per day'],
+    ['Rinse it three-times-per-day.', 'three-times-per-day'],
+    ['Rinse it 2 times per day.', '2 times per day'],
+    ['Wipe it twice a day.', 'twice a day'],
+    ['Descale three times a month.', 'three times a month'],
+    ['Descale Three Times A Month.', 'Three Times A Month'],
+    ['Descale three-times-a-month.', 'three-times-a-month'],
+    ['Service it 4 times per month.', '4 times per month'],
+    ['Service it 5 times per year.', '5 times per year'],
+  ] as const)('quotes the manual wording in "%s"', (quote, wording) => {
+    expect(readCadence(quote)).toEqual(unstated(wording))
+  })
+
+  it('prefers the frequency phrase over a vague word or a usage phrase', () => {
+    expect(readCadence('Clean regularly, twice a week.')).toEqual(unstated('twice a week'))
+    expect(readCadence('Wipe the seal after each use and clean twice a week.')).toEqual(unstated('twice a week'))
+  })
+})
+
 describe('presentInterval', () => {
   it('labels a stated cadence as from the manual and ignores a different stored interval', () => {
     expect(
@@ -138,6 +244,29 @@ describe('presentInterval', () => {
         generalGuidance: false,
       }).text,
     ).toBe('Every month · Keeply\'s suggestion. The manual says "after each use".')
+  })
+
+  it('labels a newly recognised cadence as from the manual', () => {
+    expect(
+      presentInterval({
+        quote: 'Have the appliance serviced quarterly.',
+        stored: { count: 1, unit: 'month' },
+        generalGuidance: false,
+      }),
+    ).toEqual({ interval: { count: 3, unit: 'month' }, text: 'Every 3 months · from the manual' })
+  })
+
+  it('quotes a sub-unit frequency instead of saying the manual is silent', () => {
+    expect(
+      presentInterval({
+        quote: 'Clean the filter twice a week.',
+        stored: { count: 1, unit: 'week' },
+        generalGuidance: false,
+      }),
+    ).toEqual({
+      interval: { count: 1, unit: 'month' },
+      text: 'Every month · Keeply\'s suggestion. The manual says "twice a week".',
+    })
   })
 
   it('says when the manual does not say how often', () => {

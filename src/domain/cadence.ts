@@ -26,6 +26,7 @@ const WORD_NUMBERS: Record<string, number> = {
 
 const NUMBER = '(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)'
 const UNIT = '(day|week|month|year)s?'
+const GAP = '(?:[\\s-]+)'
 
 const UNITS = new Set<IntervalUnit>(['day', 'week', 'month', 'year'])
 
@@ -43,7 +44,24 @@ function unitOf(raw: string): IntervalUnit | null {
   return UNITS.has(unit as IntervalUnit) ? (unit as IntervalUnit) : null
 }
 
-type CadencePattern = { source: string; interval: (match: RegExpMatchArray) => Interval | null }
+// A count of occurrences per unit, when { count, unit } can say it exactly.
+// Twice a year is every 6 months. Twice a month is every 2 weeks.
+// Twice a week, N times per day, and three times a month are null: the interval
+// type cannot express them, and rounding would misquote the manual.
+function expressTimesPer(count: number, unit: IntervalUnit): Interval | null {
+  if (count === 1) return { count: 1, unit }
+  if (unit === 'year' && 12 % count === 0) return { count: 12 / count, unit: 'month' }
+  if (unit === 'month' && count === 2) return { count: 2, unit: 'week' }
+  return null
+}
+
+// 'unexpressed' is a real frequency the interval type cannot store.
+type ParsedInterval = Interval | 'unexpressed'
+
+type CadencePattern = {
+  source: string
+  interval: (match: RegExpMatchArray) => ParsedInterval | null
+}
 
 const CADENCE_PATTERNS: readonly CadencePattern[] = [
   {
@@ -55,12 +73,29 @@ const CADENCE_PATTERNS: readonly CadencePattern[] = [
       return { count, unit }
     },
   },
-  { source: '\\btwice\\s+a\\s+year\\b', interval: () => ({ count: 6, unit: 'month' }) },
   {
-    source: '\\bonce\\s+a\\s+(week|month|year)\\b',
+    source: `\\bevery${GAP}other${GAP}${UNIT}\\b`,
     interval: (match) => {
       const unit = unitOf(match[1] ?? '')
-      return unit ? { count: 1, unit } : null
+      return unit ? { count: 2, unit } : null
+    },
+  },
+  {
+    source: `\\b(once|twice)${GAP}(?:a|per)${GAP}${UNIT}\\b`,
+    interval: (match) => {
+      const unit = unitOf(match[2] ?? '')
+      if (unit === null) return null
+      const count = match[1]?.toLowerCase() === 'twice' ? 2 : 1
+      return expressTimesPer(count, unit) ?? 'unexpressed'
+    },
+  },
+  {
+    source: `\\b${NUMBER}${GAP}times?${GAP}(?:a|per)${GAP}${UNIT}\\b`,
+    interval: (match) => {
+      const count = parseCount(match[1] ?? '')
+      const unit = unitOf(match[2] ?? '')
+      if (count === null || unit === null) return null
+      return expressTimesPer(count, unit) ?? 'unexpressed'
     },
   },
   {
@@ -74,6 +109,14 @@ const CADENCE_PATTERNS: readonly CadencePattern[] = [
   { source: '\\bdaily\\b', interval: () => ({ count: 1, unit: 'day' }) },
   { source: '\\bweekly\\b', interval: () => ({ count: 1, unit: 'week' }) },
   { source: '\\bmonthly\\b', interval: () => ({ count: 1, unit: 'month' }) },
+  { source: '\\bfortnightly\\b', interval: () => ({ count: 2, unit: 'week' }) },
+  { source: `\\bevery${GAP}fortnight\\b`, interval: () => ({ count: 2, unit: 'week' }) },
+  { source: '\\bquarterly\\b', interval: () => ({ count: 3, unit: 'month' }) },
+  { source: '\\bhalf(?:[\\s-]*)yearly\\b', interval: () => ({ count: 6, unit: 'month' }) },
+  { source: '\\bsemi(?:[\\s-]*)annually\\b', interval: () => ({ count: 6, unit: 'month' }) },
+  // "Biannually" means twice a year or every two years. Mapped to every 6 months
+  // until Ricardo confirms (RF-347).
+  { source: '\\bbi(?:[\\s-]*)annually\\b', interval: () => ({ count: 6, unit: 'month' }) },
   { source: '\\b(?:yearly|annually)\\b', interval: () => ({ count: 1, unit: 'year' }) },
 ]
 
@@ -93,17 +136,22 @@ const VAGUE_PATTERNS = [
   '\\bfrom\\s+time\\s+to\\s+time\\b',
 ]
 
-function earliestCadence(quote: string): Interval | null {
-  let best: { index: number; interval: Interval } | null = null
+function earliestCadence(quote: string): CadenceReading | null {
+  let best: { index: number; reading: CadenceReading } | null = null
   for (const pattern of CADENCE_PATTERNS) {
     for (const match of quote.matchAll(new RegExp(pattern.source, 'gi'))) {
-      const interval = pattern.interval(match)
-      if (!interval) continue
+      const parsed = pattern.interval(match)
+      if (!parsed) continue
       const index = match.index ?? 0
-      if (!best || index < best.index) best = { index, interval }
+      if (best && index >= best.index) continue
+      const reading: CadenceReading =
+        parsed === 'unexpressed'
+          ? { stated: false, wording: match[0].replace(/\s+/g, ' ') }
+          : { stated: true, interval: parsed }
+      best = { index, reading }
     }
   }
-  return best?.interval ?? null
+  return best?.reading ?? null
 }
 
 function earliestPhrase(quote: string, sources: readonly string[]): string | null {
@@ -117,13 +165,17 @@ function earliestPhrase(quote: string, sources: readonly string[]): string | nul
   return best?.text ?? null
 }
 
-// A stated time cadence, or "not stated" plus the manual's own vague or usage wording.
-// When several time cadences appear, the one earliest in the quote is used.
-// A usage phrase is preferred over a vague word when the quote has both.
+// A stated time cadence, or "not stated" plus the manual's own wording.
+// When several cadences appear, the one earliest in the quote is used.
+// A frequency the interval cannot express is "not stated", with that phrase quoted.
+// A usage phrase is preferred over a vague word when the quote has no cadence.
 export function readCadence(quote: string): CadenceReading {
-  const interval = earliestCadence(quote)
-  if (interval) return { stated: true, interval }
-  return { stated: false, wording: earliestPhrase(quote, USAGE_PATTERNS) ?? earliestPhrase(quote, VAGUE_PATTERNS) }
+  return (
+    earliestCadence(quote) ?? {
+      stated: false,
+      wording: earliestPhrase(quote, USAGE_PATTERNS) ?? earliestPhrase(quote, VAGUE_PATTERNS),
+    }
+  )
 }
 
 export type IntervalPresentation = { interval: Interval; text: string }
