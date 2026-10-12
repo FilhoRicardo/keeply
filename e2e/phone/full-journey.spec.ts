@@ -88,8 +88,23 @@ test('scan, confirm, manual, accept and reject, then Google Calendar', async ({ 
   expect(readCalendarEvents()).toEqual([])
 
   const startDate = await page.locator('input[type="date"]').inputValue()
-  await page.getByRole('button', { name: 'Approve and add 1 task to Google Calendar' }).click()
+  let releaseCalendarWrite!: () => void
+  const calendarWrite = new Promise<void>((resolve) => {
+    releaseCalendarWrite = resolve
+  })
+  await page.route('**/api/calendar/events', async (route) => {
+    await calendarWrite
+    await route.continue()
+  })
+  await page.getByRole('button', { name: 'Approve and add 1 task to Google Calendar' }).click({ noWaitAfter: true })
+  const progress = page.getByRole('status')
+  await expect(progress).toHaveText('Adding 1 task to Google Calendar…')
+  await expect(progress).toHaveAttribute('aria-live', 'polite')
+  await expect(page.getByText('This plan is approved.')).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'View your appliance' })).toHaveCount(0)
+  releaseCalendarWrite()
   await expect(page.getByText('Plan approved. Your tasks are in Google Calendar.')).toBeVisible()
+  await expect(page).toHaveURL(/\/appliances\/[^/?]+\?approved=calendar/)
 
   const events = readCalendarEvents()
   expect(events).toHaveLength(1)
