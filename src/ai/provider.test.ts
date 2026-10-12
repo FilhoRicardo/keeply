@@ -14,8 +14,8 @@ describe('selectProvider', () => {
   it('keeps the documented order with Manual last', () => {
     expect(CANDIDATES.map((c) => c.kind)).toEqual([
       'chatgpt_authorized',
-      'minimax',
       'openrouter',
+      'minimax',
       'openai_api',
       'anthropic_api',
       'keeply_hosted',
@@ -23,10 +23,10 @@ describe('selectProvider', () => {
     ])
   })
 
-  it('uses a BYO MiniMax key, then server MiniMax, then OpenRouter, then Manual', () => {
-    // The identify route represents a saved BYO key by passing it as the only MiniMax credential.
-    expect(selectProvider({ env: { MINIMAX_API_KEY: 'byo-key', OPENROUTER_API_KEY: 'or-key' } }).kind).toBe('minimax')
-    expect(selectProvider({ env: { MINIMAX_API_KEY: 'server-key', OPENROUTER_API_KEY: 'or-key' } }).kind).toBe('minimax')
+  it('prefers OpenRouter over a server MiniMax key, then MiniMax, then Manual', () => {
+    // The identify route represents a saved BYO key by passing it as the only credential.
+    expect(selectProvider({ env: { MINIMAX_API_KEY: 'byo-key' } }).kind).toBe('minimax')
+    expect(selectProvider({ env: { MINIMAX_API_KEY: 'server-key', OPENROUTER_API_KEY: 'or-key' } }).kind).toBe('openrouter')
     expect(selectProvider({ env: { OPENROUTER_API_KEY: 'or-key' } }).kind).toBe('openrouter')
     expect(selectProvider({ env: { MINIMAX_API_KEY: 'k', MINIMAX_MODEL: 'MiniMax-M2.7', OPENROUTER_API_KEY: 'or-key' } }).kind).toBe('openrouter')
     expect(selectProvider({ env: {} }).kind).toBe('manual')
@@ -53,6 +53,50 @@ describe('selectProvider', () => {
   it('picks the first available and falls past a failing provider', () => {
     expect(selectProvider({ env: {} }, [fake('chatgpt_authorized', 'throws'), fake('minimax', true), fake('manual', true)]).kind).toBe('minimax')
     expect(selectProvider({ env: {} }, [fake('openai_api', false)])).toBe(manualProvider)
+  })
+
+  it('asks MiniMax when OpenRouter refuses over HTTP, for both label reading and manual reading', async () => {
+    const identity = '{"applianceType":"dishwasher","typeEvidence":"Dishwasher","manufacturer":"Bosch","model":"SMS6ZCI49E","serialNumber":null,"confidence":0.9}'
+    const tasks = JSON.stringify({ candidates: [{ task: 'Clean the filter', instructions: 'Rinse it.', interval: { count: 1, unit: 'month' }, page: 1, quote: 'Clean the filter every month.' }] })
+    const hosts: string[] = []
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      hosts.push(new URL(url).hostname)
+      if (url.startsWith('https://openrouter.ai')) return new Response('{"error":"rate limited"}', { status: 429 })
+      const vision = String(init?.body).includes('image_url')
+      return Response.json({ choices: [{ message: { content: vision ? identity : tasks } }] })
+    })
+    const provider = selectProvider({
+      env: { OPENROUTER_API_KEY: 'or-key', MINIMAX_API_KEY: 'mm-key' },
+      fetch: fetchMock as unknown as typeof fetch,
+    })
+    expect(provider.kind).toBe('openrouter')
+    expect(await provider.identifyAppliance({ bytes: new Uint8Array([1]), mimeType: 'image/jpeg' })).toMatchObject({ model: 'SMS6ZCI49E' })
+    expect(await provider.extractTasks({ model: 'SMS6ZCI49E', pages: [{ page: 1, text: 'Clean the filter every month.' }] })).toHaveLength(1)
+    // OpenRouter is tried first (with its one 429 retry), then MiniMax answers.
+    expect(hosts).toEqual(['openrouter.ai', 'openrouter.ai', 'api.minimax.io', 'openrouter.ai', 'openrouter.ai', 'api.minimax.io'])
+  })
+
+  it('does not ask MiniMax when OpenRouter answers, even with nothing read', async () => {
+    const fetchMock = vi.fn(async () => Response.json({ choices: [{ message: { content: 'no label here' } }] }))
+    const provider = selectProvider({
+      env: { OPENROUTER_API_KEY: 'or-key', MINIMAX_API_KEY: 'mm-key' },
+      fetch: fetchMock as unknown as typeof fetch,
+    })
+    expect(await provider.identifyAppliance({ bytes: new Uint8Array([1]), mimeType: 'image/jpeg' })).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports the first failure when the backup also refuses, and never retries a timeout elsewhere', async () => {
+    const refusing = vi.fn(async () => new Response('{}', { status: 503 }))
+    const both = selectProvider({ env: { OPENROUTER_API_KEY: 'or-key', MINIMAX_API_KEY: 'mm-key' }, fetch: refusing as unknown as typeof fetch })
+    await expect(both.identifyAppliance({ bytes: new Uint8Array([1]), mimeType: 'image/jpeg' })).rejects.toThrow(/OpenRouter rejected the request \(503\)/)
+
+    const timingOut = vi.fn(async () => {
+      throw Object.assign(new Error('The operation timed out.'), { name: 'TimeoutError' })
+    })
+    const slow = selectProvider({ env: { OPENROUTER_API_KEY: 'or-key', MINIMAX_API_KEY: 'mm-key' }, fetch: timingOut as unknown as typeof fetch })
+    await expect(slow.identifyAppliance({ bytes: new Uint8Array([1]), mimeType: 'image/jpeg' })).rejects.toThrow(/timed out/)
+    expect(timingOut).toHaveBeenCalledTimes(1)
   })
 
   it('wires the MiniMax adapter to the injected fetch', async () => {
