@@ -27,7 +27,6 @@ function makeDeps(overrides: Partial<PlanDeps> = {}): PlanDeps {
     resolveSource: overrides.resolveSource ?? (() => ({ documentModels: [MODEL], documentFamily: FAMILY })),
     manufacturerDomains: overrides.manufacturerDomains ?? { bosch: [BOSCH_DOMAIN] },
     generalGuidance: overrides.generalGuidance ?? (() => GENERAL_DISHWASHER_TASKS),
-    candidateTitle: overrides.candidateTitle ?? ((url) => url),
     aiModel: overrides.aiModel ?? 'MiniMax-M3',
     signal: overrides.signal ?? controller.signal,
     scheduleTimeout: overrides.scheduleTimeout,
@@ -89,7 +88,45 @@ describe('proposePlan', () => {
     expect(proposal.source.url).toBe(PDF_URL)
     expect(proposal.source.location).toBe('page 1')
     expect(proposal.source.quote).toBe(QUOTE)
+    expect(proposal.source.title).toBe('Bosch SMS6ZCI49E user manual')
     expect(proposal.name).toBe('Clean the filter')
+  })
+
+  it('names the source from a readable document title, and otherwise from the appliance', async () => {
+    const model = 'KEQB7300L'
+    const url = 'https://api.electrolux-medialibrary.com/asset/550e8400-e29b-41d4-a716-446655440000/ORIGINAL/550e8400-e29b-41d4-a716-446655440000.pdf'
+    const quote = 'Clean the filter every month under running water.'
+    const page = `User manual ${model}\n${quote}`
+    const proposed = (documentTitle: string) =>
+      proposePlan(
+        { manufacturer: 'Electrolux', model, applianceType: 'dishwasher' },
+        makeDeps({
+          manufacturerDomains: { electrolux: ['electrolux.com', 'electrolux-medialibrary.com'] },
+          searchManuals: async () => ({
+            status: 'ok',
+            candidates: [{ url, title: 'Electrolux-medialibrary', snippet: '', host: 'api.electrolux-medialibrary.com' }],
+          }),
+          fetchDocument: fetchOk(new TextEncoder().encode(page), 'pdf'),
+          extractPages: async () => ({ ok: true, pages: [{ page: 1, text: page }], documentTitle }),
+          extractTasks: extractedTasksOk([{ ...CANDIDATE, quote, page: 1 }]),
+          resolveSource: () => ({ documentModels: [] }),
+        }),
+      )
+
+    const readable = await proposed('Electrolux KEQB7300L User Manual')
+    expect(readable.proposals[0].evidenceLevel).toBe('manufacturer_verified')
+    expect(readable.proposals[0].source).toMatchObject({
+      title: 'Electrolux KEQB7300L User Manual',
+      url,
+      location: 'page 1',
+      quote,
+    })
+
+    const fileName = await proposed('550e8400-e29b-41d4-a716-446655440000.pdf')
+    expect(fileName.proposals[0].source.title).toBe('Electrolux KEQB7300L user manual')
+    expect(fileName.proposals[0].source.url).toBe(url)
+    expect(fileName.proposals[0].source.quote).toBe(quote)
+    expect(fileName.proposals[0].evidenceLevel).toBe('manufacturer_verified')
   })
 
   it('proposes the quote’s cadence, not the AI interval', async () => {
@@ -266,6 +303,7 @@ describe('proposePlan', () => {
       expect(result.proposals[0].evidenceLevel).toBe('similar_model')
       expect(result.proposals[0].source).toMatchObject({
         type: 'similar_model_manual',
+        title: 'Smeg DI6012-2 user manual',
         url: exactUrl,
         location: 'page 5',
         quote,

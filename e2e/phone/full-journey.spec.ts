@@ -112,6 +112,7 @@ test('scan, confirm, manual, accept and reject, then Google Calendar', async ({ 
   expect(events[0]?.body.summary).toBe(`${ACCEPTED_TASK} · Bosch ${EXACT_MODEL}`)
   expect(events[0]?.body.recurrence).toEqual([toRRule({ count: 1, unit: 'month' }, startDate)])
   expect(events[0]?.body.description).toContain('Every month · from the manual')
+  expect(events[0]?.body.description).toContain('Source: Bosch SMS6ZCI49E user manual, page 1')
   expect(events[0]?.body.start?.date).toBe(startDate)
   expect(events.some((event) => (event.body.summary ?? '').includes(REJECTED_TASK))).toBe(false)
   expect(events.some((event) => (event.body.recurrence ?? []).some((rule) => rule.includes('INTERVAL=3')))).toBe(false)

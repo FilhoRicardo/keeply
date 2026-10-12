@@ -115,13 +115,6 @@ function buildDeps(args: {
     resolveSource: resolveSourceFromUrl,
     manufacturerDomains: args.manufacturerDomains,
     generalGuidance: () => GENERAL_DISHWASHER_TASKS,
-    candidateTitle: (url) => {
-      try {
-        return new URL(url).pathname.split('/').pop() || url
-      } catch {
-        return url
-      }
-    },
     aiModel: args.env.MINIMAX_MODEL?.trim() || 'MiniMax-M3',
     signal: args.signal,
   }
