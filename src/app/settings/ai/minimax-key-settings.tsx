@@ -198,7 +198,7 @@ function GoogleMiniMaxKeySettings({ accessToken }: { accessToken: () => Promise<
 
       <section className="settings-notes aster-inner" aria-label="AI access details">
         <h3>Access and usage</h3>
-        <p>Anyone signed in with Google can use AI label reading, within a personal daily limit and a shared daily cap. The owner’s scans do not use the shared cap.</p>
+        <p>Anyone signed in with Google can use AI label reading, within a personal daily limit and a shared daily cap.</p>
         <p>Saving a key does not bypass these limits. If AI is unavailable, you can always enter appliance details manually.</p>
       </section>
     </div>
