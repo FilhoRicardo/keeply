@@ -22,11 +22,19 @@ function isHostLabel(title: string): boolean {
   return labels.some((label) => label === 'api' || label === 'cdn')
 }
 
+// Authoring tools often leave a placeholder or an export name in the PDF metadata. Live example:
+// the Electrolux KEQB7300L manual's metadata title is literally "Title".
+function isPlaceholder(title: string): boolean {
+  if (!/\s/.test(title)) return true // one word ("Title", "Manual", "KEQB7300L") names nothing
+  if (/^microsoft (word|powerpoint|excel)\b/i.test(title)) return true
+  return /^(untitled|title|document|manual|user manual|instruction manual)\b/i.test(title) && title.split(/\s+/).length <= 2
+}
+
 function readableDocumentTitle(raw: string | null | undefined): string | null {
   if (!raw) return null
   const title = clean(raw)
   if (!title) return null
-  if (isPdfFileName(title) || UUID.test(title.replace(/\.pdf$/i, '')) || isHostLabel(title)) return null
+  if (isPdfFileName(title) || UUID.test(title.replace(/\.pdf$/i, '')) || isHostLabel(title) || isPlaceholder(title)) return null
   return title
 }
 

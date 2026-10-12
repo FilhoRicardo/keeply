@@ -38,6 +38,15 @@ describe('manualSourceTitle', () => {
     expect(manualSourceTitle({ documentTitle: 'api', ...electrolux })).toBe(fallback)
   })
 
+  it('replaces a placeholder or export name from the PDF metadata', () => {
+    const fallback = 'Electrolux KEQB7300L user manual'
+    // Live: the Electrolux KEQB7300L manual's PDF metadata title is "Title".
+    for (const placeholder of ['Title', 'Untitled', 'Manual', 'User manual', 'KEQB7300L', 'Microsoft Word - IM_KEQB7300L.docx']) {
+      expect(manualSourceTitle({ documentTitle: placeholder, ...electrolux })).toBe(fallback)
+    }
+    expect(manualSourceTitle({ documentTitle: 'Dishwasher user manual KEQB7300L', ...electrolux })).toBe('Dishwasher user manual KEQB7300L')
+  })
+
   it('names a similar-model source with the covered model', () => {
     expect(
       manualSourceTitle({
