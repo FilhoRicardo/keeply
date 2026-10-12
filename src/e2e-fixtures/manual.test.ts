@@ -33,7 +33,6 @@ function deps(model: string): PlanDeps {
     resolveSource: () => ({ documentModels: [] }),
     manufacturerDomains: buildDefaultManufacturerDomains(),
     generalGuidance: () => [],
-    candidateTitle: (url) => url,
     aiModel: model,
     signal: new AbortController().signal,
   }
@@ -63,6 +62,7 @@ describe('journey fixtures', () => {
     ])
     expect(result.proposals[0]?.source.location).toBe('page 1')
     expect(result.proposals[0]?.source.quote).toBe(extractionReply().candidates[0]?.quote)
+    expect(result.proposals[0]?.source.title).toBe(MANUAL_TITLE)
   })
 
   it('does not verify a manual for a different model', async () => {
@@ -72,5 +72,6 @@ describe('journey fixtures', () => {
     expect(result.proposals.every((task) => task.evidenceLevel === 'similar_model')).toBe(true)
     expect(result.proposals.every((task) => task.evidenceLevel !== 'manufacturer_verified')).toBe(true)
     expect(result.proposals[0]?.source.coveredModel).toBe(EXACT_MODEL)
+    expect(result.proposals[0]?.source.title).toBe(MANUAL_TITLE)
   })
 })

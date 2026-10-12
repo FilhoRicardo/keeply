@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { extractPages } from './extract-pages'
 
 // Minimal valid PDF; a page with text === null is image-only (no text operators).
-function makePdf(pages: (string | null)[]): Uint8Array {
+function makePdf(pages: (string | null)[], title?: string): Uint8Array {
   const objs: string[] = []
   const n = pages.length
   objs.push('<< /Type /Catalog /Pages 2 0 R >>')
@@ -13,6 +13,12 @@ function makePdf(pages: (string | null)[]): Uint8Array {
     objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`)
     objs.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`)
   })
+  let infoRef = ''
+  if (title) {
+    const escaped = title.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+    objs.push(`<< /Title (${escaped}) >>`)
+    infoRef = ` /Info ${objs.length} 0 R`
+  }
   let out = '%PDF-1.4\n'
   const offsets: number[] = []
   objs.forEach((o, i) => {
@@ -21,7 +27,7 @@ function makePdf(pages: (string | null)[]): Uint8Array {
   })
   const xref = out.length
   out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')
-  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R${infoRef} >>\nstartxref\n${xref}\n%%EOF\n`
   return new TextEncoder().encode(out)
 }
 
@@ -30,12 +36,21 @@ describe('extractPages', () => {
     const r = await extractPages(makePdf(['Cover Page', 'Clean the FILTER monthly', 'Descale every 6 months']), 'pdf')
     expect(r).toEqual({
       ok: true,
+      documentTitle: null,
       pages: [
         { page: 1, text: 'cover page' },
         { page: 2, text: 'clean the filter monthly' },
         { page: 3, text: 'descale every 6 months' },
       ],
     })
+  })
+
+  it('keeps the PDF metadata title for display, including its original case', async () => {
+    const r = await extractPages(makePdf(['User manual KEQB7300L'], 'Electrolux KEQB7300L User Manual'), 'pdf')
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.documentTitle).toBe('Electrolux KEQB7300L User Manual')
+    expect(r.pages[0]?.text).toBe('user manual keqb7300l')
   })
 
   it('keeps page numbers when an interior page has no text', async () => {
@@ -59,14 +74,25 @@ describe('extractPages', () => {
     const r = await extractPages(new TextEncoder().encode(html), 'html')
     expect(r).toEqual({
       ok: true,
+      documentTitle: 'x',
       pages: [{ page: 1, text: 'dishwasher care clean the filter & spray arms.', title: 'x' }],
+    })
+  })
+
+  it('keeps the HTML title case for display and a normalised copy for the cover', async () => {
+    const html = '<html><head><title>Bosch SMS6ZCI49E user manual</title></head><body><p>Clean the filter.</p></body></html>'
+    const r = await extractPages(new TextEncoder().encode(html), 'html')
+    expect(r).toEqual({
+      ok: true,
+      documentTitle: 'Bosch SMS6ZCI49E user manual',
+      pages: [{ page: 1, text: 'clean the filter.', title: 'bosch sms6zci49e user manual' }],
     })
   })
 
   it('keeps an empty title when the html document has none, so the cover window still applies', async () => {
     const html = '<html><body><p>Clean the filter monthly.</p></body></html>'
     const r = await extractPages(new TextEncoder().encode(html), 'html')
-    expect(r).toEqual({ ok: true, pages: [{ page: 1, text: 'clean the filter monthly.', title: '' }] })
+    expect(r).toEqual({ ok: true, documentTitle: null, pages: [{ page: 1, text: 'clean the filter monthly.', title: '' }] })
   })
 
   it('reports no_text for html with no body text', async () => {

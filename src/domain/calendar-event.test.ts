@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applianceName, draftsForTasks, toCalendarEvent } from './calendar-event'
+import { manualSourceTitle } from './manual-title'
 import { toRRule } from './recurrence'
 import { appliance, record, task } from './test-fixtures'
 
@@ -39,6 +40,30 @@ describe('toCalendarEvent', () => {
     expect(description).toContain('Source: Bosch SMS6ZCI49E user manual, page 32')
     expect(description).toContain('“Check and clean the filters regularly.”')
     expect(description).toContain('https://example.com/manual.pdf')
+  })
+
+  it('writes the readable manual name into the event, including when the document title was a host label', () => {
+    const title = manualSourceTitle({
+      documentTitle: 'Electrolux-medialibrary',
+      manufacturer: 'Electrolux',
+      model: 'KEQB7300L',
+    })
+    const electrolux = task({
+      status: 'accepted',
+      source: {
+        type: 'manufacturer_manual',
+        title,
+        url: 'https://api.electrolux-medialibrary.com/asset/550e8400-e29b-41d4-a716-446655440000/ORIGINAL/550e8400-e29b-41d4-a716-446655440000.pdf',
+        location: 'page 22',
+        quote: 'Clean the condenser every three months.',
+      },
+    })
+    const { description } = toCalendarEvent(
+      electrolux,
+      { ...appliance, manufacturer: 'Electrolux', model: 'KEQB7300L' },
+      '2026-10-12',
+    )
+    expect(description).toContain('Source: Electrolux KEQB7300L user manual, page 22')
   })
 
   it('repeats a stated cadence from the quote, not the stored interval', () => {

@@ -1,6 +1,7 @@
 import 'server-only'
 import { presentInterval } from '@/domain/cadence'
 import { classifyEvidence } from '@/domain/evidence-check'
+import { manualSourceTitle } from '@/domain/manual-title'
 import { COVER_PAGE_COUNT, coverWindowText, matchingCoverModel, modelFamily } from '@/domain/model-family'
 import type { Source, SourceType, TaskProposal } from '@/domain/model'
 import type { ExtractedTaskCandidate } from '@/ai/extraction'
@@ -54,8 +55,6 @@ export type PlanDeps = {
   // Final fallback when no manual yields a verified or even similar-model task. Honest general
   // guidance: the existing `GENERAL_DISHWASHER_TASKS`.
   generalGuidance: () => readonly TaskProposal[]
-  // The friendly display title for the manual once it is fetched.
-  candidateTitle: (url: string) => string
   // Picks the AI model name to pass into `provider.extractTasks`. The provider decides whether it
   // actually reads manuals; the orchestration owns the budget.
   aiModel: string
@@ -189,9 +188,9 @@ type PreparedCandidate =
   | { rank: number; missedCover: true }
   | {
       rank: number
-      candidate: { url: string; title: string }
       url: string
       pages: readonly { page: number; text: string; title?: string }[]
+      documentTitle: string | null
       kind: 'exact' | 'family'
       manufacturerSite: boolean
     }
@@ -240,12 +239,27 @@ async function prepareCandidate(
   if (!kind) return { rank, missedCover: true }
   return {
     rank,
-    candidate,
     url: fetched.url,
     pages: extracted.pages,
+    documentTitle: documentTitleFrom(extracted),
     kind,
     manufacturerSite: hostedByManufacturer(fetched.url, domains),
   }
+}
+
+// PDF metadata, or the HTML <title>. A search-result title is not a document title: Brave often
+// labels a direct PDF with the host ("Electrolux-medialibrary") or a file name.
+function documentTitleFrom(extracted: {
+  documentTitle?: string | null
+  pages: readonly { title?: string }[]
+}): string | null {
+  const named = extracted.documentTitle?.replace(/\s+/g, ' ').trim()
+  if (named) return named
+  for (const page of extracted.pages) {
+    const title = page.title?.trim()
+    if (title) return title
+  }
+  return null
 }
 
 function aiGroup(item: Extract<PreparedCandidate, { kind: 'exact' | 'family' }>): number {
@@ -326,7 +340,18 @@ async function findPlans(
     // the resolver's documentFamily are ignored, so neither can raise or invent a level.
     const ownerFamily = modelFamily(args.model) ?? undefined
     const coveredModel = matchingCoverModel(item.pages, args.model)
-    const title = item.candidate.title
+    const verifiedTitle = manualSourceTitle({
+      documentTitle: item.documentTitle,
+      manufacturer: args.manufacturer,
+      model: args.model,
+    })
+    const similarTitle = coveredModel
+      ? manualSourceTitle({
+          documentTitle: item.documentTitle,
+          manufacturer: args.manufacturer,
+          model: coveredModel,
+        })
+      : verifiedTitle
     for (const c of candidates) {
       const documentText = safePageText(item.pages, c.page)
       const verdict = classifyEvidence({
@@ -348,7 +373,7 @@ async function findPlans(
           instructions: c.instructions,
           interval,
           evidenceLevel: 'manufacturer_verified',
-          source: manufacturerSource({ url: item.url, title, page: c.page, quote: c.quote }),
+          source: manufacturerSource({ url: item.url, title: verifiedTitle, page: c.page, quote: c.quote }),
         })
       } else if (verdict.level === 'similar_model' && coveredModel) {
         similar.push({
@@ -356,7 +381,7 @@ async function findPlans(
           instructions: c.instructions,
           interval,
           evidenceLevel: 'similar_model',
-          source: similarModelSource({ url: item.url, title, page: c.page, quote: c.quote, coveredModel }),
+          source: similarModelSource({ url: item.url, title: similarTitle, page: c.page, quote: c.quote, coveredModel }),
         })
       }
       // General guidance items from a manual go to /dev/null — we already have `generalGuidance()`
