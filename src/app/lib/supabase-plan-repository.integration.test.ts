@@ -174,7 +174,7 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase plan repository', () => {
     },
     {
       name: 'timeout',
-      meta: { fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout', searched: true } satisfies ProposalMeta,
+      meta: { fallback: 'general', searchOutcome: 'timeout', searchReason: null, searched: true } satisfies ProposalMeta,
       proposals: GENERAL_DISHWASHER_TASKS,
       reason: 'timeout',
     },

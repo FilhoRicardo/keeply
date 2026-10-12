@@ -442,7 +442,7 @@ const RELOAD_CASES: {
   {
     name: 'timeout',
     id: 'app-timeout',
-    fixture: generalPlan('app-timeout', { fallback: 'general', searchOutcome: 'timeout', searchReason: 'timeout', searched: true }),
+    fixture: generalPlan('app-timeout', { fallback: 'general', searchOutcome: 'timeout', searchReason: null, searched: true }),
     kind: 'banner',
     reason: 'timeout',
   },
