@@ -8,8 +8,9 @@ import { bearerToken } from './calendar-session'
 
 // Who may make a billable AI scan (docs/HANDOFF.md §23). Server only.
 //
-// KEEPLY_SCAN_ACCESS=invite (default): only invited testers, within the per-tester and daily limits
-//   counted in Supabase. Fails closed: no Supabase, no session or any error means no AI call.
+// KEEPLY_SCAN_ACCESS=invite (default): a Google sign-in, or an anonymous session with a live invite,
+//   within the per-person and shared daily limits counted in Supabase. Fails closed: no Supabase,
+//   no session or any error means no AI call.
 // KEEPLY_SCAN_ACCESS=open: anyone who can reach the server. Only for a private machine or a
 //   login-protected preview. Ignored in Vercel Production (VERCEL_ENV=production), so a preview
 //   setting can never switch off the invite limits there.

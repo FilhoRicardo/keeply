@@ -36,6 +36,16 @@ describe('MiniMaxKeySettings', () => {
     expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeInTheDocument()
   })
 
+  it('tells a signed-in account the daily limits and does not ask for an invite', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ configured: false, available: true, provider: 'minimax' })))
+    renderWithPlan(<MiniMaxKeySettings />, authedRepository(), undefined, { account: googleAccount() })
+
+    expect(await screen.findByText(/Anyone signed in with Google can use AI label reading/)).toBeInTheDocument()
+    expect(screen.getByText(/does not bypass these limits/)).toBeInTheDocument()
+    expect(screen.queryByText(/invite/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Have an invite code?' })).not.toBeInTheDocument()
+  })
+
   it('saves a key only to the bearer API, clears the field, and never reads it back', async () => {
     const key = 'mm-secret-test-value'
     let configured = false

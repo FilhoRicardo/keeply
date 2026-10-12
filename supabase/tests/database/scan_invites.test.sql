@@ -14,8 +14,14 @@ insert into auth.users (id, email) values
   ('00000000-0000-0000-0000-0000000000b2', 'tester-b@example.com'),
   ('00000000-0000-0000-0000-0000000000c3', 'no-invite@example.com');
 
+-- These callers are anonymous sessions (is_anonymous true). A Google sign-in is covered in
+-- scan_google_access.test.sql; without this claim the migration would treat them as signed in.
 create function pg_temp.act_as(uid text) returns void language sql as $$
-  select set_config('request.jwt.claims', json_build_object('sub', uid, 'role', 'authenticated')::text, true);
+  select set_config(
+    'request.jwt.claims',
+    json_build_object('sub', uid, 'role', 'authenticated', 'is_anonymous', true)::text,
+    true
+  );
   set local role authenticated;
 $$;
 create function pg_temp.as_owner() returns void language sql as $$

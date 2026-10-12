@@ -35,7 +35,7 @@ CI runs all four on every pull request.
 
 ## Rules that the code enforces
 
-- AI label reading on public deployments only for invited testers: each scan reserves one billable attempt in Supabase first (limits live in Supabase `scan_limits`; the live site uses 3 per tester and 100 in total per UTC day, and the owner's invite can be unlimited; `docs/testers.md`). Refusals call nothing.
+- AI label reading on public deployments is for anyone signed in with Google, and for an anonymous session that has redeemed an invite. Each scan reserves one billable attempt in Supabase first (limits live in Supabase `scan_limits`: 10 per person and 12 non-owner scans per UTC day; the owner's unlimited invite is recorded and does not use the shared cap; `docs/testers.md`). Refusals call nothing.
 
 - Nothing reaches a calendar before Approval; rejected tasks never do. Approval needs every task decided and one accepted.
 - A proposed task is never rewritten (database trigger); the owner only accepts or rejects it.

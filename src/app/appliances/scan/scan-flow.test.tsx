@@ -2,6 +2,7 @@
 import { act, fireEvent, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { noRecognizer, type ApplianceRecognizer } from '@/domain/identification'
+import type { AccountService } from '../../lib/account'
 import { scanEnabled } from '../../lib/features'
 import type { PlanRepository } from '../../lib/plan-repository'
 import { findRecord } from '../../lib/plan-state'
@@ -25,6 +26,16 @@ beforeEach(() => {
 })
 
 const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], 'label.jpg', { type: 'image/jpeg' })
+
+function googleAccount(): AccountService {
+  return {
+    current: async () => ({ kind: 'google', email: 'owner@example.com', name: 'Owner' }),
+    onChange: () => () => {},
+    signInWithGoogle: async () => ({ ok: true }),
+    switchToGoogleAccount: async () => ({ ok: true }),
+    signOut: async () => {},
+  }
+}
 
 async function takePhoto() {
   const input = screen.getByLabelText('Take or choose a photo')
@@ -235,9 +246,9 @@ describe('ScanFlow when no plan can be built', () => {
   })
 })
 
-describe('ScanFlow for invited testers', () => {
+describe('ScanFlow AI access copy', () => {
   it.each([
-    ['no_invite', /AI label reading is for invited testers, so the photo was not sent to the AI service/],
+    ['no_invite', /Sign in with Google on the Home screen to use AI label reading\. The photo was not sent to the AI service/],
     ['tester_limit', /You have used today’s AI scans, so the photo was not sent/],
     ['daily_limit', /reached today’s AI scan limit, so the photo was not sent/],
   ] as const)('explains a %s refusal and offers the manual form', async (notice, copy) => {
@@ -250,16 +261,20 @@ describe('ScanFlow for invited testers', () => {
     expect(events.map((e) => e.name)).toEqual(['scan_started', 'scan_denied'])
   })
 
-  it('shows how many AI scans are left, or how to get an invite', async () => {
-    const access = { ai: true, access: 'invited', testerLeft: 3, globalLeft: 40 }
+  it('shows how many AI scans are left, or how to sign in', async () => {
+    const access = { ai: true, access: 'invited', testerLeft: 10, globalLeft: 12 }
     vi.stubGlobal('fetch', vi.fn(async () => Response.json(access)))
-    renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo)
-    expect(await screen.findByText('AI label reading: 3 scans left today.')).toBeInTheDocument()
+    renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo, undefined, { account: googleAccount() })
+    expect(await screen.findByText('AI label reading: 10 scans left today.')).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'AI settings' })).toHaveAttribute('href', '/settings/ai')
+    expect(screen.queryByText(/invite/i)).not.toBeInTheDocument()
     vi.unstubAllGlobals()
 
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ai: true, access: 'no_invite' })))
     renderWithPlan(<ScanFlow recognizer={noRecognizer} />, testRepository())
-    expect(await screen.findByRole('link', { name: 'Have an invite code?' })).toHaveAttribute('href', '/invite')
+    expect(await screen.findByText(/Sign in with Google on the Home screen to use AI label reading/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Have an invite code?' })).toHaveAttribute('href', '/invite')
+    expect(screen.queryByText(/invited testers/i)).not.toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 
@@ -270,7 +285,7 @@ describe('ScanFlow for invited testers', () => {
     await screen.findByRole('link', { name: 'Have an invite code?' })
     await takePhoto()
     expect(recognise).not.toHaveBeenCalled()
-    expect(screen.getByText(/the photo was not sent to the AI service/)).toBeInTheDocument()
+    expect(screen.getByText(/The photo was not sent to the AI service/)).toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 })

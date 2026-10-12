@@ -11,6 +11,12 @@ create schema auth; create schema extensions;
 create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}');
 create function auth.uid() returns uuid language sql stable as $$
   select nullif(coalesce(current_setting('request.jwt.claim.sub', true), current_setting('request.jwt.claims', true)::jsonb ->> 'sub'), '')::uuid $$;
+-- Supabase already provides this. Anonymous sessions carry is_anonymous=true; Google sign-in does not.
+create function auth.jwt() returns jsonb language sql stable as $$
+  select nullif(coalesce(
+    nullif(current_setting('request.jwt.claim', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')
+  ), '')::jsonb $$;
 grant usage on schema auth, public, extensions to anon, authenticated;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;

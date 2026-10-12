@@ -41,9 +41,12 @@ type ManualReasonKey = 'unread' | 'no_invite' | 'tester_limit' | 'daily_limit' |
 const UNREAD =
   'Keeply could not read an appliance label in this photo. Try a clearer photo of the label, or enter the details below.'
 
+const SIGN_IN_FOR_AI = 'Sign in with Google on the Home screen to use AI label reading. You can always type the details.'
+
 const MANUAL_REASON: Record<ManualReasonKey, string> = {
   unread: UNREAD,
-  no_invite: 'AI label reading is for invited testers, so the photo was not sent to the AI service. Enter the details below.',
+  no_invite:
+    'Sign in with Google on the Home screen to use AI label reading. The photo was not sent to the AI service. You can always type the details.',
   tester_limit: 'You have used today’s AI scans, so the photo was not sent to the AI service. Enter the details below, or scan again tomorrow.',
   daily_limit: 'Keeply has reached today’s AI scan limit, so the photo was not sent to the AI service. Enter the details below, or scan again tomorrow.',
   ai_unavailable: 'AI label reading is unavailable right now. Enter the details below.',
@@ -81,15 +84,15 @@ function useScanAccess(accessToken: () => Promise<string | null>, accountKey: st
 }
 
 // A refusal already known before the photo is taken, so the photo is not uploaded at all.
-function knownDenial(access: ScanAccess | null): AccessDenial | null {
+function knownDenial(access: ScanAccess | null, signedIn: boolean): AccessDenial | null {
   if (!access?.ai) return null
-  if (access.access === 'no_invite') return 'no_invite'
+  if (access.access === 'no_invite' && !signedIn) return 'no_invite'
   if (access.access === 'invited' && access.testerLeft <= 0) return 'tester_limit'
   if (access.access === 'invited' && access.globalLeft <= 0) return 'daily_limit'
   return null
 }
 
-function ScanAccessNote({ access }: { access: ScanAccess | null }) {
+function ScanAccessNote({ access, signedIn }: { access: ScanAccess | null; signedIn: boolean }) {
   if (!access?.ai) return null
   if (access.access === 'invited') {
     const left = Math.min(access.testerLeft, access.globalLeft)
@@ -99,11 +102,10 @@ function ScanAccessNote({ access }: { access: ScanAccess | null }) {
       </p>
     )
   }
-  if (access.access === 'no_invite') {
+  if (access.access === 'no_invite' && !signedIn) {
     return (
       <p className="notice notice--warning" role="status">
-        AI label reading is for invited testers. <Link href="/invite">Have an invite code?</Link> You can still take a photo
-        and type the details.
+        {SIGN_IN_FOR_AI} <Link href="/invite">Have an invite code?</Link>
       </p>
     )
   }
@@ -117,6 +119,8 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
   const { addAppliance, track, accessToken, account } = usePlan()
   const recognizer = useMemo(() => injected ?? httpRecognizer(accessToken), [injected, accessToken])
   const access = useScanAccess(accessToken, account ? JSON.stringify(account) : '')
+  const signedIn = account?.kind === 'google'
+  const anonymousWithoutAccess = access?.ai === true && access.access === 'no_invite'
   const [step, setStep] = useState<Step>({ kind: 'capture' })
   const [error, setError] = useState<string | null>(null)
   const [recovery, setRecovery] = useState<NoPlanRecovery | null>(null)
@@ -137,7 +141,7 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
     // browser could not decode it, the owner types the details instead.
     const reencoded = prepared !== file
     // An "other" or unreadable answer is too uncertain to claim anything; both get the same neutral message.
-    const denied = knownDenial(access)
+    const denied = knownDenial(access, signedIn)
     const { identification: proposal, notice }: RecognitionResult = denied
       ? { identification: null, notice: denied }
       : reencoded
@@ -164,16 +168,19 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
   if (step.kind === 'capture') {
     return (
       <section className="aster-glass form-panel" aria-label="Photograph the label">
-        <ScanAccessNote access={access} />
+        <ScanAccessNote access={access} signedIn={signedIn} />
         <p className="form-intro">
           Open the appliance door (or panel) and photograph the rating label. It shows the manufacturer
           and model number. Keeply may send the photo to an AI service to suggest the details, and does not keep it; you
           always confirm them.
         </p>
-        <p className="settings-footnote">
-          AI scans require an invite and daily limits apply. You can manage your MiniMax key in{' '}
-          <Link href="/settings/ai">AI settings</Link>.
-        </p>
+        {signedIn ? (
+          <p className="settings-footnote">
+            Daily limits apply to AI scans. You can manage your MiniMax key in <Link href="/settings/ai">AI settings</Link>.
+          </p>
+        ) : account && !anonymousWithoutAccess ? (
+          <p className="settings-footnote">{SIGN_IN_FOR_AI}</p>
+        ) : null}
         <label className="aster-btn aster-btn--primary full-width file-button">
           Take or choose a photo
           <input
