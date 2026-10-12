@@ -110,11 +110,12 @@ const REASON_COPY: Record<PlanFallbackReason, { eyebrow: string; title: string; 
     body:
       'Keeply could not reach its own search service. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
+  // Older rows have no stored outcome. Say only what the tasks are. Never claim the search
+  // found nothing: that reason belongs to a saved no_results outcome.
   no_proposal_meta: {
     eyebrow: 'General guidance',
-    title: 'No manufacturer manual found for this model',
-    body:
-      'Keeply could not find a manual for this model. These are general guidance tasks. They are not a manufacturer recommendation.',
+    title: 'Keeply has no record of how this plan was built',
+    body: 'These are general guidance tasks. They are not a manufacturer recommendation.',
   },
 }
 

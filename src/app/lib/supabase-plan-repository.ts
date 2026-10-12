@@ -14,8 +14,9 @@ import type { ProposalMeta } from '@/domain/model'
 import type { PlanRepository } from './plan-repository'
 import { validateNewAppliance, type PlanState } from './plan-state'
 
-// Supabase does not store proposalMeta (no column; schema stays out of scope). Remember the
-// outcome for this browser session so the plan banner can still say why the tasks are general.
+// Stored provenance wins. This map only fills a row that came back empty inside the same
+// repository instance, so the plan just saved can still name its reason if that read missed
+// the column. A reload builds a new repository and reads proposal_meta from the appliance.
 export function rememberProposalMeta(state: PlanState, remembered: ReadonlyMap<string, ProposalMeta>): PlanState {
   if (remembered.size === 0) return state
   let changed = false
@@ -58,10 +59,7 @@ export function createSupabasePlanRepository({
       const { data } = await db.auth.getSession()
       return data.session?.access_token ?? null
     },
-    async addAppliance(input, proposals, _meta?: ProposalMeta | null) {
-      // KEE-43: there is still no proposalMeta column. Remember the outcome on this repository
-      // so the plan the owner just opened can name the real reason. A later full reload, which
-      // builds a new repository, falls back to the generic banner again.
+    async addAppliance(input, proposals, meta: ProposalMeta | null = null) {
       const error = validateNewAppliance(input)
       if (error) throw new Error(error)
       await ready()
@@ -69,8 +67,9 @@ export function createSupabasePlanRepository({
         db,
         { manufacturer: input.manufacturer.trim(), model: input.model, serialNumber: input.serialNumber, confidence: input.confidence ?? null },
         proposals,
+        meta,
       )
-      if (_meta) rememberedMeta.set(applianceId, _meta)
+      if (meta) rememberedMeta.set(applianceId, meta)
       return { state: await load(), applianceId }
     },
     async decide(_applianceId, taskId, decision) {

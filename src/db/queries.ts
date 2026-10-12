@@ -1,13 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { LocalDate } from '@/domain/dates'
-import type { TaskProposal } from '@/domain/model'
+import type { ProposalMeta, TaskProposal } from '@/domain/model'
 import type { Decision } from '@/domain/plan'
 import { fromProposal, type ApplianceTree } from './rows'
 
 // Every Keeply read and write against Supabase. Each call runs as the signed-in user, so
-// row-level security scopes it to their own dishwashers. (KEE-60 kept this comment verbatim:
-// the underlying schema is unchanged, only the UI copy and the proposer's fallback policy
-// changed.)
+// row-level security scopes it to their own appliances. add_appliance also stores the
+// proposer's outcome (RF-352) so a reload can show the same plan banner.
 
 function check<T>({ data, error }: { data: T | null; error: { message: string } | null }): T {
   if (error) throw new Error(`Supabase: ${error.message}`)
@@ -28,7 +27,12 @@ export async function loadApplianceTree(db: SupabaseClient, applianceId: string)
 export type NewAppliance = { manufacturer: string; model: string; serialNumber: string; confidence: number | null }
 
 // One transaction: the dishwasher never exists without its proposed tasks.
-export async function addAppliance(db: SupabaseClient, input: NewAppliance, proposals: readonly TaskProposal[]): Promise<string> {
+export async function addAppliance(
+  db: SupabaseClient,
+  input: NewAppliance,
+  proposals: readonly TaskProposal[],
+  meta: ProposalMeta | null = null,
+): Promise<string> {
   return check(
     await db.rpc('add_appliance', {
       p_manufacturer: input.manufacturer,
@@ -36,6 +40,7 @@ export async function addAppliance(db: SupabaseClient, input: NewAppliance, prop
       p_serial_number: input.serialNumber,
       p_identification_confidence: input.confidence,
       p_tasks: proposals.map(fromProposal),
+      p_proposal_meta: meta,
     }),
   ) as string
 }

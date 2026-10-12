@@ -1,7 +1,8 @@
-import type { Appliance, ApplianceRecord, MaintenanceTask, TaskProposal } from '@/domain/model'
+import type { Appliance, ApplianceRecord, MaintenanceTask, ProposalMeta, TaskProposal } from '@/domain/model'
 import { decodeSourceLocation, encodeSourceLocation } from '@/domain/model-family'
 
-// Row shapes as stored in supabase/migrations/20261005090000_mvp_schema.sql.
+// Row shapes as stored in supabase/migrations. proposal_meta landed in
+// 20261011120000_proposal_meta.sql (RF-352).
 
 export type ApplianceRow = {
   id: string
@@ -13,6 +14,8 @@ export type ApplianceRow = {
   approved_at: string | null
   start_date: string | null
   created_at: string
+  // Null on rows saved before RF-352. Unknown provenance, not "no manual found".
+  proposal_meta: unknown
 }
 
 export type TaskRow = {
@@ -74,15 +77,48 @@ export function toAppliance(row: ApplianceRow): Appliance {
   }
 }
 
+const PROPOSAL_FALLBACKS = ['exact', 'similar', 'general'] as const
+const PROPOSAL_OUTCOMES = [
+  'ok',
+  'no_results',
+  'quota_exhausted',
+  'fetch_failed',
+  'extraction_unavailable',
+  'unreadable',
+  'no_text',
+  'timeout',
+  'unavailable',
+  'no_plan',
+] as const
+
+function isOneOf<T extends string>(value: unknown, allowed: readonly T[]): value is T {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value)
+}
+
+// A stored document that is missing or the wrong shape is unknown provenance. Never invent
+// a search outcome from it: that is what made old rows say "no manufacturer manual found".
+function proposalMetaFromRow(value: unknown): ProposalMeta | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const meta = value as Record<string, unknown>
+  if (!isOneOf(meta.fallback, PROPOSAL_FALLBACKS)) return null
+  if (!isOneOf(meta.searchOutcome, PROPOSAL_OUTCOMES)) return null
+  if (typeof meta.searched !== 'boolean') return null
+  if (meta.searchReason !== null && typeof meta.searchReason !== 'string') return null
+  return {
+    fallback: meta.fallback,
+    searchOutcome: meta.searchOutcome,
+    searchReason: meta.searchReason,
+    searched: meta.searched,
+  }
+}
+
 export function toApplianceRecord(tree: ApplianceTree): ApplianceRecord {
   return {
     appliance: toAppliance(tree),
     tasks: [...tree.maintenance_tasks].sort((a, b) => a.position - b.position).map(toTask),
     approvedAt: tree.approved_at,
     startDate: tree.start_date,
-    // KEE-43: the Supabase schema does not yet persist proposalMeta; the plan page falls back
-    // to a generic "we could not find a manual" message in that case.
-    proposalMeta: null,
+    proposalMeta: proposalMetaFromRow(tree.proposal_meta),
   }
 }
 
