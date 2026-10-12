@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithPlan, testRepository } from './test-utils'
 import { PlanReview } from './appliances/[id]/plan/plan-review'
@@ -387,5 +387,66 @@ describe('PlanReview — fallback banner when the search cannot find a manual', 
     expect(banner).not.toHaveTextContent(/no manufacturer manual found/i)
     expect(banner).not.toHaveTextContent(/could not find a manual/i)
     expect(screen.queryByText(/found no guidance for your exact model/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('PlanReview — calendar write progress', () => {
+  it('shows progress after Approve until the calendar write finishes, then opens the appliance', async () => {
+    const repo = testRepository()
+    await repo.addAppliance({ manufacturer: 'Bosch', model: 'SMS6ZCI49E', serialNumber: '' }, [VERIFIED_PROPOSAL, SIMILAR_PROPOSAL])
+    await repo.decide('app-1', 'task-1', 'accepted')
+    await repo.decide('app-1', 'task-2', 'accepted')
+
+    const calls: string[] = []
+    let releaseWrite: (response: Response) => void = () => {}
+    const write = new Promise<Response>((resolve) => {
+      releaseWrite = resolve
+    })
+    stubFetch(async (url) => {
+      calls.push(url)
+      if (url === '/api/calendar/status') return Response.json({ configured: true, connected: true })
+      if (url === '/api/calendar/events') return write
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo)
+
+    const approve = await screen.findByRole('button', { name: 'Approve and add 2 tasks to Google Calendar' })
+    fireEvent.click(approve)
+    fireEvent.click(approve)
+
+    const progress = await screen.findByRole('status')
+    expect(progress).toHaveTextContent('Adding 2 tasks to Google Calendar…')
+    expect(progress).toHaveAttribute('aria-live', 'polite')
+    expect(screen.queryByRole('heading', { name: 'This plan is approved.' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'View your appliance' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Approve/ })).not.toBeInTheDocument()
+    expect(push).not.toHaveBeenCalled()
+    await waitFor(() => expect(calls.filter((url) => url === '/api/calendar/events')).toEqual(['/api/calendar/events']))
+
+    releaseWrite(
+      Response.json({
+        results: [
+          { taskId: 'task-1', ok: true, eventId: 'evt-task-1' },
+          { taskId: 'task-2', ok: true, eventId: 'evt-task-2' },
+        ],
+      }),
+    )
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/appliances/app-1?approved=calendar'))
+    expect(push).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the approved screen when the plan was already approved', async () => {
+    const repo = testRepository()
+    await repo.addAppliance({ manufacturer: 'Bosch', model: 'SMS6ZCI49E', serialNumber: '' }, [VERIFIED_PROPOSAL, SIMILAR_PROPOSAL])
+    await repo.decide('app-1', 'task-1', 'accepted')
+    await repo.decide('app-1', 'task-2', 'rejected')
+    await repo.approve('app-1', '2026-10-05')
+    stubCalendarConfigured()
+    renderWithPlan(<PlanReview applianceId="app-1" />, repo)
+
+    expect(await screen.findByRole('heading', { name: 'This plan is approved.' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'View your appliance' })).toHaveAttribute('href', '/appliances/app-1')
+    expect(screen.queryByText(/Adding .* to Google Calendar/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Approve/ })).not.toBeInTheDocument()
   })
 })

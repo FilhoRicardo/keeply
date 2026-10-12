@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { applianceName } from '@/domain/calendar-event'
 import { isLocalDate } from '@/domain/dates'
 import { approvalBlockers } from '@/domain/plan'
@@ -44,6 +44,7 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
   const [calendar, setCalendar] = useState<CalendarStatus | null>(null)
   const [startDate, setStartDate] = useState(today)
   const [busy, setBusy] = useState(false)
+  const approving = useRef(false)
 
   useEffect(() => {
     fetchCalendarStatus().then(setCalendar)
@@ -52,6 +53,22 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
   if (!state) return <LoadingPanel />
   const record = findRecord(state, applianceId)
   if (!record) return <NotFoundPanel />
+
+  // Approval sets approvedAt before the calendar writes finish. Stay on this progress
+  // state until navigation; a later visit (busy is false) still uses the screen below.
+  if (record.approvedAt && busy) {
+    const acceptedCount = record.tasks.filter((task) => task.status === 'accepted').length
+    const progress = calendar?.connected
+      ? `Adding ${acceptedCount} ${acceptedCount === 1 ? 'task' : 'tasks'} to Google Calendar…`
+      : 'Saving your plan…'
+    return (
+      <div className="empty-state aster-inner" aria-busy="true">
+        <p className="form-progress" role="status" aria-live="polite">
+          {progress}
+        </p>
+      </div>
+    )
+  }
 
   if (record.approvedAt) {
     return (
@@ -74,12 +91,15 @@ export function PlanReview({ applianceId }: { applianceId: string }) {
   const fallbackReason = planFallbackReason(record.proposalMeta)
 
   async function onApprove() {
+    if (approving.current) return
+    approving.current = true
     setBusy(true)
     let approved
     try {
       approved = await approve(applianceId, startDate)
     } catch {
       // Nothing was approved and nothing was written; the provider's banner shows why.
+      approving.current = false
       setBusy(false)
       return
     }
