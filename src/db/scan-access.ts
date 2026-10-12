@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-// Invited-tester access to AI scanning, enforced in Postgres (migration 20261005100000).
+// Who may use a billable AI scan, enforced in Postgres (migration 20261012120000).
+// A Google sign-in (not an anonymous session) or a live invite. The status stays 'invited'
+// for either, which is what the scan screen already understands.
 
 export type ReserveResult = 'allowed' | 'signed_out' | 'no_invite' | 'tester_limit' | 'daily_limit'
 export type RedeemResult = 'invited' | 'already_invited' | 'invalid' | 'signed_out'

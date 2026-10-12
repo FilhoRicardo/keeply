@@ -20,6 +20,8 @@ describe('InviteForm', () => {
     )
     const events: { name: string }[] = []
     renderWithPlan(<InviteForm />, testRepository(), (e) => void events.push(e))
+    expect(screen.getByText(/Sign in with Google on the Home screen to use AI label reading/)).toBeInTheDocument()
+    expect(screen.queryByText(/invited testers/i)).not.toBeInTheDocument()
     expect(screen.getByLabelText('Invite code')).toHaveValue('KP-1234-5678-9ABC-DEF0')
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Accept invite' })))
     expect(bodies).toEqual([{ code: 'KP-1234-5678-9ABC-DEF0' }])

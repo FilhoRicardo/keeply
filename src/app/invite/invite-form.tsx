@@ -48,12 +48,13 @@ export function InviteForm() {
   return (
     <form className="aster-glass form-panel" onSubmit={accept} noValidate>
       <p className="form-intro">
-        Keeply can read your appliance’s label from a photo. During testing this is for invited testers, with a few AI
-        scans per day. You can always type the details instead.
+        Sign in with Google on the Home screen to use AI label reading. You can always type the details. If you are not
+        signed in, an invite code still turns AI on for this browser.
       </p>
       {account?.kind === 'anonymous' && (
         <p className="form-intro">
-          Tip: sign in with Google on the Home screen first, so your invite stays with you on other devices.
+          Tip: sign in with Google on the Home screen and you will not need a code. A code on this signed-out session
+          stays in this browser only.
         </p>
       )}
       <label className="field">

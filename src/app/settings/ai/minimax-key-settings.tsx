@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import Link from 'next/link'
 import { usePlan } from '../../lib/plan-context'
 
 type KeyStatus = { configured: boolean; available: boolean; provider: 'minimax' }
@@ -199,9 +198,8 @@ function GoogleMiniMaxKeySettings({ accessToken }: { accessToken: () => Promise<
 
       <section className="settings-notes aster-inner" aria-label="AI access details">
         <h3>Access and usage</h3>
-        <p>An invite is still required for AI scans. Invited testers get a few AI scans per day, within a shared daily limit.</p>
-        <p>Saving a key does not bypass invite access or these limits. If AI is unavailable, you can always enter appliance details manually.</p>
-        <Link href="/invite">Have an invite code?</Link>
+        <p>Anyone signed in with Google can use AI label reading, within a personal daily limit and a shared daily cap. The owner’s scans do not use the shared cap.</p>
+        <p>Saving a key does not bypass these limits. If AI is unavailable, you can always enter appliance details manually.</p>
       </section>
     </div>
   )

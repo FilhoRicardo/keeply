@@ -19,9 +19,9 @@ const { KEEPLY_POSTGREST_URL, KEEPLY_JWT_SECRET, KEEPLY_INTEGRATION_DB } = proce
 const OWNER = '00000000-0000-4000-8000-00000000000a'
 const OTHER = '00000000-0000-4000-8000-00000000000b'
 
-function jwt(sub: string) {
+function jwt(sub: string, claims: { is_anonymous?: boolean } = {}) {
   const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url')
-  const body = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 600 })}`
+  const body = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 600, ...claims })}`
   return `${body}.${createHmac('sha256', KEEPLY_JWT_SECRET!).update(body).digest('base64url')}`
 }
 
@@ -276,7 +276,9 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase usage sink', () => {
 
 describe.skipIf(!KEEPLY_POSTGREST_URL)('Scan invites and limits under concurrency', () => {
   const psql = (sql: string) => execFileSync('psql', [KEEPLY_INTEGRATION_DB!, '-tAc', sql]).toString().trim()
-  const dbFor = (user: string) => createClient(supabaseUrl, jwt(user), { auth: { persistSession: false, autoRefreshToken: false } })
+  // Anonymous sessions: a Google sign-in (is_anonymous not true) may scan without redeeming.
+  const dbFor = (user: string) =>
+    createClient(supabaseUrl, jwt(user, { is_anonymous: true }), { auth: { persistSession: false, autoRefreshToken: false } })
   // Leaves the database as it found it, so the test can be rerun the same day.
   const reset = () =>
     psql(

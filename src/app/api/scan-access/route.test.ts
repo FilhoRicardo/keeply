@@ -48,6 +48,11 @@ describe('GET /api/scan-access', () => {
     expect(await (await get()).json()).toEqual({ ai: true, access: 'invited', testerLeft: 4, globalLeft: 90 })
   })
 
+  it('reports a Google sign-in’s allowance with the personal and shared counts', async () => {
+    configure(() => Response.json({ status: 'invited', tester_left: 10, global_left: 12 }))
+    expect(await (await get()).json()).toEqual({ ai: true, access: 'invited', testerLeft: 10, globalLeft: 12 })
+  })
+
   it('reports no invite, and is unavailable without a session', async () => {
     const calls = configure(() => Response.json({ status: 'no_invite', tester_left: 5, global_left: 100 }))
     expect(await (await get()).json()).toEqual({ ai: true, access: 'no_invite' })
