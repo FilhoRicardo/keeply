@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { e2eFixturesEnabled } from '@/e2e-fixtures/guard'
 import { planSearchLive, recordPlanSearch, runPlan, type PlanResponse } from './orchestration'
 import { admitScan } from '../../lib/scan-gate'
 import { bearerToken, enforceJsonContentType, enforceSameOrigin } from '../../lib/calendar-session'
@@ -44,8 +45,13 @@ async function gate(request: NextRequest, env: Record<string, string | undefined
   if (!bearerToken(request.headers.get('authorization'))) {
     // The visitor must be signed in (anonymous or full) to spend a tester slot. Without a session
     // we refuse before any provider call; Manual without a session is still allowed.
+    // The full-journey e2e stores the plan on the device, so it has no Supabase session. The
+    // fixture switch lets that request reach admitScan. Production ignores the switch, and
+    // admitScan still applies the invite gate unless scan access is open.
     if (!env.BRAVE_SEARCH_API_KEY?.trim()) return null
-    return NextResponse.json({ error: 'plan_denied', reason: 'signed_out' }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
+    if (!e2eFixturesEnabled(env)) {
+      return NextResponse.json({ error: 'plan_denied', reason: 'signed_out' }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
+    }
   }
   const decision = await admitScan(request, env)
   if (decision !== 'allowed') {

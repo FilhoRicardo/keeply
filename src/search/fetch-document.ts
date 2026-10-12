@@ -2,6 +2,7 @@ import 'server-only'
 import { request as httpsRequest } from 'node:https'
 import { lookup as dnsLookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
+import { e2eManualAddresses, e2eManualResponse } from '@/e2e-fixtures/documents'
 import { isBlockedAddress } from './ip'
 
 export type DocType = 'pdf' | 'html'
@@ -43,8 +44,11 @@ const MAX_REDIRECTS = 3
 const USER_AGENT = 'Keeply/0.1 (manual lookup; +https://keeply.app)'
 
 const defaultDeps: FetchDeps = {
-  resolve: async (host) => (await dnsLookup(host, { all: true })).map((a) => a.address),
-  fetch: (url, init) => pinnedHttpsFetch(url, init),
+  resolve: async (host) => e2eManualAddresses(host) ?? (await dnsLookup(host, { all: true })).map((a) => a.address),
+  fetch: (url, init) => {
+    const fixture = e2eManualResponse(url)
+    return fixture ? Promise.resolve(fixture) : pinnedHttpsFetch(url, init)
+  },
 }
 
 class Stop extends Error {

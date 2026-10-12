@@ -89,6 +89,31 @@ describe('POST /api/plan', () => {
     expect(mockRunPlan).not.toHaveBeenCalled()
   })
 
+  it('still refuses an unsigned Brave search in production when the e2e fixture flag is set', async () => {
+    mockPlanSearchLive.mockReturnValueOnce(true)
+    vi.stubEnv('BRAVE_SEARCH_API_KEY', 'server-key')
+    vi.stubEnv('KEEPLY_E2E_FIXTURES', '1')
+    vi.stubEnv('VERCEL_ENV', 'production')
+    const response = await post({ manufacturer: 'Bosch', model: 'X' })
+    expect(response.status).toBe(403)
+    expect(await response.json()).toEqual({ error: 'plan_denied', reason: 'signed_out' })
+    expect(admitScanMock).not.toHaveBeenCalled()
+    expect(mockRunPlan).not.toHaveBeenCalled()
+  })
+
+  it('lets the fixture e2e reach admitScan without a Supabase session', async () => {
+    mockPlanSearchLive.mockReturnValueOnce(true)
+    vi.stubEnv('BRAVE_SEARCH_API_KEY', 'server-key')
+    vi.stubEnv('KEEPLY_E2E_FIXTURES', '1')
+    vi.stubEnv('VERCEL_ENV', '')
+    admitScanMock.mockResolvedValueOnce('allowed')
+    mockRunPlan.mockResolvedValueOnce({ proposals: [], fallback: 'general', searchOutcome: 'no_results', searchReason: null })
+    const response = await post({ manufacturer: 'Bosch', model: 'SMS6ZCI49E' })
+    expect(response.status).toBe(200)
+    expect(admitScanMock).toHaveBeenCalledOnce()
+    expect(mockRunPlan).toHaveBeenCalledOnce()
+  })
+
   it('refuses when the caller has no remaining scan quota', async () => {
     mockPlanSearchLive.mockReturnValueOnce(true)
     admitScanMock.mockResolvedValueOnce('daily_limit')

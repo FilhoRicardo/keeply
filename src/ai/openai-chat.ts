@@ -1,4 +1,5 @@
 import 'server-only'
+import { withE2eFixtures } from '@/e2e-fixtures/edge-fetch'
 import { EXTRACTION_INSTRUCTIONS, type ExtractedPage } from './extraction'
 import { IDENTITY_INSTRUCTIONS, type LabelPhoto } from './identity'
 
@@ -137,7 +138,7 @@ export async function completeChat(input: {
   // When set, replaces the per-call timeout so a retry stays inside one deadline.
   signal?: AbortSignal
 }): Promise<ChatCompletion> {
-  const fetchImpl = input.fetchImpl ?? fetch
+  const fetchImpl = withE2eFixtures(input.fetchImpl ?? fetch)
   const response = await fetchImpl(`${input.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {

@@ -1,3 +1,4 @@
+import { withE2eFixtures } from '@/e2e-fixtures/edge-fetch'
 import type { CalendarEventDraft } from '@/domain/calendar-event'
 import type { CalendarWriter } from './writer'
 
@@ -60,9 +61,10 @@ export function googleCalendarWriter({
   calendarId?: string
   fetch?: Fetch
 }): CalendarWriter {
+  const sendFetch = withE2eFixtures(fetchImpl)
   const eventsUrl = `${EVENTS_URL}/${encodeURIComponent(calendarId)}/events`
   const send = (method: 'POST' | 'PUT', url: string, body: unknown) =>
-    fetchImpl(url, {
+    sendFetch(url, {
       method,
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -111,7 +113,7 @@ export async function exchangeGoogleCode(
   code: string,
   fetchImpl: Fetch = fetch,
 ): Promise<{ accessToken: string; expiresIn: number }> {
-  const response = await fetchImpl(TOKEN_URL, {
+  const response = await withE2eFixtures(fetchImpl)(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -132,7 +134,7 @@ export async function exchangeGoogleCode(
 
 // Best effort: Google returns 400 for tokens that are already invalid.
 export async function revokeGoogleToken(token: string, fetchImpl: Fetch = fetch): Promise<void> {
-  await fetchImpl('https://oauth2.googleapis.com/revoke', {
+  await withE2eFixtures(fetchImpl)('https://oauth2.googleapis.com/revoke', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ token }),
