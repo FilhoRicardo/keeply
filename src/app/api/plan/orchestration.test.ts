@@ -62,9 +62,9 @@ describe('extractTasksFromProvider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('keeps using MiniMax when both keys are set', async () => {
+  it('uses OpenRouter first when both keys are set', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      expect(String(input)).toContain('api.minimax.io')
+      expect(String(input)).toContain('openrouter.ai')
       return Response.json({ choices: [{ message: { content: '{"candidates":[]}' } }] })
     })
     vi.stubGlobal('fetch', fetchMock)
