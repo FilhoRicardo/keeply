@@ -33,7 +33,7 @@ Do not invent a new location; add it here first.
 | `OPENROUTER_MODEL` | `.env.local` / Vercel | no (defaults to `openrouter/free`) |
 | `OPENROUTER_DATA_COLLECTION` | `.env.local` / Vercel (optional) | no (`deny` default; `allow` opts in to providers that may train on prompts) |
 | `KEEPLY_SCAN_ACCESS` | `.env.local` / Vercel | no (scan-access mode; "invite" is the safe default) |
-| `KEEPLY_E2E_FIXTURES` | Playwright scan server only (`.env.local` if you run that server yourself) | no (`1` serves canned OpenRouter/MiniMax, Brave, manual and Google responses). Ignored when `VERCEL_ENV=production`, same rule as `KEEPLY_SCAN_ACCESS=open`. Do not set it on Vercel. |
+| `KEEPLY_E2E_FIXTURES` | Playwright scan server only (`.env.local` if you run that server yourself) | no (`1` serves canned OpenRouter/MiniMax, Brave, manual and Google responses). Ignored on every Vercel deployment (production and preview). Do not set it on Vercel. |
 
 ### Local development (`.env.local`)
 

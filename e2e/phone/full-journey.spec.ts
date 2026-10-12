@@ -6,7 +6,7 @@ import { toRRule } from '../../src/domain/recurrence'
 // RF-353. The production server on port 3124 runs the real identify route, plan orchestration,
 // evidence classification and calendar route. OpenRouter, Brave, the manual download and
 // Google token/event calls are answered at the server's network edge (KEEPLY_E2E_FIXTURES,
-// ignored when VERCEL_ENV=production). This spec does not fulfill /api/*.
+// ignored on any Vercel deployment). This spec does not fulfill /api/*.
 //
 // Google's consent screen is a browser navigation. The test sends that navigation back to
 // Keeply's callback; the server then exchanges the code and writes events itself.

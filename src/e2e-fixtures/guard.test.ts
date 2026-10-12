@@ -7,10 +7,11 @@ describe('e2eFixturesEnabled', () => {
     expect(e2eFixturesEnabled({ KEEPLY_E2E_FIXTURES: 'true' })).toBe(false)
     expect(e2eFixturesEnabled({ KEEPLY_E2E_FIXTURES: 'open' })).toBe(false)
     expect(e2eFixturesEnabled({ KEEPLY_E2E_FIXTURES: '1' })).toBe(true)
-    expect(e2eFixturesEnabled({ KEEPLY_E2E_FIXTURES: '1', VERCEL_ENV: 'preview' })).toBe(true)
   })
 
-  it('is ignored in Vercel Production', () => {
+  it('is ignored on every Vercel deployment', () => {
     expect(e2eFixturesEnabled({ KEEPLY_E2E_FIXTURES: '1', VERCEL_ENV: 'production' })).toBe(false)
+    expect(e2eFixturesEnabled({ KEEPLY_E2E_FIXTURES: '1', VERCEL_ENV: 'preview' })).toBe(false)
+    expect(e2eFixturesEnabled({ KEEPLY_E2E_FIXTURES: '1', VERCEL: '1' })).toBe(false)
   })
 })

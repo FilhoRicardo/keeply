@@ -5,7 +5,7 @@ let installed = false
 
 // Catches a server fetch that does not go through withE2eFixtures. Call sites that already
 // wrap their fetch still answer first, so a calendar write is recorded once.
-// Production never wraps fetch: the flag is ignored when VERCEL_ENV=production.
+// A Vercel deployment never wraps fetch: the flag is ignored there (production and preview).
 export function installE2eFetch(): void {
   if (installed || !e2eFixturesEnabled()) return
   installed = true
