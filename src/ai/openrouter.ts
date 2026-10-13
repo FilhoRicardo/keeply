@@ -96,7 +96,8 @@ async function callOpenRouter(
   }
   let result = await once()
   if (!result.ok && result.status === 429 && !signal.aborted) result = await once()
-  // 429 (after one retry), 402, 5xx, and a 404 when data_collection: deny leaves no endpoint
+  // 429 (after one retry), 402, 5xx, a 404 when data_collection: deny leaves no endpoint, and the
+  // same codes reported inside a 200 reply (a provider that timed out after the stream began)
   // are all provider failures. The response body is not copied onto the error: it can echo the prompt.
   if (!result.ok) throw new OpenRouterError(`OpenRouter rejected the request (${result.status})`, result.status)
   return result.content

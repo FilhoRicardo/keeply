@@ -294,6 +294,31 @@ describe('identifyWithOpenRouter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('maps an error reported inside a 200 reply to a provider failure, not an unreadable label', async () => {
+    // Live 2026-10-13: free routes answered HTTP 200 with only an `error` object.
+    for (const error of [
+      { message: 'Provider timed out after 11748ms', code: 504, metadata: { error_type: 'timeout' } },
+      { message: 'JSON error injected into SSE stream', code: 502, metadata: { error_type: 'provider_unavailable' } },
+    ]) {
+      const fetchMock = vi.fn(async () => Response.json({ id: 'gen-1', error }))
+      const caught = await identifyWithOpenRouter(config, photo, fetchMock as unknown as typeof fetch).catch((e: unknown) => e)
+      expect(caught).toBeInstanceOf(OpenRouterError)
+      expect(caught).toMatchObject({ status: error.code })
+      expect((caught as Error).message).not.toContain(error.message)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  it('retries a 429 reported inside a 200 reply once', async () => {
+    const identity = '{"applianceType":"washing machine","typeEvidence":"Washing machine","manufacturer":"Electrolux","model":"EWS1477FDW","serialNumber":"740 00049","confidence":0.95}'
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ error: { code: 429, message: 'rate limited' } }))
+      .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: identity } }] }))
+    expect(await identifyWithOpenRouter(config, photo, fetchMock as unknown as typeof fetch)).toMatchObject({ model: 'EWS1477FDW' })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('maps a timeout to a provider failure', async () => {
     const fetchMock = vi.fn(async () => {
       throw Object.assign(new Error('The operation was aborted'), { name: 'TimeoutError' })

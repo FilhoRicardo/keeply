@@ -165,9 +165,17 @@ export async function completeChat(input: {
     return { ok: false, status: response.status, content: null }
   }
   const body = (await response.json()) as {
-    choices?: { message?: { content?: unknown } }[]
+    choices?: { message?: { content?: unknown }; error?: { code?: unknown } }[]
+    // OpenRouter reports a provider failure after the 200 status line was sent (a timeout, or an
+    // error injected into the stream) as an `error` object, with no answer.
+    error?: { code?: unknown }
     // MiniMax sometimes reports a failure here on HTTP 200. Callers decide whether that is fatal.
     base_resp?: { status_code?: number; status_msg?: string }
+  }
+  const failure = body.error ?? body.choices?.[0]?.error
+  if (failure) {
+    const code = typeof failure.code === 'number' && Number.isInteger(failure.code) ? failure.code : 502
+    return { ok: false, status: code, content: null }
   }
   return {
     ok: true,
