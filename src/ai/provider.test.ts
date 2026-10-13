@@ -76,6 +76,18 @@ describe('selectProvider', () => {
     expect(hosts).toEqual(['openrouter.ai', 'openrouter.ai', 'api.minimax.io', 'openrouter.ai', 'openrouter.ai', 'api.minimax.io'])
   })
 
+  it('asks MiniMax when OpenRouter reports a provider error inside a 200 reply', async () => {
+    const identity = '{"applianceType":"washing machine","typeEvidence":"Washing machine","manufacturer":"Electrolux","model":"EWS1477FDW","serialNumber":"740 00049","confidence":0.95}'
+    const fetchMock = vi.fn(async (url: string) =>
+      url.startsWith('https://openrouter.ai')
+        ? Response.json({ error: { code: 504, message: 'Provider timed out after 11748ms' } })
+        : Response.json({ choices: [{ message: { content: identity } }] }),
+    )
+    const provider = selectProvider({ env: { OPENROUTER_API_KEY: 'or-key', MINIMAX_API_KEY: 'mm-key' }, fetch: fetchMock as unknown as typeof fetch })
+    expect(await provider.identifyAppliance({ bytes: new Uint8Array([1]), mimeType: 'image/jpeg' })).toMatchObject({ model: 'EWS1477FDW' })
+    expect(fetchMock.mock.calls.map(([url]) => new URL(url as string).hostname)).toEqual(['openrouter.ai', 'api.minimax.io'])
+  })
+
   it('does not ask MiniMax when OpenRouter answers, even with nothing read', async () => {
     const fetchMock = vi.fn(async () => Response.json({ choices: [{ message: { content: 'no label here' } }] }))
     const provider = selectProvider({
