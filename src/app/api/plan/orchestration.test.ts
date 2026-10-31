@@ -8,14 +8,14 @@ afterEach(() => {
 describe('extractTasksFromProvider', () => {
   const pages = [{ page: 4, text: 'Clean the filter every month.' }]
 
-  it('is unavailable without calling a provider when MiniMax and OpenRouter are unset', async () => {
+  it('is unavailable without calling a provider when OpenRouter is unset', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     expect(await extractTasksFromProvider({}, { model: 'KEQB7300L', pages })).toBe('unavailable')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('reads the manual with OpenRouter when MiniMax is unset', async () => {
+  it('reads the manual with OpenRouter when configured', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
@@ -62,13 +62,15 @@ describe('extractTasksFromProvider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('uses OpenRouter first when both keys are set', async () => {
+  it('ignores a leftover MiniMax key and still uses OpenRouter only', async () => {
+    const hosts: string[] = []
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      expect(String(input)).toContain('openrouter.ai')
+      hosts.push(new URL(String(input)).hostname)
       return Response.json({ choices: [{ message: { content: '{"candidates":[]}' } }] })
     })
     vi.stubGlobal('fetch', fetchMock)
     expect(await extractTasksFromProvider({ MINIMAX_API_KEY: 'mm', OPENROUTER_API_KEY: 'or' }, { model: 'KEQB7300L', pages })).toEqual([])
+    expect(hosts).toEqual(['openrouter.ai'])
   })
 })
 

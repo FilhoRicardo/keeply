@@ -3,8 +3,9 @@ import { withE2eFixtures } from '@/e2e-fixtures/edge-fetch'
 import { EXTRACTION_INSTRUCTIONS, type ExtractedPage } from './extraction'
 import { IDENTITY_INSTRUCTIONS, type LabelPhoto } from './identity'
 
-// Shared OpenAI-compatible Chat Completions client. MiniMax and OpenRouter both speak this
-// shape; provider-specific headers, body fields and error policy stay in each adapter.
+// Shared OpenAI-compatible Chat Completions client used by OpenRouter. Provider-specific
+// headers, body fields and error policy stay in the OpenRouter adapter.
+
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const
 const MAX_IMAGE_BYTES = 10_000_000
@@ -31,7 +32,6 @@ export type ChatCompletion = {
   // Assistant text with reasoning tags removed. Null when the model returned no text content.
   // A separate reasoning channel is ignored: it is not an answer.
   content: string | null
-  baseResp?: { status_code?: number; status_msg?: string }
 }
 
 export function labelPhotoAccepted(photo: LabelPhoto): boolean {
@@ -169,8 +169,6 @@ export async function completeChat(input: {
     // OpenRouter reports a provider failure after the 200 status line was sent (a timeout, or an
     // error injected into the stream) as an `error` object, with no answer.
     error?: { code?: unknown }
-    // MiniMax sometimes reports a failure here on HTTP 200. Callers decide whether that is fatal.
-    base_resp?: { status_code?: number; status_msg?: string }
   }
   const failure = body.error ?? body.choices?.[0]?.error
   if (failure) {
@@ -181,6 +179,5 @@ export async function completeChat(input: {
     ok: true,
     status: response.status,
     content: messageText(body.choices?.[0]?.message?.content),
-    baseResp: body.base_resp,
   }
 }

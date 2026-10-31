@@ -115,7 +115,7 @@ function buildDeps(args: {
     resolveSource: resolveSourceFromUrl,
     manufacturerDomains: args.manufacturerDomains,
     generalGuidance: () => GENERAL_DISHWASHER_TASKS,
-    aiModel: args.env.MINIMAX_MODEL?.trim() || 'MiniMax-M3',
+    aiModel: args.env.OPENROUTER_MODEL?.trim() || 'openrouter/free',
     signal: args.signal,
   }
 }

@@ -839,11 +839,13 @@ tokens/credentials securely and follow OpenAI's current security
 requirements. If OpenAI changes the feature, only provider A changes;
 Keeply is not redesigned.
 
-Code seam today: `selectProvider()` in `src/ai/provider.ts` (server-only,
-used by `/api/identify`) picks ChatGPT-authorized → BYO key →
-Keeply-hosted → Manual; only Manual is implemented. Any
-AI output is still only a proposal the owner confirms, and evidence
-levels are still enforced by `unsupportedEvidence` and the database.
+Code seam today (RF-357, 2026-10-31): `selectProvider()` in `src/ai/provider.ts`
+(server-only, used by `/api/identify` and manual extraction) picks
+ChatGPT-authorized (not built) → OpenRouter when `OPENROUTER_API_KEY` is set →
+Manual. MiniMax is not selected. A provider failure stays on the honest
+unavailable path; there is no backup provider. Any AI output is still only a
+proposal the owner confirms, and evidence levels are still enforced by
+`unsupportedEvidence` and the database. See §26.
 
 ------------------------------------------------------------------------
 
@@ -937,3 +939,27 @@ integration is part of this change.
 - Manual entry and human Confirm / Edit / Rescan remain available.
 - Deployment requires the credential migration, a server-only encryption
   key and service-role credential; live access changes remain owner setup.
+
+------------------------------------------------------------------------
+
+## 26. OpenRouter only (owner decision, 2026-10-31)
+
+Ricardo asked to retire MiniMax before public release (RF-357, following
+RF-349). OpenRouter is the only AI provider for label reading and
+manufacturer-manual extraction. Manual still works. A failed OpenRouter
+call is an honest unavailable state; nothing else is tried.
+
+- There is no MiniMax provider, backup call, settings screen, or route
+  that accepts a MiniMax key.
+- Ricardo explicitly chose to delete stored MiniMax BYO keys. Migration
+  `20261031120000_drop_ai_credentials.sql` drops the MiniMax-only
+  `public.ai_credentials` table. Production application waits for Codex
+  review and Ricardo's approval; do not apply it from an agent session.
+- Remove leftover `MINIMAX_*` and `KEEPLY_AI_KEY_ENCRYPTION_KEY` from
+  Vercel Production/Preview only after code review and production
+  authorization, then redeploy.
+- Evidence classification, quote verification, scan limits, owner approval,
+  and Calendar behaviour are unchanged.
+
+§23 and §25 record what was decided when MiniMax was the provider. §26
+is the running app.

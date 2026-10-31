@@ -175,9 +175,7 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
           always confirm them.
         </p>
         {signedIn ? (
-          <p className="settings-footnote">
-            Daily limits apply to AI scans. You can manage your MiniMax key in <Link href="/settings/ai">AI settings</Link>.
-          </p>
+          <p className="settings-footnote">Daily limits apply to AI scans.</p>
         ) : account && !anonymousWithoutAccess ? (
           <p className="settings-footnote">{SIGN_IN_FOR_AI}</p>
         ) : null}

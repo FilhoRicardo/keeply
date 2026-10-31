@@ -42,12 +42,12 @@ Wave-2 verification of the post-KEE-43 plan search: photo or manual add → `/ap
 
 ```bash
 # On the host, with a session cookie / signed-in to Vercel Authentication and the owner's .env.local
-# MINIMAX_API_KEY / BRAVE_SEARCH_API_KEY either in the Preview env or local .env.local, and a Supabase
+# OPENROUTER_API_KEY / BRAVE_SEARCH_API_KEY either in the Preview env or local .env.local, and a Supabase
 # session for the owner (the harness reuses the same localStorage / Supabase adapter as the app):
 node scripts/live-plan-check.mjs <base-url> <out-dir> --case <name> \
     --manufacturer "Electrolux" --model "KEQB7300L" \
     [--defect KEE-XX] [--note "free-text note"]
-# `--case` is one of: exact-manual, similar-only, no-manual, scanned-pdf, brave-fail, minimax-fail,
+# `--case` is one of: exact-manual, similar-only, no-manual, scanned-pdf, brave-fail, openrouter-fail,
 # calendar-write. The harness writes <out-dir>/<case>-result.json (browser steps + /api/plan
 # response + screenshots) and <out-dir>/<case>-row.json (the single row to paste into the G10
 # table below). When the runner observes a defect, they file a KEE-… issue, then re-run with
@@ -62,7 +62,7 @@ node scripts/live-plan-check.mjs <base-url> <out-dir> --case <name> \
 3. **No manual found (general guidance).** A model with no manufacturer manual on the first Brave page (e.g. an obscure OEM model number or a typo the search returns empty for). Expect: `proposals` is the three general-guidance tasks, every `evidenceLevel` is `general_guidance`, `fallback: general`, `search_outcome: no_results` (or `fetch_failed` when a candidate was found but could not be read), and the plan page shows the "we did not find a manual" fallback banner. No source link, no quote, no Manufacturer verified. Photo: `docs/screenshots/g10-3-general.png`.
 4. **Scanned-image PDF.** A real manufacturer manual that is a scanned image (no embedded text layer). Expect: `/api/plan` returns `search_outcome: unreadable` for that document, the proposer tries the next Brave candidate, and the final plan is whatever the next candidate yielded — most likely general guidance if no other candidate is readable. The point is that scanned PDFs never silently become verified. Photo: `docs/screenshots/g10-4-scanned.png`.
 5. **Brave fails.** Run the exact-manual case with `BRAVE_SEARCH_API_KEY` removed from the Preview env (or set to a wrong value). Expect: `/api/plan` returns `searchOutcome: no_results` with `searchReason: no_key` (or Brave's HTTP error), `fallback: general`, the three general-guidance tasks, and the plan page shows the fallback banner. No provider call is made. Photo: `docs/screenshots/g10-5-brave-fail.png`.
-6. **MiniMax fails.** Run the exact-manual case with `MINIMAX_API_KEY` removed (or set to a wrong value) but `BRAVE_SEARCH_API_KEY` still set. Expect: Brave finds the manual and the document is read, but the extraction returns `'unavailable'`, so `search_outcome: extraction_unavailable` and `fallback: general`. No partial "Manufacturer verified" task is returned. Photo: `docs/screenshots/g10-6-minimax-fail.png`.
+6. **OpenRouter fails.** Run the exact-manual case with `OPENROUTER_API_KEY` removed (or set to a wrong value) but `BRAVE_SEARCH_API_KEY` still set. Expect: Brave finds the manual and the document is read, but the extraction returns `'unavailable'`, so `search_outcome: extraction_unavailable` and `fallback: general`. No partial "Manufacturer verified" task is returned. (Historical MiniMax-era screenshot name: `docs/screenshots/g10-6-minimax-fail.png`.)
 7. **Calendar write after Approval (runs on the case 1 appliance).** Accept one task, reject the others, set a start date, click Approve. Expect: Keeply shows "Plan approved", the accepted task's `calendar_event_id` in Supabase is the deterministic `kp…` id, the rejected tasks' `calendar_event_id` is NULL, and Google Calendar shows one recurring all-day event from the start date with instructions, the source and the approval line. Photo: `docs/screenshots/g10-7-calendar.png`.
 
 **Pass criteria (the gate is "passed" when all of the following hold):**
@@ -86,7 +86,7 @@ The rows below are the runner's deliverable, not this branch's. The branch (KEE-
 | 3 | no-manual | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _n/a_ | _general_ | _no_results_ | _TBD_ | n/a | _—_ |
 | 4 | scanned-pdf | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _general_ | _unreadable_ | _TBD_ | n/a | _—_ |
 | 5 | brave-fail | _Electrolux / KEQB7300L_ (no key) | _TBD_ | _TBD_ | _TBD_ | _n/a_ | _general_ | _no_results_ | _TBD_ | n/a | _—_ |
-| 6 | minimax-fail | _Electrolux / KEQB7300L_ (no key) | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _general_ | _extraction_unavailable_ | _TBD_ | n/a | _—_ |
+| 6 | openrouter-fail | _Electrolux / KEQB7300L_ (no key) | _TBD_ | _TBD_ | _TBD_ | _TBD_ | _general_ | _extraction_unavailable_ | _TBD_ | n/a | _—_ |
 | 7 | calendar-write | case-1 appliance | — | — | — | — | — | — | — | _TBD_ | _—_ |
 
 ## Open (not yet verified live)

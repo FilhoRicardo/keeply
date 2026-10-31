@@ -56,7 +56,7 @@ describe('G10 row mirror (TS <-> scripts/g10-row.mjs)', () => {
       'no-manual',
       'scanned-pdf',
       'brave-fail',
-      'minimax-fail',
+      'openrouter-fail',
       'calendar-write',
     ])
   })

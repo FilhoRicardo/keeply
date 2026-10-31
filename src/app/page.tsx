@@ -42,9 +42,6 @@ export default function Home() {
             <span aria-hidden="true">＋</span>
             Add manually
           </Link>
-          <Link className="settings-link" href="/settings/ai">
-            AI settings
-          </Link>
         </section>
       </main>
 

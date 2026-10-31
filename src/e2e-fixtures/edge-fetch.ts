@@ -6,7 +6,6 @@ const GOOGLE_CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
 
 const FAKED_HOSTS = new Set([
   'openrouter.ai',
-  'api.minimax.io',
   'api.search.brave.com',
   'oauth2.googleapis.com',
   'www.googleapis.com',
@@ -45,7 +44,7 @@ export function fixtureResponse(input: RequestInfo | URL, init?: RequestInit): R
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
   const body = bodyText(init)
 
-  if (host === 'openrouter.ai' || host === 'api.minimax.io') {
+  if (host === 'openrouter.ai') {
     if (!url.pathname.endsWith('/chat/completions')) return new Response('e2e fixture: unhandled', { status: 404 })
     const vision = body.includes('image_url') || body.includes('Read this appliance label')
     const content = vision ? JSON.stringify(visionReply()) : JSON.stringify(extractionReply())

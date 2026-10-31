@@ -58,4 +58,4 @@ Only the owner can set this flag; visitors cannot read or change invites. Remove
 
 ## Before serving other people
 
-AI for other people needs a key whose terms allow serving other users, and spending controls on that key. See `docs/live-gates.md` G7. The provider order is unchanged: OpenRouter, then MiniMax as backup.
+AI for other people needs a key whose terms allow serving other users, and spending controls on that key. See `docs/live-gates.md` G7. OpenRouter is the sole AI provider (RF-357); Manual always works when it is unset.
