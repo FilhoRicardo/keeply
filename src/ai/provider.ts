@@ -3,8 +3,10 @@ import type { ApplianceIdentity, LabelPhoto } from './identity'
 import type { ExtractedPage, ExtractedTaskCandidate } from './extraction'
 import { extractTasksWithOpenRouter, identifyWithOpenRouter, openrouterConfig } from './openrouter'
 
-// Where AI usage comes from (docs/HANDOFF.md §22). Separate from the Keeply account: being
-// signed in to Keeply never implies the owner authorised any AI usage.
+// Where AI usage comes from (docs/HANDOFF.md §22, §26). Separate from the Keeply account: being
+// signed in to Keeply never implies the owner authorised any AI usage. MiniMax is retired (RF-357):
+// it is not a selectable provider, and a leftover MiniMax key is ignored.
+
 export type AiProviderKind =
   | 'openrouter' // OpenRouter API (server key) — implemented
   | 'chatgpt_authorized' // the owner's ChatGPT plan — after OpenAI's requirements are confirmed
@@ -58,8 +60,9 @@ const notBuilt = (kind: AiProviderKind): AiCandidate => ({
 })
 
 // Preference order: ChatGPT-authorized (not built), then OpenRouter, then other server-keyed
-// providers that are not built, then Manual. MiniMax was retired (RF-357); OpenRouter is the sole
-// implemented AI provider. Manual always works.
+// providers that are not built, then Manual. A refusal from OpenRouter is the answer for that
+// request: there is no backup provider. The caller reports the honest "AI unavailable" path.
+
 export const CANDIDATES: readonly AiCandidate[] = [
   notBuilt('chatgpt_authorized'), // docs/ai/chatgpt-integration-plan.md
   {

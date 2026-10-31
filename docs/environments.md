@@ -108,3 +108,16 @@ are therefore listed in the Supabase / Google Cloud sections instead:
 
 If you change a location for any setting, update this file in the same
 PR. New env vars land in `.env.example` first, then in this table.
+
+## Retired MiniMax settings (RF-357; owner cleanup after merge)
+
+The app no longer reads these. After this PR merges and production is
+authorized, remove them from Vercel Production and Preview and redeploy.
+Apply migration `20261031120000_drop_ai_credentials.sql` through the
+normal reviewed Supabase path; do not leave `ai_credentials` populated.
+
+| Name | Where it may still live | Owner action after approval |
+|---|---|---|
+| `MINIMAX_API_KEY`, `MINIMAX_MODEL`, `MINIMAX_BASE_URL` | Vercel, if previously set | Remove from Production and Preview |
+| `KEEPLY_AI_KEY_ENCRYPTION_KEY` | Vercel, if previously set | Remove from Production and Preview |
+| `public.ai_credentials` | Supabase | Apply the drop-table migration after review |
