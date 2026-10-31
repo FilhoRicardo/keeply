@@ -1,5 +1,7 @@
 # Hosted personal MiniMax keys — KEE-47
 
+> **Historical (RF-357).** Hosted BYO MiniMax keys, `/settings/ai`, `/api/ai-key`, and `ai_credentials` were removed. Do not follow this as a current setup guide.
+
 This implements HANDOFF §25. A signed-in Keeply user can save, replace or remove a personal MiniMax API key at `/settings/ai`. Google sign-in identifies the owner; it grants no AI usage. The user pays MiniMax directly. Manual entry remains available.
 
 ## Security and behavior

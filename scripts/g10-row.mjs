@@ -13,7 +13,7 @@ export const G10_CASES = [
   'no-manual',
   'scanned-pdf',
   'brave-fail',
-  'minimax-fail',
+  'openrouter-fail',
   'calendar-write',
 ]
 
@@ -26,7 +26,7 @@ const LEVEL_TO_RENDERED = {
 }
 
 function isFailureCase(caseName) {
-  return caseName === 'brave-fail' || caseName === 'minimax-fail'
+  return caseName === 'brave-fail' || caseName === 'openrouter-fail'
 }
 
 function summariseTasks(visibleTasks, response) {
@@ -87,7 +87,7 @@ export function buildG10Row(input) {
 
 export function isOverTimeTarget(row) {
   if (row.case === 'calendar-write') return false
-  if (row.case === 'brave-fail' || row.case === 'minimax-fail') return false
+  if (row.case === 'brave-fail' || row.case === 'openrouter-fail') return false
   const m = /^(\d+)/.exec(String(row.timeToPlanMs))
   if (!m) return false
   return Number(m[1]) > TIME_TARGET_MS

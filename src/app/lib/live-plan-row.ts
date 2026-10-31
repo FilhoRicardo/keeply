@@ -12,7 +12,7 @@ export type G10CaseName =
   | 'no-manual'
   | 'scanned-pdf'
   | 'brave-fail'
-  | 'minimax-fail'
+  | 'openrouter-fail'
   | 'calendar-write'
 
 export const G10_CASES: readonly G10CaseName[] = [
@@ -21,7 +21,7 @@ export const G10_CASES: readonly G10CaseName[] = [
   'no-manual',
   'scanned-pdf',
   'brave-fail',
-  'minimax-fail',
+  'openrouter-fail',
   'calendar-write',
 ] as const
 
@@ -107,7 +107,7 @@ const TIME_TARGET_MS = 60_000
 // True when the case is one of the failure cases whose time-to-plan is exempt from the magic-minute
 // target (per docs/live-gates.md G10 pass criteria).
 function isFailureCase(case_: G10CaseName): boolean {
-  return case_ === 'brave-fail' || case_ === 'minimax-fail'
+  return case_ === 'brave-fail' || case_ === 'openrouter-fail'
 }
 
 function summariseTasks(
@@ -181,7 +181,7 @@ export function buildG10Row(input: G10RowInput): G10Row {
 // calendar-write is also exempt (its time-to-plan is the Approve round-trip, not the plan fetch).
 export function isOverTimeTarget(row: G10Row): boolean {
   if (row.case === 'calendar-write') return false
-  if (row.case === 'brave-fail' || row.case === 'minimax-fail') return false
+  if (row.case === 'brave-fail' || row.case === 'openrouter-fail') return false
   const m = /^(\d+)/.exec(row.timeToPlanMs)
   if (!m) return false
   return Number(m[1]) > TIME_TARGET_MS

@@ -124,12 +124,12 @@ describe('buildG10Row', () => {
     expect(isOverTimeTarget(row)).toBe(true)
   })
 
-  it('exempts brave-fail and minimax-fail from the time target (pass criteria)', () => {
+  it('exempts brave-fail and openrouter-fail from the time target (pass criteria)', () => {
     const row = buildG10Row({ ...ELECTROLUX_INPUT, case: 'brave-fail', timeToPlanMs: 4_000 })
     expect(row.timeToPlanMs).toBe('4000')
     expect(isOverTimeTarget(row)).toBe(false)
 
-    const row2 = buildG10Row({ ...ELECTROLUX_INPUT, case: 'minimax-fail', timeToPlanMs: 90_000 })
+    const row2 = buildG10Row({ ...ELECTROLUX_INPUT, case: 'openrouter-fail', timeToPlanMs: 90_000 })
     expect(row2.timeToPlanMs).toBe('90000')
     expect(isOverTimeTarget(row2)).toBe(false)
   })

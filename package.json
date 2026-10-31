@@ -10,8 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
-    "e2e": "playwright test",
-    "verify:minimax": "NODE_USE_ENV_PROXY=1 vitest run --config vitest.live.config.mts"
+    "e2e": "playwright test"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

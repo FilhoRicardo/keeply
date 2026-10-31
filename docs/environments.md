@@ -8,7 +8,7 @@ for the production setup, and `docs/live-gates.md` for what has been
 verified live.
 
 If a setting is not in this table, it is either a constant in the code
-(for example, the MiniMax model default) or an OAuth-screen configuration in Google
+(for example, the OpenRouter model default) or an OAuth-screen configuration in Google
 Cloud / Supabase, which the README's "Go live" list covers step by step.
 Do not invent a new location; add it here first.
 
@@ -19,21 +19,17 @@ Do not invent a new location; add it here first.
 | `NEXT_PUBLIC_SUPABASE_URL` | `.env.local` / Vercel | no (public anon URL) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `.env.local` / Vercel | no (anon key; RLS protects data) |
 | `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` / Vercel | **yes** (server only; bypasses RLS; also needed for the durable Brave quota) |
-| `KEEPLY_AI_KEY_ENCRYPTION_KEY` | `.env.local` / Vercel | **yes** (server only; AES-256-GCM key) |
 | `GOOGLE_CLIENT_ID` | `.env.local` / Vercel | no (public OAuth client id) |
 | `GOOGLE_CLIENT_SECRET` | `.env.local` / Vercel | **yes** (server only) |
 | `GOOGLE_REDIRECT_URI` | `.env.local` / Vercel | no (registered URI, not a secret) |
 | `NEXT_PUBLIC_KEEPLY_SCAN` | `.env.local` / Vercel | no (build-time feature flag; "1" enables) |
 | `BRAVE_SEARCH_API_KEY` | `.env.local` / Vercel | **yes** (server only) |
 | `BRAVE_FREE_QUOTA_PER_MONTH` | `.env.local` / Vercel | no (counter cap; override only for self-hosted tests) |
-| `MINIMAX_API_KEY` | `.env.local` / Vercel | **yes** (server only; never `NEXT_PUBLIC_*`) |
-| `MINIMAX_MODEL` | `.env.local` / Vercel | no (model name) |
-| `MINIMAX_BASE_URL` | `.env.local` / Vercel (optional) | no (defaults to `https://api.minimax.io/v1`; set for the mainland host) |
-| `OPENROUTER_API_KEY` | `.env.local` / Vercel | **yes** (server only; never `NEXT_PUBLIC_*`). Used when MiniMax is unset. |
+| `OPENROUTER_API_KEY` | `.env.local` / Vercel | **yes** (server only; never `NEXT_PUBLIC_*`). Sole AI provider (RF-357). |
 | `OPENROUTER_MODEL` | `.env.local` / Vercel | no (defaults to `openrouter/free`) |
 | `OPENROUTER_DATA_COLLECTION` | `.env.local` / Vercel (optional) | no (`deny` default; `allow` opts in to providers that may train on prompts) |
 | `KEEPLY_SCAN_ACCESS` | `.env.local` / Vercel | no (scan-access mode; "invite" is the safe default) |
-| `KEEPLY_E2E_FIXTURES` | Playwright scan server only (`.env.local` if you run that server yourself) | no (`1` serves canned OpenRouter/MiniMax, Brave, manual and Google responses). Ignored on every Vercel deployment (production and preview). Do not set it on Vercel. |
+| `KEEPLY_E2E_FIXTURES` | Playwright scan server only (`.env.local` if you run that server yourself) | no (`1` serves canned OpenRouter, Brave, manual and Google responses). Ignored on every Vercel deployment (production and preview). Do not set it on Vercel. |
 
 ### Local development (`.env.local`)
 
@@ -55,8 +51,8 @@ The same names, set in **Vercel → Project → Settings → Environment
 Variables**. Anything without `NEXT_PUBLIC_` must be added without the
 prefix (Vercel never exposes a server-only variable to the browser).
 Sensitive values (`SUPABASE_SERVICE_ROLE_KEY`,
-`KEEPLY_AI_KEY_ENCRYPTION_KEY`, `GOOGLE_CLIENT_SECRET`,
-`BRAVE_SEARCH_API_KEY`, `MINIMAX_API_KEY`, `OPENROUTER_API_KEY`) are entered as **Sensitive**
+`GOOGLE_CLIENT_SECRET`,
+`BRAVE_SEARCH_API_KEY`, `OPENROUTER_API_KEY`) are entered as **Sensitive**
 and are never pasted into chat or committed.
 
 `KEEPLY_E2E_FIXTURES` is not a Vercel setting. Production ignores it, and setting it

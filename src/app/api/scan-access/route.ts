@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { redeemInvite, scanAllowance, type RedeemResult } from '@/db/scan-access'
-import { aiScanLive, callerDb, scanAccessMode, userMiniMaxKey } from '../../lib/scan-gate'
+import { aiScanLive, callerDb, scanAccessMode } from '../../lib/scan-gate'
 
 // What the scan screen may promise before a photo is taken. Informational only: /api/identify
 // reserves (and enforces) each scan itself.
@@ -13,13 +13,7 @@ export type ScanAccess =
 const noStore = { headers: { 'Cache-Control': 'no-store' } }
 
 export async function GET(request: NextRequest) {
-  let hasUserKey = false
-  try {
-    hasUserKey = (await userMiniMaxKey(request)) !== null
-  } catch {
-    return NextResponse.json({ ai: true, access: 'unavailable' } satisfies ScanAccess, noStore)
-  }
-  if (!aiScanLive(process.env, hasUserKey)) {
+  if (!aiScanLive(process.env)) {
     return NextResponse.json({ ai: false } satisfies ScanAccess, noStore)
   }
   if (scanAccessMode() === 'open') return NextResponse.json({ ai: true, access: 'open' } satisfies ScanAccess, noStore)

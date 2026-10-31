@@ -27,7 +27,7 @@ function makeDeps(overrides: Partial<PlanDeps> = {}): PlanDeps {
     resolveSource: overrides.resolveSource ?? (() => ({ documentModels: [MODEL], documentFamily: FAMILY })),
     manufacturerDomains: overrides.manufacturerDomains ?? { bosch: [BOSCH_DOMAIN] },
     generalGuidance: overrides.generalGuidance ?? (() => GENERAL_DISHWASHER_TASKS),
-    aiModel: overrides.aiModel ?? 'MiniMax-M3',
+    aiModel: overrides.aiModel ?? 'openrouter/free',
     signal: overrides.signal ?? controller.signal,
     scheduleTimeout: overrides.scheduleTimeout,
   }

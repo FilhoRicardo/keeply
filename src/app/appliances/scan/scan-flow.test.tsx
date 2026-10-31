@@ -266,7 +266,7 @@ describe('ScanFlow AI access copy', () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json(access)))
     renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo, undefined, { account: googleAccount() })
     expect(await screen.findByText('AI label reading: 10 scans left today.')).toBeInTheDocument()
-    expect(await screen.findByRole('link', { name: 'AI settings' })).toHaveAttribute('href', '/settings/ai')
+    expect(await screen.findByText('Daily limits apply to AI scans.')).toBeInTheDocument()
     expect(screen.queryByText(/invite/i)).not.toBeInTheDocument()
     vi.unstubAllGlobals()
 

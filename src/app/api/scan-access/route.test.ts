@@ -14,7 +14,7 @@ const redeem = (code: unknown, headers: Record<string, string> = session) =>
 
 function configure(rpc: (name: string, body: unknown) => Response) {
   vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
-  vi.stubEnv('MINIMAX_API_KEY', 'server-key')
+  vi.stubEnv('OPENROUTER_API_KEY', 'or-key')
   vi.stubEnv('KEEPLY_SCAN_ACCESS', '')
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://project.supabase.example')
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key')
@@ -39,7 +39,7 @@ describe('GET /api/scan-access', () => {
     vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '')
     expect(await (await get()).json()).toEqual({ ai: false })
     vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
-    vi.stubEnv('MINIMAX_API_KEY', '')
+    vi.stubEnv('OPENROUTER_API_KEY', '')
     expect(await (await get()).json()).toEqual({ ai: false })
   })
 

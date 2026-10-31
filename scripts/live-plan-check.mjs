@@ -8,7 +8,7 @@
 //       --manufacturer "Electrolux" --model "KEQB7300L" \
 //       [--defect KEE-XX] [--note "free-text note"]
 //
-// `--case` is one of: exact-manual, similar-only, no-manual, scanned-pdf, brave-fail, minimax-fail,
+// `--case` is one of: exact-manual, similar-only, no-manual, scanned-pdf, brave-fail, openrouter-fail,
 // calendar-write. The harness is intentionally lossy: it records what the live app does, never
 // invents a row. When the runner observes a defect during a run, they pass `--defect KEE-XX` (the
 // id of a KEE-… issue filed from the run, per docs/live-gates.md G10 pass criteria "Fix nothing

@@ -1,14 +1,12 @@
 import 'server-only'
 import type { ApplianceIdentity, LabelPhoto } from './identity'
 import type { ExtractedPage, ExtractedTaskCandidate } from './extraction'
-import { extractTasksWithMiniMax, identifyWithMiniMax, minimaxConfig } from './minimax'
 import { extractTasksWithOpenRouter, identifyWithOpenRouter, openrouterConfig } from './openrouter'
 
 // Where AI usage comes from (docs/HANDOFF.md §22). Separate from the Keeply account: being
 // signed in to Keeply never implies the owner authorised any AI usage.
 export type AiProviderKind =
-  | 'openrouter' // OpenRouter API (server key, free vision model) — implemented
-  | 'minimax' // MiniMax API (server key or the owner's saved BYO key) — implemented
+  | 'openrouter' // OpenRouter API (server key) — implemented
   | 'chatgpt_authorized' // the owner's ChatGPT plan — after OpenAI's requirements are confirmed
   | 'openai_api' // OpenAI API (server key) — optional
   | 'anthropic_api' // Anthropic API (server key) — optional
@@ -59,10 +57,9 @@ const notBuilt = (kind: AiProviderKind): AiCandidate => ({
   create: () => manualProvider,
 })
 
-// Preference order: ChatGPT-authorized (not built), then OpenRouter (free models), then MiniMax,
-// then other server-keyed providers that are not built, then Manual. A saved BYO key is not its
-// own candidate: the identify route passes that key as the only credential, so it is still chosen
-// ahead of every server key.
+// Preference order: ChatGPT-authorized (not built), then OpenRouter, then other server-keyed
+// providers that are not built, then Manual. MiniMax was retired (RF-357); OpenRouter is the sole
+// implemented AI provider. Manual always works.
 export const CANDIDATES: readonly AiCandidate[] = [
   notBuilt('chatgpt_authorized'), // docs/ai/chatgpt-integration-plan.md
   {
@@ -80,73 +77,21 @@ export const CANDIDATES: readonly AiCandidate[] = [
       }
     },
   },
-  {
-    kind: 'minimax',
-    available: ({ env }) => minimaxConfig(env) !== null,
-    create: ({ env, fetch: fetchImpl }) => {
-      const config = minimaxConfig(env)!
-      return {
-        kind: 'minimax',
-        identifyAppliance: (photo) => identifyWithMiniMax(config, photo, fetchImpl),
-        extractTasks: ({ model, pages }) => {
-          // The AI model is part of the resolved config. `model` is the appliance model, kept so
-          // the provider signature stays uniform (e.g. ChatGPT, where the AI model comes from the
-          // owner's plan, not the server).
-          void model
-          return extractTasksWithMiniMax(config, pages, fetchImpl)
-        },
-      }
-    },
-  },
   notBuilt('openai_api'),
   notBuilt('anthropic_api'),
   notBuilt('keeply_hosted'),
   { kind: 'manual', available: () => true, create: () => manualProvider },
 ]
 
-// A provider refused the request over HTTP (rate limit, payment, 5xx, routing). A timeout or a
-// network error has no status and is not retried elsewhere, so the request stays inside its time
-// limit and takes the honest "AI unavailable" path.
-function refusedOverHttp(error: unknown): boolean {
-  return typeof (error as { status?: unknown } | null)?.status === 'number'
-}
-
-// The second configured provider answers when the first refuses. Both failing reports the first
-// failure. One scan reservation covers both calls. A null reading or no tasks is an answer, not
-// a failure, so it is never sent to the backup.
-function withBackup(primary: AiProvider, backup: AiProvider): AiProvider {
-  const run = async <T>(first: () => Promise<T>, second: () => Promise<T>): Promise<T> => {
-    try {
-      return await first()
-    } catch (error) {
-      if (!refusedOverHttp(error)) throw error
-      try {
-        return await second()
-      } catch {
-        throw error
-      }
-    }
-  }
-  return {
-    kind: primary.kind,
-    identifyAppliance: (photo) => run(() => primary.identifyAppliance(photo), () => backup.identifyAppliance(photo)),
-    extractTasks: (input) => run(() => primary.extractTasks(input), () => backup.extractTasks(input)),
-  }
-}
-
-// First available provider in preference order, with the next available one as its backup;
-// Manual whenever nothing else can serve.
+// First available provider in preference order; Manual whenever nothing else can serve.
 export function selectProvider(context: AiContext, candidates: readonly AiCandidate[] = CANDIDATES): AiProvider {
-  const ready: AiProvider[] = []
   for (const candidate of candidates) {
     if (candidate.kind === 'manual') continue
     try {
-      if (candidate.available(context)) ready.push(candidate.create(context))
+      if (candidate.available(context)) return candidate.create(context)
     } catch {
       // A broken provider never blocks the owner: fall through to the next one.
     }
-    if (ready.length === 2) break
   }
-  if (ready.length === 0) return manualProvider
-  return ready.length === 1 ? ready[0] : withBackup(ready[0], ready[1])
+  return manualProvider
 }

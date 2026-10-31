@@ -1,5 +1,7 @@
 # MiniMax appliance-identification provider
 
+> **Historical (RF-357).** MiniMax was retired as a Keeply AI provider. OpenRouter is the sole implemented AI path; Manual still works. Keep this file as verification evidence from the MiniMax era.
+
 Status (2026-10-04, 20:20 UTC): **MiniMax-M3 reads the owner's real BUSH rating plate correctly through the full app path, 6 of 6 calls, after the JPEG-quality fix below; uncertain photos return nothing rather than guesses.** Evidence: one real plate photo plus synthetic cases, so this is not a general accuracy figure. `pnpm test` and CI use mocks or a local stand-in, never MiniMax. Real calls happen only when `MINIMAX_API_KEY` is set on the server and scanning is enabled; hosted scanning is off.
 
 Code: `src/ai/minimax.ts` (all MiniMax request/response handling), `src/ai/identity.ts` (Keeply's neutral schema `applianceType, manufacturer, model, serialNumber, confidence`), `src/ai/provider.ts` (selection; Manual always last). Workflow: photo → `/api/identify` → provider → neutral identity → Confirm / Edit / Rescan. Nothing is saved without the owner confirming; any edit drops the AI confidence. Only photos the browser re-encoded (EXIF/GPS dropped) are sent.
