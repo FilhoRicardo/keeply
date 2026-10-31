@@ -129,6 +129,37 @@ describe('proposePlan', () => {
     expect(fileName.proposals[0].evidenceLevel).toBe('manufacturer_verified')
   })
 
+  // Real run, 2026-10-31: the weekly door-gasket quote was attached to "Clean the filters".
+  it('drops a task whose verified quote is about something else, keeping the on-task ones', async () => {
+    const model = 'KEQB7300L'
+    const url = 'https://api.electrolux-medialibrary.com/asset/manual.pdf'
+    const task = (name: string, quote: string) => ({ ...CANDIDATE, task: name, quote, page: 1 })
+    const tasks = [
+      task('Clean the filters', 'wipe clean the door, including the rubber gasket, once a week.'),
+      task('Clean the lower spray arm', 'we recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.'),
+      task('Check for foreign objects in the filters and sump', 'check the filters and the sump after each use of the dishwasher.'),
+    ]
+    const page = `User manual ${model}\n${tasks.map((t) => t.quote).join('\n')}`
+    const result = await proposePlan(
+      { manufacturer: 'Electrolux', model, applianceType: 'dishwasher' },
+      makeDeps({
+        manufacturerDomains: { electrolux: ['electrolux-medialibrary.com'] },
+        searchManuals: searchOkWith(url),
+        fetchDocument: fetchOk(new TextEncoder().encode(page), 'pdf'),
+        extractPages: extractPagesOk(page),
+        extractTasks: extractedTasksOk(tasks),
+        resolveSource: () => ({ documentModels: [] }),
+      }),
+    )
+
+    expect(result.fallback).toBe('exact')
+    expect(result.proposals.map((p) => [p.name, p.evidenceLevel])).toEqual([
+      ['Clean the lower spray arm', 'manufacturer_verified'],
+      ['Check for foreign objects in the filters and sump', 'manufacturer_verified'],
+    ])
+    expect(result.proposals.map((p) => p.source.quote)).not.toContain(tasks[0].quote)
+  })
+
   it('proposes the quote’s cadence, not the AI interval', async () => {
     const everyThree = 'Run a cleaning cycle every 3 months to keep the interior fresh.'
     const regularly = 'We recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.'

@@ -363,6 +363,7 @@ async function findPlans(
         },
         model: { name: args.model, family: ownerFamily },
         manufacturerDomains: [...domains],
+        task: c.task,
         quote: c.quote,
         documentText,
       })
