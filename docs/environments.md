@@ -82,6 +82,32 @@ are configured through the Supabase dashboard (see README "Go live"):
 Schema, RLS, the invites table and the scan-access tables all live in
 Supabase but are code (`supabase/migrations/`), not settings.
 
+### GitHub Actions (Supabase keep-alive)
+
+Supabase pauses a free-tier project after about a week without database
+activity. Production paused on 2026-10-31 and the app lost its database
+and sign-in until the owner resumed it. `.github/workflows/supabase-keepalive.yml`
+runs every 3 days (and on demand from the Actions tab). It makes one
+anonymous read, `GET /rest/v1/appliances?select=id&limit=1`. Postgres runs
+the query, and RLS returns an empty list because anon can see no rows. It
+adds no grants or schema and does not use the service-role key.
+
+| Setting | Where | Secret? |
+|---|---|---|
+| `SUPABASE_URL` | GitHub → repo → Settings → Secrets and variables → Actions | no (same value as `NEXT_PUBLIC_SUPABASE_URL`) |
+| `SUPABASE_ANON_KEY` | GitHub → repo → Settings → Secrets and variables → Actions | no (same value as `NEXT_PUBLIC_SUPABASE_ANON_KEY`; kept as a secret so it stays out of logs) |
+
+If either secret is missing, the run logs a notice and passes without
+calling Supabase. A non-2xx reply or a network failure fails the run, so
+a red run usually means the project is paused. Resume it in the Supabase
+dashboard. After adding the secrets, run the workflow once by hand to
+check it.
+
+This only lowers the risk. Supabase may still pause the project if it
+changes its inactivity policy. GitHub also disables scheduled workflows
+after 60 days without repository activity; re-enable it from the Actions
+tab if that happens.
+
 ### Google Cloud (Keeply OAuth client)
 
 | Setting | Where | Notes |

@@ -1,0 +1,40 @@
+name: Supabase keep-alive
+
+# Free-tier Supabase pauses a project after about a week without database activity
+# (production paused on 2026-10-31). One cheap anon read every 3 days keeps it awake.
+on:
+  schedule:
+    - cron: '17 6 */3 * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read one row through PostgREST as anon
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::notice::SUPABASE_URL or SUPABASE_ANON_KEY is not set in Actions secrets; skipping the keep-alive. See docs/environments.md."
+            exit 0
+          fi
+          # RLS lets only signed-in owners see appliances, so anon gets 200 [] after a real Postgres query.
+          status=$(curl -sS -o response.json -w '%{http_code}' --max-time 30 --retry 2 --retry-all-errors \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "${SUPABASE_URL%/}/rest/v1/appliances?select=id&limit=1") || status=000
+          echo "PostgREST answered HTTP $status"
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "::error::Keep-alive read failed with HTTP $status. The project may be paused; resume it in the Supabase dashboard."
+            head -c 500 response.json 2>/dev/null || true
+            exit 1
+          fi
