@@ -1,5 +1,6 @@
 import type { EvidenceLevel } from './evidence'
 import { normalizeKeepLineBreaks, normalizeText } from './normalize'
+import { quoteIsAboutTask } from './quote-about-task'
 
 // Shortest quote (after normalising) that can verify anything; shorter text matches by accident.
 export const MIN_QUOTE_LENGTH = 20
@@ -23,11 +24,13 @@ export type EvidenceReason =
   | 'not_manufacturer_domain'
   | 'model_not_covered'
   | 'quote_not_found'
+  | 'quote_not_about_task'
 
 export type ClassifyInput = {
   source: { url: string | null; page: number | null; documentModels: string[]; documentFamily?: string }
   model: { name: string; family?: string }
   manufacturerDomains: string[]
+  task: string
   quote: string
   documentText: string
 }
@@ -52,21 +55,24 @@ function onManufacturerDomain(url: string, domains: string[]): boolean {
 }
 
 // Manufacturer verified only when the link is on the manufacturer's own https domain, the document
-// covers this exact model, the quote is found in the document text, and link and page are present.
-// Similar-model needs the same quote, page and link, plus a matching product family. A missing
-// quote, page or link stays General guidance even when the family matches. A different family
-// stays General guidance too. Every failing reason is still reported.
-export function classifyEvidence({ source, model, manufacturerDomains, quote, documentText }: ClassifyInput): EvidenceClassification {
+// covers this exact model, the quote is found in the document text and is about the task, and
+// link and page are present. Similar-model needs the same quote, page and link, plus a matching
+// product family. A missing, unfound or off-task quote, or a missing page or link, stays General
+// guidance even when the family matches. A different family stays General guidance too. Every
+// failing reason is still reported.
+export function classifyEvidence({ source, model, manufacturerDomains, task, quote, documentText }: ClassifyInput): EvidenceClassification {
   const reasons: EvidenceReason[] = []
   if (!source.url?.trim()) reasons.push('missing_link')
   else if (!onManufacturerDomain(source.url, manufacturerDomains)) reasons.push('not_manufacturer_domain')
   if (!Number.isInteger(source.page) || (source.page as number) < 1) reasons.push('missing_page')
   if (!source.documentModels.some((m) => sameModel(m, model.name))) reasons.push('model_not_covered')
   if (!verifyQuote(documentText, quote)) reasons.push('quote_not_found')
+  if (!quoteIsAboutTask(task, quote)) reasons.push('quote_not_about_task')
 
   if (reasons.length === 0) return { level: 'manufacturer_verified', reasons }
   const sameFamily =
     !!model.family && !!source.documentFamily && sameModel(model.family, source.documentFamily)
-  const blocksSimilar = reasons.some((reason) => reason === 'missing_link' || reason === 'missing_page' || reason === 'quote_not_found')
+  const blocksSimilar = reasons.some((reason) =>
+    reason === 'missing_link' || reason === 'missing_page' || reason === 'quote_not_found' || reason === 'quote_not_about_task')
   return { level: sameFamily && !blocksSimilar ? 'similar_model' : 'general_guidance', reasons }
 }

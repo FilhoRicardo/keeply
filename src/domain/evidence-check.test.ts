@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EVIDENCE_LEVELS, evidenceLabel, evidenceExplanation } from './evidence'
 import { MIN_QUOTE_LENGTH, classifyEvidence, verifyQuote, type ClassifyInput } from './evidence-check'
+import { quoteIsAboutTask } from './quote-about-task'
 
 const QUOTE = 'Clean the filter once a month under running water.'
 const DOC = `Care and cleaning\n${QUOTE}\nDo not use abrasive pads.`
@@ -9,6 +10,7 @@ const base: ClassifyInput = {
   source: { url: 'https://docs.acme.example/manuals/dw100.pdf', page: 12, documentModels: ['DW-100'], documentFamily: 'DW' },
   model: { name: 'dw-100', family: 'DW' },
   manufacturerDomains: ['acme.example'],
+  task: 'Clean the filter',
   quote: QUOTE,
   documentText: DOC,
 }
@@ -84,9 +86,70 @@ describe('classifyEvidence', () => {
       reasons: expect.arrayContaining(['missing_page']),
     })
   })
+  it('downgrades to general guidance when the quote is about something else, and does not keep Similar-model', () => {
+    const offTask = { ...base, task: 'Clean the door seal' }
+    expect(classifyEvidence(offTask)).toEqual({ level: 'general_guidance', reasons: ['quote_not_about_task'] })
+    const familyOnly = { ...offTask, source: { ...offTask.source, documentModels: ['DW-200'] } }
+    expect(classifyEvidence(familyOnly)).toMatchObject({ level: 'general_guidance' })
+  })
   it('reports every failing condition', () => {
     const r = classifyEvidence({ ...base, quote: '', source: { ...base.source, page: null, documentModels: [] } })
     expect(r.reasons).toEqual(expect.arrayContaining(['quote_not_found', 'missing_page', 'model_not_covered']))
+  })
+})
+
+// Real run, 2026-10-31: Electrolux KEQB7300L, official manual, OpenRouter extraction.
+describe('Electrolux KEQB7300L extraction', () => {
+  const electrolux = (task: string, quote: string, page: number): ClassifyInput => ({
+    source: { url: 'https://api.electrolux-medialibrary.com/asset/manual.pdf', page, documentModels: ['KEQB7300L'] },
+    model: { name: 'KEQB7300L' },
+    manufacturerDomains: ['electrolux-medialibrary.com'],
+    task,
+    quote,
+    documentText: `Care and cleaning. ${quote} More text.`,
+  })
+
+  it('does not verify "Clean the filters" with the weekly door-gasket quote', () => {
+    const r = classifyEvidence(electrolux('Clean the filters', 'wipe clean the door, including the rubber gasket, once a week.', 22))
+    expect(r).toEqual({ level: 'general_guidance', reasons: ['quote_not_about_task'] })
+  })
+  it.each([
+    ['Clean the lower spray arm', 'we recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.', 23],
+    ['Clean the upper spray arm', 'we recommend to clean the upper spray arm regularly to prevent soil from clogging the holes.', 24],
+    ['Clean the ceiling spray arm', 'we recommend to clean the ceiling spray arm regularly to prevent soil from clogging the holes.', 24],
+    ['Check for foreign objects in the filters and sump', 'check the filters and the sump after each use of the dishwasher.', 22],
+    // Second run, same manual: other task names and quotes from the same pages.
+    ['Check for foreign objects', 'check the filters and the sump after each use of the dishwasher. foreign objects (e.g. pieces of glass, plastic, bones or toothpicks, etc) decrease the cleaning performance and can cause damage to the drain pump.', 22],
+    ['Clean the filters', 'dirty filters and clogged spray arms negatively affect the washing results. check these elements regularly and, if necessary, clean them.', 21],
+  ])('keeps "%s" Manufacturer verified', (task, quote, page) => {
+    expect(classifyEvidence(electrolux(task, quote, page))).toEqual({ level: 'manufacturer_verified', reasons: [] })
+  })
+})
+
+describe('quoteIsAboutTask', () => {
+  it('needs an object from the task name in the quote', () => {
+    expect(quoteIsAboutTask('Clean the filter', 'Rinse the filter under running water.')).toBe(true)
+    expect(quoteIsAboutTask('Clean the filter', 'Wipe the door once a week.')).toBe(false)
+  })
+  it('matches singular and plural either way', () => {
+    expect(quoteIsAboutTask('Clean the filters', 'Clean the filter every month.')).toBe(true)
+    expect(quoteIsAboutTask('Clean the spray arm', 'Check the spray arms every 3 months.')).toBe(true)
+    expect(quoteIsAboutTask('Wipe the shelves', 'Wipe each shelf monthly.')).toBe(true)
+  })
+  it('treats the words manuals use for the same part as one object', () => {
+    expect(quoteIsAboutTask('Clean the door seal', 'Wipe the rubber gasket once a week.')).toBe(true)
+    expect(quoteIsAboutTask('Descale the machine', 'Run a descaling programme every 3 months.')).toBe(true)
+  })
+  it('matches whole words and whole multi-word objects only', () => {
+    expect(quoteIsAboutTask('Clean the spray arm', 'Reset the alarm and spray the door.')).toBe(false)
+    expect(quoteIsAboutTask('Top up the rinse aid', 'Rinse the filter after each use.')).toBe(false)
+    expect(quoteIsAboutTask('Check the salt', 'Check the basalt worktop.')).toBe(false)
+  })
+  it('never matches a task whose name names no known object', () => {
+    expect(quoteIsAboutTask('Look after the appliance', 'Look after the appliance every month.')).toBe(false)
+  })
+  it('ignores case and line-break hyphenation', () => {
+    expect(quoteIsAboutTask('CLEAN THE FILTER', 'Remove the fil-\nter every month.')).toBe(true)
   })
 })
 
@@ -102,7 +165,7 @@ describe('properties', () => {
     for (const quote of quotes) for (const documentText of docs)
       cases.push({ ...base, source: { ...base.source, url, page, documentModels }, quote, documentText })
 
-  it('never yields Manufacturer verified unless all four conditions hold', () => {
+  it('never yields Manufacturer verified unless all conditions hold', () => {
     for (const c of cases) {
       const r = classifyEvidence(c)
       const allFour =
