@@ -18,11 +18,19 @@ describe('IDENTITY_INSTRUCTIONS', () => {
     expect(IDENTITY_INSTRUCTIONS).toContain('model-number prefix')
     expect(IDENTITY_INSTRUCTIONS).toContain('only when you are certain')
     expect(IDENTITY_INSTRUCTIONS).toContain('"unknown"')
-    expect(IDENTITY_INSTRUCTIONS).toMatch(/do not guess a category/i)
+    expect(IDENTITY_INSTRUCTIONS).toMatch(/do not guess a category from the picture/i)
   })
 
-  it('does not offer oven as an example category', () => {
-    expect(IDENTITY_INSTRUCTIONS.toLowerCase()).not.toContain('oven')
+  it('asks for the visible parts without asking the model to name the category from them', () => {
+    expect(IDENTITY_INSTRUCTIONS).toContain('"visibleParts": string[]')
+    expect(IDENTITY_INSTRUCTIONS).toContain('plainly see outside the label')
+    expect(IDENTITY_INSTRUCTIONS).toContain('Do not name the appliance or its category there')
+    expect(IDENTITY_INSTRUCTIONS).toContain('Use [] when none are clearly visible')
+  })
+
+  it('does not offer an example category or part', () => {
+    const prompt = IDENTITY_INSTRUCTIONS.toLowerCase()
+    for (const word of ['oven', 'dishwasher', 'fridge', 'rack', 'basket', 'drum']) expect(prompt).not.toContain(word)
   })
 })
 
@@ -104,6 +112,45 @@ describe('normaliseIdentity', () => {
         normaliseIdentity({ applianceType: 'oven', manufacturer: 'X', model, typeEvidence: model, confidence: 0.95 })?.applianceType,
       ).toBe('unknown')
     }
+  })
+
+  it('names the category from listed parts that belong to one kind of appliance', () => {
+    const plate = { applianceType: 'unknown', typeEvidence: null, manufacturer: 'Electrolux', model: 'KEQB7300L', serialNumber: '04130146', confidence: 0.95 }
+    expect(normaliseIdentity({ ...plate, visibleParts: ['Dish racks above the label'] })).toEqual({
+      applianceType: 'dishwasher',
+      manufacturer: 'Electrolux',
+      model: 'KEQB7300L',
+      serialNumber: '04130146',
+      confidence: 0.95,
+    })
+    expect(normaliseIdentity({ ...plate, visibleParts: ['wire racks', 'cutlery basket', 'spray arm'] })?.applianceType).toBe('dishwasher')
+    expect(normaliseIdentity({ ...plate, applianceType: 'Dishwasher', visibleParts: ['plate racks'] })?.applianceType).toBe('dishwasher')
+    expect(normaliseIdentity({ ...plate, visibleParts: ['lint filter'] })?.applianceType).toBe('dryer')
+    expect(normaliseIdentity({ ...plate, applianceType: 'Tumble dryer', visibleParts: ['lint filter'] })?.applianceType).toBe('tumble dryer')
+  })
+
+  it('returns unknown when the listed parts are shared, conflicting or missing', () => {
+    const plate = { applianceType: 'unknown', typeEvidence: null, manufacturer: 'Electrolux', model: 'KEQB7300L', confidence: 0.95 }
+    // Parts several kinds of appliance share are not evidence.
+    for (const part of ['wire racks', 'metal rack', 'drum', 'interior shelf', 'stainless steel door', 'grey panel']) {
+      expect(normaliseIdentity({ ...plate, visibleParts: [part] })?.applianceType).toBe('unknown')
+    }
+    // A category word is not a part.
+    expect(normaliseIdentity({ ...plate, visibleParts: ['dishwasher'] })?.applianceType).toBe('unknown')
+    expect(normaliseIdentity({ ...plate, visibleParts: ['oven racks'] })?.applianceType).toBe('unknown')
+    // The free model's "oven" for a dishwasher plate conflicts with dish racks.
+    expect(normaliseIdentity({ ...plate, applianceType: 'oven', visibleParts: ['dish racks'] })?.applianceType).toBe('unknown')
+    // Parts of two kinds of appliance contradict each other.
+    expect(normaliseIdentity({ ...plate, visibleParts: ['dish rack', 'detergent drawer'] })?.applianceType).toBe('unknown')
+    expect(normaliseIdentity({ ...plate, visibleParts: [] })?.applianceType).toBe('unknown')
+    expect(normaliseIdentity({ ...plate, visibleParts: 'dish racks' })?.applianceType).toBe('unknown')
+    expect(normaliseIdentity({ ...plate, visibleParts: [42, null] })?.applianceType).toBe('unknown')
+  })
+
+  it('lets a printed category win over the listed parts', () => {
+    const raw = { applianceType: 'washing machine', typeEvidence: 'Waschmaschine', visibleParts: ['dish racks'], manufacturer: 'Miele', confidence: 0.6 }
+    expect(normaliseIdentity(raw)?.applianceType).toBe('washing machine')
+    expect(normaliseIdentity({ ...raw, applianceType: 'oven', typeEvidence: 'oven dishwasher' })?.applianceType).toBe('unknown')
   })
 
   it('uses a model-number prefix only when that prefix is certain and the quote includes the model', () => {

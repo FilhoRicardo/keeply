@@ -65,6 +65,20 @@ describe('identifyWithOpenRouter', () => {
     expect(messages[1]?.content[1]).toEqual({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,/9j/2Q==', detail: 'high' } })
   })
 
+  it('names the type from listed visible parts unless the model claimed a different one', async () => {
+    const plate = '"manufacturer":"Smeg","model":"DI6012-1","serialNumber":"30728108511","confidence":0.95'
+    const listed = reply(`{"applianceType":"unknown","typeEvidence":null,"visibleParts":["dish racks"],${plate}}`)
+    expect((await identifyWithOpenRouter(config, photo, listed as unknown as typeof fetch))?.applianceType).toBe('dishwasher')
+    const guessed = reply(`{"applianceType":"oven","typeEvidence":"DI6012-1","visibleParts":["dish racks"],${plate}}`)
+    expect(await identifyWithOpenRouter(config, photo, guessed as unknown as typeof fetch)).toEqual({
+      applianceType: 'unknown',
+      manufacturer: 'Smeg',
+      model: 'DI6012-1',
+      serialNumber: '30728108511',
+      confidence: 0.95,
+    })
+  })
+
   it('sends allow only when the config opts in', async () => {
     const fetchMock = reply('{"applianceType":"dishwasher","manufacturer":"Bosch","model":"SMS6ZCI49E","serialNumber":null,"confidence":0.5}')
     await identifyWithOpenRouter({ ...config, dataCollection: 'allow', model: 'google/gemma-4-26b-a4b-it:free' }, photo, fetchMock as unknown as typeof fetch)
