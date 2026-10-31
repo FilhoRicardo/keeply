@@ -1,5 +1,7 @@
 # Live gates for the MVP (docs/HANDOFF.md §24)
 
+As of RF-357 (2026-10-31), label reading and manual extraction use OpenRouter only. Gates below that name MiniMax record what was true on that date. To repeat the extraction-failure case, remove `OPENROUTER_API_KEY` (the case id remains `minimax-fail`). Do not delete the production MiniMax key or `ai_credentials` rows as part of re-running a gate.
+
 What has been checked on the real services, with evidence, and what is still open. Automated checks (unit, pgTAP, PostgREST integration, phone e2e) run in CI on every push; this file is only about the hosted setup.
 
 Environment under test: Vercel Preview of branch `kee-44-p3-7-live-gates` (off `main` at KEE-43 / `47c1661`), Supabase project `xmilbvzbptmozwjphvsx`, Google Cloud project "Keeply" (OAuth client "Keeply preview", External, Testing, owner Gmail as the only test user). Preview is gated by Vercel Authentication; only the owner opens it. `NEXT_PUBLIC_KEEPLY_SCAN=1`, `MINIMAX_API_KEY`, `MINIMAX_MODEL=MiniMax-M3`, `BRAVE_SEARCH_API_KEY` set on the Preview; Production stays off. Photo scanning + plan search are live on the Preview for G8 and G10.
@@ -42,7 +44,7 @@ Wave-2 verification of the post-KEE-43 plan search: photo or manual add → `/ap
 
 ```bash
 # On the host, with a session cookie / signed-in to Vercel Authentication and the owner's .env.local
-# MINIMAX_API_KEY / BRAVE_SEARCH_API_KEY either in the Preview env or local .env.local, and a Supabase
+# OPENROUTER_API_KEY / BRAVE_SEARCH_API_KEY either in the Preview env or local .env.local, and a Supabase
 # session for the owner (the harness reuses the same localStorage / Supabase adapter as the app):
 node scripts/live-plan-check.mjs <base-url> <out-dir> --case <name> \
     --manufacturer "Electrolux" --model "KEQB7300L" \
@@ -62,7 +64,7 @@ node scripts/live-plan-check.mjs <base-url> <out-dir> --case <name> \
 3. **No manual found (general guidance).** A model with no manufacturer manual on the first Brave page (e.g. an obscure OEM model number or a typo the search returns empty for). Expect: `proposals` is the three general-guidance tasks, every `evidenceLevel` is `general_guidance`, `fallback: general`, `search_outcome: no_results` (or `fetch_failed` when a candidate was found but could not be read), and the plan page shows the "we did not find a manual" fallback banner. No source link, no quote, no Manufacturer verified. Photo: `docs/screenshots/g10-3-general.png`.
 4. **Scanned-image PDF.** A real manufacturer manual that is a scanned image (no embedded text layer). Expect: `/api/plan` returns `search_outcome: unreadable` for that document, the proposer tries the next Brave candidate, and the final plan is whatever the next candidate yielded — most likely general guidance if no other candidate is readable. The point is that scanned PDFs never silently become verified. Photo: `docs/screenshots/g10-4-scanned.png`.
 5. **Brave fails.** Run the exact-manual case with `BRAVE_SEARCH_API_KEY` removed from the Preview env (or set to a wrong value). Expect: `/api/plan` returns `searchOutcome: no_results` with `searchReason: no_key` (or Brave's HTTP error), `fallback: general`, the three general-guidance tasks, and the plan page shows the fallback banner. No provider call is made. Photo: `docs/screenshots/g10-5-brave-fail.png`.
-6. **MiniMax fails.** Run the exact-manual case with `MINIMAX_API_KEY` removed (or set to a wrong value) but `BRAVE_SEARCH_API_KEY` still set. Expect: Brave finds the manual and the document is read, but the extraction returns `'unavailable'`, so `search_outcome: extraction_unavailable` and `fallback: general`. No partial "Manufacturer verified" task is returned. Photo: `docs/screenshots/g10-6-minimax-fail.png`.
+6. **Provider fails** (case id `minimax-fail`). Run the exact-manual case with `OPENROUTER_API_KEY` removed (or set to a wrong value) but `BRAVE_SEARCH_API_KEY` still set. Expect: Brave finds the manual and the document is read, but the extraction returns `'unavailable'`, so `search_outcome: extraction_unavailable` and `fallback: general`. No partial "Manufacturer verified" task is returned. Photo: `docs/screenshots/g10-6-minimax-fail.png`.
 7. **Calendar write after Approval (runs on the case 1 appliance).** Accept one task, reject the others, set a start date, click Approve. Expect: Keeply shows "Plan approved", the accepted task's `calendar_event_id` in Supabase is the deterministic `kp…` id, the rejected tasks' `calendar_event_id` is NULL, and Google Calendar shows one recurring all-day event from the start date with instructions, the source and the approval line. Photo: `docs/screenshots/g10-7-calendar.png`.
 
 **Pass criteria (the gate is "passed" when all of the following hold):**
@@ -146,7 +148,7 @@ The invite limits (G9) are built. For a public test round, in order:
    - Supabase → Authentication → URL Configuration: Site URL `https://<prod>`; add `https://<prod>` to Redirect URLs (keep the preview entry). Without this, Google sign-in on production returns to the preview.
 3. **Production smoke test (no AI):** manual add → accept 1, reject 2 → connect Calendar → approve → one monthly event; Google sign-in keeps the dishwasher; `/appliances/scan` is 404.
 4. **Testers:** add each tester's Gmail as a Google test user (Google Auth Platform → Audience; up to 100). Send them the production link. They type their dishwasher's details.
-5. **AI for testers (optional, owner decision):** needs a pay-as-you-go MiniMax key (not the Token Plan key, which stays Preview-only) with spending limits set in MiniMax. Then in Vercel **Production**: `MINIMAX_API_KEY` (Sensitive), `MINIMAX_MODEL=MiniMax-M3`, `NEXT_PUBLIC_KEEPLY_SCAN=1`; redeploy; create one invite per tester (`docs/testers.md`). Never set `KEEPLY_SCAN_ACCESS` in Production (it is ignored there anyway).
+5. **AI for testers (optional, owner decision):** needs an OpenRouter key whose terms allow serving other people, with spending controls. Then in Vercel **Production**: `OPENROUTER_API_KEY` (Sensitive), `OPENROUTER_MODEL=openrouter/free`, `NEXT_PUBLIC_KEEPLY_SCAN=1`; redeploy; create one invite per tester (`docs/testers.md`). Do not set `MINIMAX_API_KEY` for this. Never set `KEEPLY_SCAN_ACCESS` in Production (it is ignored there anyway). Production secret changes still need Ricardo’s approval.
 6. Optional: G6 failure paths; delete the test rows (Bosch, BUSH, Isolation test).
 
 **Rollback:** Vercel → Deployments → the previous production deployment → **Promote to Production** (instant). Code: revert the merge commit on `main`. AI only: remove `NEXT_PUBLIC_KEEPLY_SCAN` from Production and redeploy, or `update public.scan_limits set global_daily = 0;` (immediate). Database: the migrations only add objects; nothing needs undoing to roll the app back.

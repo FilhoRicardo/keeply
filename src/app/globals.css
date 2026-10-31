@@ -252,16 +252,6 @@ a {
   line-height: 1;
 }
 
-.settings-link {
-  display: inline-block;
-  margin-top: 14px;
-  color: var(--aster-green-deep);
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
 .site-footer {
   color: var(--aster-ink-3);
   font-size: 10px;

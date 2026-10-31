@@ -53,6 +53,9 @@ describe('e2e network edge', () => {
     vi.stubEnv('KEEPLY_E2E_FIXTURES', '')
     expect(fixtureResponse('https://api.search.brave.com/res/v1/web/search')).toBeNull()
     expect(e2eManualResponse(MANUAL_URL)).toBeNull()
+
+    vi.stubEnv('KEEPLY_E2E_FIXTURES', '1')
+    expect(fixtureResponse('https://api.minimax.io/v1/chat/completions', { method: 'POST', body: '{}' })).toBeNull()
   })
 
   it('serves the manual through fetchDocument when the flag is on', async () => {

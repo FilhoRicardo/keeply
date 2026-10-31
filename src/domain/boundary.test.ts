@@ -13,7 +13,7 @@ describe('src/domain import boundary', () => {
     ['src/db', "import { x } from '../db/client'"],
     ['src/calendar', "import { x } from '@/calendar/writer'"],
     ['src/app', "import { x } from '../app/page'"],
-    ['src/ai', "import { x } from '../ai/minimax'"],
+    ['src/ai', "import { x } from '../ai/provider'"],
     ['src/search', "import { x } from '../search/brave'"],
     ['next', "import { headers } from 'next/headers'"],
     ['@supabase/*', "import { createClient } from '@supabase/supabase-js'"],

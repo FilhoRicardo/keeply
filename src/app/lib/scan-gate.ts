@@ -1,7 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { NextRequest } from 'next/server'
 import { selectProvider } from '@/ai/provider'
-import { getUserAiKey } from '@/ai/credentials'
 import { reserveScan, type ReserveResult } from '@/db/scan-access'
 import { scanEnabled } from './features'
 import { bearerToken } from './calendar-session'
@@ -23,43 +22,10 @@ export function scanAccessMode(env: Record<string, string | undefined> = process
 
 export type ScanDecision = ReserveResult | 'unavailable'
 
-// Whether a photo would go to a billable AI provider at all (scanning on and a provider key set).
-export function aiScanLive(env: Record<string, string | undefined> = process.env, hasUserKey = false): boolean {
-  return scanEnabled(env.NEXT_PUBLIC_KEEPLY_SCAN) && (hasUserKey || selectProvider({ env }).kind !== 'manual')
-}
-
-// A verified, nonanonymous Supabase caller. Credential management and use require a signed-in
-// account; ordinary invite scans retain their existing anonymous access.
-export async function signedInCallerDb(
-  request: NextRequest,
-  env: Record<string, string | undefined> = process.env,
-): Promise<SupabaseClient | null> {
-  const db = callerDb(request, env)
-  if (!db) return null
-  try {
-    const { data, error } = await db.auth.getUser()
-    if (error || !data.user || data.user.is_anonymous) return null
-    return db
-  } catch {
-    return null
-  }
-}
-
-// BYO key errors fail closed: a stored key that cannot be read must never silently switch to the
-// application-funded key. `null` means there is no configured user key.
-export async function userMiniMaxKey(request: NextRequest, env: Record<string, string | undefined> = process.env): Promise<string | null> {
-  const db = callerDb(request, env)
-  if (!db) return null
-  try {
-    const { data, error } = await db.auth.getUser()
-    if (error || !data.user) throw new Error()
-    if (data.user.is_anonymous) return null
-    return await getUserAiKey(db.auth, 'minimax')
-  } catch {
-    // If account verification or credential lookup is unhealthy, do not assume no BYO key exists
-    // and fall through to the app-funded provider.
-    throw new Error('AI credential status is unavailable.')
-  }
+// Whether a photo would go to a billable AI provider at all (scanning on and OpenRouter configured).
+// A MiniMax key does not make scanning live.
+export function aiScanLive(env: Record<string, string | undefined> = process.env): boolean {
+  return scanEnabled(env.NEXT_PUBLIC_KEEPLY_SCAN) && selectProvider({ env }).kind !== 'manual'
 }
 
 // A Supabase client acting as the caller (their own session), or null.

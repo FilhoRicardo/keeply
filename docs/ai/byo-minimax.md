@@ -1,6 +1,8 @@
 # Hosted personal MiniMax keys — KEE-47
 
-This implements HANDOFF §25. A signed-in Keeply user can save, replace or remove a personal MiniMax API key at `/settings/ai`. Google sign-in identifies the owner; it grants no AI usage. The user pays MiniMax directly. Manual entry remains available.
+**Retired (RF-357, 2026-10-31).** `/settings/ai` and `/api/ai-key` are gone. The app does not save, read, or call with a personal MiniMax key. Existing ciphertext in `public.ai_credentials` is untouched until a separate deletion decision. The rest of this page is the historical KEE-47 note.
+
+This implemented HANDOFF §25. A signed-in Keeply user could save, replace or remove a personal MiniMax API key at `/settings/ai`. Google sign-in identifies the owner; it grants no AI usage. The user pays MiniMax directly. Manual entry remains available.
 
 ## Security and behavior
 

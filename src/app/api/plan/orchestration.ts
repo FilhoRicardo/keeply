@@ -2,6 +2,7 @@ import 'server-only'
 import { buildDefaultManufacturerDomains, type ManufacturerDomainMap } from '@/search/rank'
 import { GENERAL_DISHWASHER_TASKS } from '@/domain/general-guidance'
 import { selectProvider } from '@/ai/provider'
+import { openrouterConfig } from '@/ai/openrouter'
 import { searchManuals } from '@/search/brave'
 import { fetchDocument } from '@/search/fetch-document'
 import { extractPages } from '@/search/extract-pages'
@@ -115,7 +116,7 @@ function buildDeps(args: {
     resolveSource: resolveSourceFromUrl,
     manufacturerDomains: args.manufacturerDomains,
     generalGuidance: () => GENERAL_DISHWASHER_TASKS,
-    aiModel: args.env.MINIMAX_MODEL?.trim() || 'MiniMax-M3',
+    aiModel: openrouterConfig(args.env)?.model ?? 'manual',
     signal: args.signal,
   }
 }

@@ -17,5 +17,7 @@ describe('Home', () => {
     expect(screen.queryByRole('button', { name: /scan/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /scan/i })).not.toBeInTheDocument()
     expect(screen.queryByText(/sign in/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'AI settings' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/MiniMax/i)).not.toBeInTheDocument()
   })
 })

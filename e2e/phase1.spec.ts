@@ -106,17 +106,15 @@ test('Google connect without configuration returns safely', async ({ request }) 
   expect(events.status()).toBe(401)
 })
 
-test('AI settings require a signed-in Google account and leave manual entry available', async ({ page }) => {
+test('manual entry stays available and MiniMax settings are gone', async ({ page, request }) => {
   await page.goto('/')
-  await page.getByRole('link', { name: 'AI settings' }).click()
-  await expect(page).toHaveURL(/\/settings\/ai$/)
-  await expect(page.getByRole('heading', { name: 'Sign in to Keeply first' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible()
-  await expect(page.getByLabel('MiniMax API key')).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'AI settings' })).toHaveCount(0)
+  await expect(page.getByText(/MiniMax/i)).toHaveCount(0)
+  expect((await request.get('/settings/ai')).status()).toBe(404)
+  expect((await request.put('/api/ai-key', { data: { key: 'not-a-real-key' } })).status()).toBe(404)
   await noHorizontalScroll(page)
   await accessible(page)
 
-  await page.getByRole('link', { name: 'Home' }).click()
   await page.getByRole('link', { name: 'Add manually' }).click()
   await expect(page).toHaveURL(/\/appliances\/new$/)
   await expect(page.getByLabel('Manufacturer')).toBeVisible()

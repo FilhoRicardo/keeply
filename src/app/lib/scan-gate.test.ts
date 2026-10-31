@@ -15,14 +15,11 @@ describe('scanAccessMode', () => {
 })
 
 describe('aiScanLive', () => {
-  it('requires the scan feature flag while recognising a configured personal key', () => {
-    expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '1' }, true)).toBe(true)
-    expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '' }, true)).toBe(false)
-    expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '1' }, false)).toBe(false)
-  })
-
-  it('is live when OpenRouter is configured and MiniMax is not', () => {
-    expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '1', OPENROUTER_API_KEY: 'or-key' }, false)).toBe(true)
-    expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '1', MINIMAX_API_KEY: 'server-key' }, false)).toBe(true)
+  it('is live only when scanning is on and OpenRouter is configured', () => {
+    expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '1', OPENROUTER_API_KEY: 'or-key' })).toBe(true)
+    expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '1', OPENROUTER_API_KEY: 'or-key', MINIMAX_API_KEY: 'server-key' })).toBe(true)
+    expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '1', MINIMAX_API_KEY: 'server-key' })).toBe(false)
+    expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '1' })).toBe(false)
+    expect(aiScanLive({ NEXT_PUBLIC_KEEPLY_SCAN: '', OPENROUTER_API_KEY: 'or-key' })).toBe(false)
   })
 })

@@ -55,8 +55,8 @@ export type PlanDeps = {
   // Final fallback when no manual yields a verified or even similar-model task. Honest general
   // guidance: the existing `GENERAL_DISHWASHER_TASKS`.
   generalGuidance: () => readonly TaskProposal[]
-  // Picks the AI model name to pass into `provider.extractTasks`. The provider decides whether it
-  // actually reads manuals; the orchestration owns the budget.
+  // The configured AI model name, recorded with the plan search. OpenRouter owns the request model;
+  // this value is not sent as the appliance model. The orchestration owns the time budget.
   aiModel: string
   // Signal for the overall time budget (the route sets this to a single ~25 s AbortController).
   signal: AbortSignal

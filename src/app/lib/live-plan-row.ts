@@ -12,6 +12,7 @@ export type G10CaseName =
   | 'no-manual'
   | 'scanned-pdf'
   | 'brave-fail'
+  // Historical G10 case id. The failure under test is now an OpenRouter extraction failure (RF-357).
   | 'minimax-fail'
   | 'calendar-write'
 
