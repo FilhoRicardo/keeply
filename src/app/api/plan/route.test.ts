@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // KEE-42 route gate: body-validation, content-type, same-origin, gate, and 200 paths all run
-// without a real Brave call, a real MiniMax call, or a real Supabase DB. The handler is exercised
+// without a real Brave call, a real OpenRouter call, or a real Supabase DB. The handler is exercised
 // with vi.mocked internals so the test can run anywhere.
 
 const mockRunPlan = vi.fn()
