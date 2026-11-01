@@ -136,11 +136,16 @@ const USAGE_PATTERNS = [
 const INDICATOR_PATTERNS = [
   '\\bwhen (?:the )?indicator\\b',
   '\\bindicator (?:is )?(?:on|lit)\\b',
+  '\\bit is on when\\b',
+  '\\bneeds refilling\\b',
   '\\bindicators? show\\b',
 ]
 
 function isRefillMaintenance(text: string): boolean {
-  return /\b(refill|top up|top-up|fill|replenish|keep)\b/i.test(text) && /\b(salt|rinse[\s-]*aid)\b/i.test(text)
+  return (
+    /\b(refill|refilling|top up|top-up|fill|replenish|keep|needs refilling)\b/i.test(text) &&
+    /\b(salt|rinse[\s-]*aid)\b/i.test(text)
+  )
 }
 
 function maintenanceComponentFromText(text: string): string | null {
@@ -174,7 +179,8 @@ function sentenceRelatesToComponent(sentence: string, component: string): boolea
     case 'machine-care':
       return (
         /\bmachine\s+care\b/.test(blob) ||
-        (/\b(descaler|cleaning product)\b/.test(blob) && /\bat least once every\b/.test(blob))
+        (/\b(descaler|cleaning product)\b/.test(blob) && /\bat least once every\b/.test(blob)) ||
+        (/\bindicator\b/.test(blob) && /\bneed for cleaning\b/.test(blob))
       )
     case 'door-gasket':
       return /\b(door|gasket|rubber)\b/.test(blob)
@@ -215,6 +221,11 @@ function quoteScopeForTask(quote: string, task?: string | null): string {
   if (matching.length === 1) return matching[0]!
   const withStatedCadence = matching.filter((sentence) => readCadenceFromText(sentence, quote).stated)
   if (withStatedCadence.length === 1) return withStatedCadence[0]!
+  if (withStatedCadence.length > 1) {
+    return (
+      withStatedCadence.find((sentence) => /\bat least once every\b/i.test(sentence)) ?? withStatedCadence[0]!
+    )
+  }
   const actions = actionTermsFromTask(task)
   const withAction = matching.filter((sentence) => actions.some((term) => sentence.toLowerCase().includes(term)))
   if (withAction.length === 1) return withAction[0]!
@@ -245,10 +256,20 @@ const VAGUE_PATTERNS = [
   '\\bfrom\\s+time\\s+to\\s+time\\b',
 ]
 
+/** "Daily use" is a manual section heading / usage phrase, not a maintenance schedule. */
+function cadenceMatchIsDailyUseNoise(quote: string, match: RegExpMatchArray): boolean {
+  const token = match[0]?.toLowerCase() ?? ''
+  if (token !== 'daily') return false
+  const index = match.index ?? 0
+  const tail = quote.slice(index + token.length, index + token.length + 6).toLowerCase()
+  return /^\s*use\b/.test(tail)
+}
+
 function earliestCadence(quote: string): CadenceReading | null {
   let best: { index: number; reading: CadenceReading } | null = null
   for (const pattern of CADENCE_PATTERNS) {
     for (const match of quote.matchAll(new RegExp(pattern.source, 'gi'))) {
+      if (cadenceMatchIsDailyUseNoise(quote, match)) continue
       const parsed = pattern.interval(match)
       if (!parsed) continue
       const index = match.index ?? 0
@@ -425,6 +446,7 @@ export function readCadenceFromContext(quote: string, pageText?: string | null, 
 function cadenceSpanInQuote(quote: string): string | null {
   for (const pattern of CADENCE_PATTERNS) {
     for (const match of quote.matchAll(new RegExp(pattern.source, 'gi'))) {
+      if (cadenceMatchIsDailyUseNoise(quote, match)) continue
       const parsed = pattern.interval(match)
       if (!parsed || parsed === 'unexpressed') continue
       return match[0].replace(/\s+/g, ' ')

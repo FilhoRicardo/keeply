@@ -285,12 +285,7 @@ describe('mergeExtractedTasks', () => {
 describe('Electrolux KEQB7300L over-extraction consolidation', () => {
   const fixturePath = fileURLToPath(new URL('../test-fixtures/electrolux-keqb7300l-care-pages.json', import.meta.url))
   const carePages = JSON.parse(readFileSync(fixturePath, 'utf8')) as ExtractedPage[]
-  const page26SaltRinse =
-    '• use a descaler or a cleaning product designed specifically for dishwashers every day. • refill salt when the indicator is on. keep the rinse aid dispenser topped up when the indicator is on.'
-  const pageTextByNumber = new Map<number, string>([
-    ...carePages.map((p) => [p.page, p.text] as const),
-    [26, page26SaltRinse] as const,
-  ])
+  const pageTextByNumber = new Map<number, string>(carePages.map((p) => [p.page, p.text] as const))
   const readCadence = (quote: string, pageText?: string, task?: string) => readCadenceFromContext(quote, pageText, task)
 
   const filterIntro =
@@ -301,12 +296,12 @@ describe('Electrolux KEQB7300L over-extraction consolidation', () => {
     'to maintain the performance of your appliance, use a cleaning product designed specifically for dishwashers at least once every two months. carefully follow the instructions on the packaging of the product. for optimal cleaning results, start the programme machine care.'
   const lowerArm = 'we recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.'
   const foreignObjects = 'check the filters and the sump after each use of the dishwasher.'
-  const saltQuote = 'refill salt when the indicator is on.'
-  const rinseQuote = 'keep the rinse aid dispenser topped up when the indicator is on.'
+  const saltQuote = 'salt indicator. it is on when the salt container needs refilling.'
+  const rinseQuote = 'rinse aid indicator. it is on when the rinse aid dispenser needs refilling.'
 
   const overExtracted: ExtractedTaskCandidate[] = [
-    goodCandidate({ task: 'Refill rinse aid dispenser', page: 26, quote: rinseQuote, interval: { count: 1, unit: 'day' } }),
-    goodCandidate({ task: 'Refill salt container', page: 26, quote: saltQuote, interval: { count: 1, unit: 'day' } }),
+    goodCandidate({ task: 'Refill rinse aid dispenser', page: 9, quote: rinseQuote, interval: { count: 1, unit: 'day' } }),
+    goodCandidate({ task: 'Refill salt container', page: 9, quote: saltQuote, interval: { count: 1, unit: 'day' } }),
     goodCandidate({ task: 'Run Machine Care programme', page: 22, quote: machineCareShort, interval: { count: 1, unit: 'month' } }),
     goodCandidate({ task: 'Check and clean filters', page: 21, quote: filterIntro, interval: { count: 1, unit: 'month' } }),
     goodCandidate({ task: 'Check and clean spray arms', page: 23, quote: lowerArm, interval: { count: 1, unit: 'month' } }),
@@ -333,8 +328,8 @@ describe('Electrolux KEQB7300L over-extraction consolidation', () => {
   ]
 
   const prodNineExtracted: ExtractedTaskCandidate[] = [
-    goodCandidate({ task: 'Refill rinse aid dispenser', page: 26, quote: rinseQuote, interval: { count: 1, unit: 'month' } }),
-    goodCandidate({ task: 'Check and refill salt container', page: 26, quote: saltQuote, interval: { count: 1, unit: 'day' } }),
+    goodCandidate({ task: 'Refill rinse aid dispenser', page: 9, quote: rinseQuote, interval: { count: 1, unit: 'month' } }),
+    goodCandidate({ task: 'Check and refill salt container', page: 9, quote: saltQuote, interval: { count: 1, unit: 'day' } }),
     goodCandidate({
       task: 'Run Machine Care programme with descaler or cleaning product',
       page: 22,
@@ -350,24 +345,24 @@ describe('Electrolux KEQB7300L over-extraction consolidation', () => {
   ]
 
   it('does not keep a daily manual quote for the same salt task when an indicator quote exists', () => {
-    const page26 =
-      '• use a descaler or a cleaning product designed specifically for dishwashers every day. • refill salt when the indicator is on. keep the rinse aid dispenser topped up when the indicator is on.'
+    const pageWithDailyDescaler =
+      '• use a descaler or a cleaning product designed specifically for dishwashers every day. • salt indicator. it is on when the salt container needs refilling.'
     const merged = mergeExtractedTasks(
       [
         goodCandidate({
           task: 'Check and refill salt container',
-          page: 26,
+          page: 9,
           quote: 'use a descaler or a cleaning product designed specifically for dishwashers every day.',
           interval: { count: 1, unit: 'day' },
         }),
         goodCandidate({
           task: 'Check and refill salt container',
-          page: 26,
+          page: 9,
           quote: saltQuote,
           interval: { count: 1, unit: 'day' },
         }),
       ],
-      { pageTextByNumber: new Map([[26, page26]]), readCadence },
+      { pageTextByNumber: new Map([[9, pageWithDailyDescaler]]), readCadence },
     )
     expect(merged).toHaveLength(1)
     expect(merged[0]!.quote).toMatch(/indicator/i)
@@ -383,14 +378,14 @@ describe('Electrolux KEQB7300L over-extraction consolidation', () => {
         task: 'Refill rinse aid',
         instructions: 'Top up when needed.',
         interval: { count: 1, unit: 'month' },
-        page: 26,
+        page: 9,
         quote: rinseQuote,
       },
       {
         task: 'Check and refill salt container',
         instructions: 'Refill when the indicator is on.',
         interval: { count: 1, unit: 'day' },
-        page: 26,
+        page: 9,
         quote: 'use a descaler or a cleaning product designed specifically for dishwashers every day.',
       },
       {
@@ -411,7 +406,7 @@ describe('Electrolux KEQB7300L over-extraction consolidation', () => {
     const normalised = normaliseExtraction({ candidates: rawCandidates }, pageNumbers)
     const merged = mergeExtractedTasks(normalised, { pageTextByNumber, readCadence })
     const byKey = new Map(merged.map((c) => [maintenanceComponentKey(c), c]))
-    const saltStored = quoteWithPageCadence(byKey.get('salt')!.quote, pageTextByNumber.get(26)!, byKey.get('salt')!.task)
+    const saltStored = quoteWithPageCadence(byKey.get('salt')!.quote, pageTextByNumber.get(9)!, byKey.get('salt')!.task)
     expect(
       presentInterval({
         quote: saltStored,
@@ -419,7 +414,7 @@ describe('Electrolux KEQB7300L over-extraction consolidation', () => {
         generalGuidance: false,
         task: byKey.get('salt')!.task,
       }).text,
-    ).toMatch(/Keeply's suggestion|indicator/i)
+    ).toMatch(/Keeply's suggestion|it is on when|indicator/i)
     expect(
       presentInterval({
         quote: saltStored,
@@ -448,9 +443,9 @@ describe('Electrolux KEQB7300L over-extraction consolidation', () => {
 
     const byKey = new Map(merged.map((c) => [maintenanceComponentKey(c), c]))
     expect(byKey.get('salt')!.quote).toMatch(/indicator/i)
-    expect(presentInterval({ quote: byKey.get('salt')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).toMatch(/indicator/i)
+    expect(presentInterval({ quote: byKey.get('salt')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).toMatch(/it is on when|indicator/i)
     expect(presentInterval({ quote: byKey.get('salt')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).not.toMatch(/from the manual/)
-    expect(presentInterval({ quote: byKey.get('rinse-aid')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).toMatch(/indicator/i)
+    expect(presentInterval({ quote: byKey.get('rinse-aid')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).toMatch(/it is on when|indicator/i)
     expect(
       presentInterval({
         quote: byKey.get('machine-care')!.quote,
@@ -487,8 +482,8 @@ describe('Electrolux KEQB7300L over-extraction consolidation', () => {
     ).toEqual({ count: 2, unit: 'month' })
     expect(presentInterval({ quote: byKey.get('filters')!.quote, stored: { count: 1, unit: 'week' }, generalGuidance: false }).text).toMatch(/Keeply's suggestion/)
     expect(presentInterval({ quote: byKey.get('spray-arms')!.quote, stored: { count: 1, unit: 'week' }, generalGuidance: false }).text).toMatch(/Keeply's suggestion/)
-    expect(presentInterval({ quote: byKey.get('salt')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).toMatch(/indicator/i)
-    expect(presentInterval({ quote: byKey.get('rinse-aid')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).toMatch(/indicator/i)
+    expect(presentInterval({ quote: byKey.get('salt')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).toMatch(/it is on when|indicator/i)
+    expect(presentInterval({ quote: byKey.get('rinse-aid')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).toMatch(/it is on when|indicator/i)
   })
 })
 
