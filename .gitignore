@@ -19,3 +19,6 @@ playwright-report/
 
 # Personal test photos
 test-photos/
+
+# Agent thread handoffs (local only)
+.agents/handoffs/

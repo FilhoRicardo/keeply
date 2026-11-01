@@ -2,6 +2,39 @@
 
 > 2026-10-06 (KEE-60): v0.1 scope widened from dishwashers only to any household appliance. Dishwashers keep the hand-curated general-guidance fallback; every other appliance needs a found manual or the plan is honestly empty.
 
+## Index
+
+Read only the sections a task needs.
+
+| § | Section | One-line summary |
+|---|---------|------------------|
+| 1 | Product concept | PPM mobile app: scan, evidence-labelled plan, owner approval, calendar. |
+| 2 | v0.1 success criterion | Prove the dishwasher “magic minute” end to end. |
+| 3 | v0.1 user flow | Step-by-step v0.1 journey from scan to calendar. |
+| 4 | Evidence and trust model | Three evidence levels and trust rules. |
+| 5 | Manufacturer recommendation vs user schedule | Separate source recommendation from owner schedule (superseded in §24 for MVP). |
+| 6 | Completion-based scheduling | Completion-driven dates (superseded in §24 for MVP). |
+| 7 | Proposed technical stack | Frontend, hosting, DB, AI, calendar choices. |
+| 8 | AI access / cost strategy | ChatGPT, self-hosted, and hosted AI cost paths. |
+| 9 | Initial data model | Core tables and relationships. |
+| 10 | Core UI screens for v0.1 | Screen list and purpose for v0.1. |
+| 11 | What NOT to build in v0.1 | Explicit v0.1 exclusions. |
+| 12 | Product differentiation | Longevity, circular economy, transparent AI, calendar-first. |
+| 13 | Long-term opportunities | Post-MVP diagnose/repair/B2B ideas. |
+| 14 | Potential monetization model | Freemium and premium directions. |
+| 15 | Validation target | Who to test with and what to learn. |
+| 16 | Build order | Phased delivery plan (0–5). |
+| 17 | Development principles | Simplicity, evidence, mobile-first, etc. |
+| 18 | Immediate next task | Historical “start Phase 0+1” milestone. |
+| 19 | Working product statement | Tagline options. |
+| 20 | Open decisions | Non-blocking product/branding questions. |
+| 21 | Context for the next coding agent/session | Legacy session checklist (prefer §24 + AGENTS.md today). |
+| 22 | ChatGPT account integration and the AI provider layer | Sign in with ChatGPT research gate and provider modes A–D. |
+| 23 | Owner decisions for the full magic-minute build | Phase 3 retrieval, tester caps, deploy order (2026-10-04). |
+| 24 | MVP scope | Current MVP: accept/reject tasks, calendar handoff (2026-10-04). |
+| 25 | Hosted bring-your-own AI key | Hosted BYO key decision (2026-10-05). |
+| 26 | OpenRouter only | MiniMax retired; OpenRouter + Manual (2026-10-31). |
+
 ## 1. Product concept
 
 Build a mobile-first web app that gives ordinary consumers **planned
