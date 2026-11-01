@@ -7,6 +7,8 @@ const config: OpenRouterConfig = {
   model: 'openrouter/free',
   baseUrl: 'https://openrouter.ai/api/v1',
   dataCollection: 'deny',
+  referer: 'http://localhost:3000',
+  title: 'Keeply',
 }
 const photo = { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), mimeType: 'image/jpeg' }
 
@@ -28,11 +30,30 @@ describe('openrouterConfig', () => {
       model: 'openrouter/free',
       baseUrl: 'https://openrouter.ai/api/v1',
       dataCollection: 'deny',
+      referer: 'http://localhost:3000',
+      title: 'Keeply',
     })
     expect(openrouterConfig({ OPENROUTER_API_KEY: 'k', OPENROUTER_MODEL: 'google/gemma-4-26b-a4b-it:free' })?.model).toBe('google/gemma-4-26b-a4b-it:free')
     expect(openrouterConfig({ OPENROUTER_API_KEY: 'k', OPENROUTER_DATA_COLLECTION: 'allow' })?.dataCollection).toBe('allow')
     expect(openrouterConfig({ OPENROUTER_API_KEY: 'k', OPENROUTER_DATA_COLLECTION: 'Deny' })?.dataCollection).toBe('deny')
     expect(openrouterConfig({ OPENROUTER_API_KEY: 'k', OPENROUTER_DATA_COLLECTION: 'yes' })?.dataCollection).toBe('deny')
+  })
+
+  it('defaults OpenRouter attribution to local site URL and allows overrides', () => {
+    expect(openrouterConfig({ OPENROUTER_API_KEY: 'k' })).toMatchObject({
+      referer: 'http://localhost:3000',
+      title: 'Keeply',
+    })
+    expect(openrouterConfig({ OPENROUTER_API_KEY: 'k', NEXT_PUBLIC_SITE_URL: 'https://keeply.example' })?.referer).toBe(
+      'https://keeply.example',
+    )
+    expect(
+      openrouterConfig({
+        OPENROUTER_API_KEY: 'k',
+        NEXT_PUBLIC_SITE_URL: 'https://keeply.example',
+        OPENROUTER_HTTP_REFERER: 'https://custom.example',
+      })?.referer,
+    ).toBe('https://custom.example')
   })
 })
 
@@ -54,7 +75,7 @@ describe('identifyWithOpenRouter', () => {
     expect(url).toBe('https://openrouter.ai/api/v1/chat/completions')
     expect(init.headers).toMatchObject({
       Authorization: 'Bearer or-test-key',
-      'HTTP-Referer': 'https://keeply.vercel.app',
+      'HTTP-Referer': 'http://localhost:3000',
       'X-Title': 'Keeply',
     })
     expect(body.model).toBe('openrouter/free')
