@@ -2,6 +2,8 @@
 
 PPM for your home: scan what you own, understand how to maintain it, and keep it working for longer.
 
+**Licence:** [MIT](LICENSE). **Self-host:** step-by-step setup in [`docs/self-host.md`](docs/self-host.md). Managed hosting from the project maintainers is planned for later; this repository is for running Keeply yourself.
+
 Status: MVP flow built (`docs/HANDOFF.md` §24): any household appliance (label photo → AI proposal → Confirm / Edit / Rescan, or typed) → proposed plan → Accept / Reject each task → Approval → accepted tasks become recurring Google Calendar events, managed there. Dishwashers fall back to a hand-curated general-guidance list when no manual is found; every other appliance needs a found manual or the plan is honestly empty (no plan). Manual search finds the manufacturer's own manual (Brave Search), reads it with the AI, and shows each task with its page and verbatim quote. Scanning and search sit behind `NEXT_PUBLIC_KEEPLY_SCAN=1`, `OPENROUTER_API_KEY` (sole AI provider; Manual when unset) and `BRAVE_SEARCH_API_KEY` (all server-side). Plan: `docs/HANDOFF.md`. How work is run: `AGENTS.md`. Module layout: `docs/architecture.md`.
 
 ## Run it
@@ -26,12 +28,9 @@ Live test of label scanning with a real AI key, privately: `docs/live-testing.md
 
 CI runs all four on every pull request.
 
-## Go live
+## Deploy
 
-1. Supabase (`<your-project-ref>`): run `supabase/migrations/` (`supabase db push`, or paste into the SQL Editor), then enable **Anonymous sign-ins**.
-2. Google Cloud: enable the Calendar API, configure the consent screen, create a Web OAuth client with redirect URI `https://<your-domain>/auth/google/callback`. Scope used: `calendar.events` only. Keeply talks to Google Calendar directly with this client; the Supabase Google provider (step 3) is only for signing in.
-3. Sign in with Google (optional, recommended): in Supabase → Authentication → Sign In / Providers enable **Google** (a Google OAuth client whose redirect URI is `https://<your-project-ref>.supabase.co/auth/v1/callback`) and **Manual linking** (anonymous visitors keep their plans when they sign in). Add the site URL under URL Configuration → Redirect URLs. This login is separate from the calendar consent in step 2.
-4. Vercel: set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`. For scanning and manual search also set `NEXT_PUBLIC_KEEPLY_SCAN=1`, `OPENROUTER_API_KEY` (and `OPENROUTER_MODEL=openrouter/free`), `BRAVE_SEARCH_API_KEY` and the server-only `SUPABASE_SERVICE_ROLE_KEY` (the durable Brave quota uses it; without it the Brave quota check does nothing). Remove any leftover `MINIMAX_*` and `KEEPLY_AI_KEY_ENCRYPTION_KEY` values after RF-357.
+Production setup (Supabase, Google OAuth, env vars, Vercel or Node): [`docs/self-host.md`](docs/self-host.md).
 
 ## Rules that the code enforces
 
