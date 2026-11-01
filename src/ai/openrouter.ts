@@ -333,10 +333,13 @@ export async function extractTasksWithOpenRouter(
   const deadline = AbortSignal.timeout(EXTRACT_PARALLEL_TIMEOUT_MS)
   const pageTextByNumber = new Map(pages.map((p) => [p.page, p.text]))
   const readCadence = (quote: string, pageText?: string) => readCadenceFromContext(quote, pageText)
-  const batchResults = await Promise.all(
+  const batchResults = await Promise.allSettled(
     chunks.map((chunkPages) => extractTasksFromChunk(config, chunkPages, fetchImpl, deadline)),
   )
-  return mergeExtractedTasks(batchResults.flat(), {
+  const mergedChunks = batchResults.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
+  const rejected = batchResults.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+  if (mergedChunks.length === 0 && rejected.length > 0) throw rejected[0]?.reason
+  return mergeExtractedTasks(mergedChunks, {
     pageTextByNumber,
     readCadence: (quote, pageText) => readCadence(quote, pageText),
   })

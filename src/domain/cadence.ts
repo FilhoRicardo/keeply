@@ -1,4 +1,4 @@
-import { MIN_QUOTE_LENGTH, verifyQuote } from './evidence-check'
+import { MAX_SOURCE_QUOTE_LENGTH, MIN_QUOTE_LENGTH, verifyQuote } from './evidence-check'
 import type { Interval, IntervalUnit } from './format-interval'
 import { formatInterval } from './format-interval'
 import { normalizeText } from './normalize'
@@ -280,15 +280,61 @@ export function readCadenceFromContext(quote: string, pageText?: string | null):
   return inQuote
 }
 
+function cadenceSpanInQuote(quote: string): string | null {
+  for (const pattern of CADENCE_PATTERNS) {
+    for (const match of quote.matchAll(new RegExp(pattern.source, 'gi'))) {
+      const parsed = pattern.interval(match)
+      if (!parsed || parsed === 'unexpressed') continue
+      return match[0].replace(/\s+/g, ' ')
+    }
+  }
+  return null
+}
+
+function longestVerifiedWordPrefix(
+  quote: string,
+  pageText: string,
+  maxLen: number,
+  mustContain: string | null,
+): string | null {
+  const words = quote.trim().split(/\s+/).filter(Boolean)
+  const need = mustContain ? normalizeText(mustContain) : null
+  for (let n = words.length; n >= 1; n -= 1) {
+    const candidate = words.slice(0, n).join(' ')
+    if (candidate.length > maxLen || candidate.trim().length === 0) continue
+    if (need && !normalizeText(candidate).includes(need)) continue
+    if (verifyQuote(pageText, candidate)) return candidate
+  }
+  return null
+}
+
+/** Keeps quotes within the DB limit while staying a verified page substring. */
+export function fitSourceQuoteForStorage(widened: string, pageText: string, original: string): string {
+  const max = MAX_SOURCE_QUOTE_LENGTH
+  const fits = (q: string) => q.length <= max && q.trim().length > 0 && verifyQuote(pageText, q)
+
+  if (fits(widened)) return widened
+
+  const cadence = cadenceSpanInQuote(widened)
+  const shrunkWidened = longestVerifiedWordPrefix(widened, pageText, max, cadence)
+  if (shrunkWidened) return shrunkWidened
+
+  if (fits(original)) return original
+  const shrunkOriginal = longestVerifiedWordPrefix(original, pageText, max, null)
+  if (shrunkOriginal) return shrunkOriginal
+  return original.trim().slice(0, max).trim()
+}
+
 // When the model quote omits the schedule phrase, widen to a verified page span that includes it.
 export function quoteWithPageCadence(quote: string, pageText: string): string {
-  if (readCadence(quote).stated) return quote
+  const original = quote.trim()
+  if (readCadence(original).stated) return fitSourceQuoteForStorage(original, pageText, original)
   const q = normalizeText(quote)
   const raw = pageText.replace(/\r\n/g, '\n')
   const lines = raw.split('\n').filter((line) => line.trim().length > 0)
   if (lines.length > 1) {
     const quoteLine = lines.find((line) => normalizeText(line).includes(q))
-    if (quoteLine) return quote.trim()
+    if (quoteLine) return fitSourceQuoteForStorage(original, pageText, original)
   }
   if (pageText.includes('•')) {
   const bullets = pageText
@@ -299,10 +345,14 @@ export function quoteWithPageCadence(quote: string, pageText: string): string {
     const current = bullets[i] ?? ''
     if (!current.includes(q)) continue
     const cleaned = current.replace(/\s+/g, ' ').trim()
-    if (readCadence(cleaned).stated && verifyQuote(pageText, cleaned)) return cleaned
+    if (readCadence(cleaned).stated && verifyQuote(pageText, cleaned)) {
+      return fitSourceQuoteForStorage(cleaned, pageText, original)
+    }
     if (i > 0) {
       const merged = `${bullets[i - 1] ?? ''} ${cleaned}`.replace(/\s+/g, ' ').trim()
-      if (readCadence(merged).stated && verifyQuote(pageText, merged)) return merged
+      if (readCadence(merged).stated && verifyQuote(pageText, merged)) {
+        return fitSourceQuoteForStorage(merged, pageText, original)
+      }
     }
     break
   }
@@ -310,9 +360,11 @@ export function quoteWithPageCadence(quote: string, pageText: string): string {
   for (const segment of cadenceContextSegments(pageText, quote)) {
     if (!readCadence(segment).stated) continue
     const cleaned = segment.replace(/\s+/g, ' ').trim()
-    if (cleaned.length >= MIN_QUOTE_LENGTH && verifyQuote(pageText, cleaned)) return cleaned
+    if (cleaned.length >= MIN_QUOTE_LENGTH && verifyQuote(pageText, cleaned)) {
+      return fitSourceQuoteForStorage(cleaned, pageText, original)
+    }
   }
-  return quote
+  return fitSourceQuoteForStorage(original, pageText, original)
 }
 
 export type IntervalPresentation = { interval: Interval; text: string }

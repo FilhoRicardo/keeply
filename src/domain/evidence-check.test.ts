@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { EVIDENCE_LEVELS, evidenceLabel, evidenceExplanation } from './evidence'
-import { MIN_QUOTE_LENGTH, classifyEvidence, verifyQuote, type ClassifyInput } from './evidence-check'
+import {
+  MAX_SOURCE_QUOTE_LENGTH,
+  MIN_QUOTE_LENGTH,
+  classifyEvidence,
+  sourceQuoteSatisfiesDbCheck,
+  verifyQuote,
+  type ClassifyInput,
+} from './evidence-check'
 import { quoteIsAboutTask } from './quote-about-task'
 
 const QUOTE = 'Clean the filter once a month under running water.'
@@ -14,6 +21,14 @@ const base: ClassifyInput = {
   quote: QUOTE,
   documentText: DOC,
 }
+
+describe('sourceQuoteSatisfiesDbCheck', () => {
+  it('matches the maintenance_tasks source_quote length check', () => {
+    expect(sourceQuoteSatisfiesDbCheck('a'.repeat(MAX_SOURCE_QUOTE_LENGTH))).toBe(true)
+    expect(sourceQuoteSatisfiesDbCheck('a'.repeat(MAX_SOURCE_QUOTE_LENGTH + 1))).toBe(false)
+    expect(sourceQuoteSatisfiesDbCheck(null)).toBe(true)
+  })
+})
 
 describe('verifyQuote', () => {
   it('accepts an exact quote', () => expect(verifyQuote(DOC, QUOTE)).toBe(true))
