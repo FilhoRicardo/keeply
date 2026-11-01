@@ -15,6 +15,8 @@ Do not invent a new location; add it here first.
 
 | Setting | Where it lives | Secret? |
 |---|---|---|
+| `NEXT_PUBLIC_SITE_URL` | `.env.local` / Vercel | no (public canonical URL; OpenRouter referer when `OPENROUTER_HTTP_REFERER` unset; defaults to `http://localhost:3000`) |
+| `OPENROUTER_HTTP_REFERER` | `.env.local` / Vercel (optional) | no (server-only override for OpenRouter `HTTP-Referer`; wins over `NEXT_PUBLIC_SITE_URL`) |
 | `NEXT_PUBLIC_SUPABASE_URL` | `.env.local` / Vercel | no (public anon URL) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `.env.local` / Vercel | no (anon key; RLS protects data) |
 | `SUPABASE_SERVICE_ROLE_KEY` | `.env.local` / Vercel | **yes** (server only; bypasses RLS; also needed for the durable Brave quota) |
