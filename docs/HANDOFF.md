@@ -912,8 +912,8 @@ conflict.
     MiniMax's Token Plan terms allow this before enabling it. Not open to
     the public.
 -   **Branding:** still open; deploy under a free Vercel address.
--   **Paperclip:** not in use (owner, 2026-10-11). `docs/paperclip/` is a
-    historical note only. Do not create Paperclip tickets or start its agents.
+-   **Paperclip:** not in use (owner, 2026-10-11). Do not create Paperclip
+    tickets or start its agents.
 
 ------------------------------------------------------------------------
 
