@@ -137,7 +137,11 @@ export type MergeExtractedTasksOptions = {
 
 function isIndicatorRefillQuote(quote: string): boolean {
   const q = quote.toLowerCase()
-  return /\bindicator\b/.test(q) && /\b(refill|top up|fill|replenish|keep)\b/.test(q) && /\b(salt|rinse[\s-]*aid)\b/.test(q)
+  return (
+    /\bindicator\b/.test(q) &&
+    /\b(refill|refilling|top up|fill|replenish|keep|needs refilling)\b/.test(q) &&
+    /\b(salt|rinse[\s-]*aid)\b/.test(q)
+  )
 }
 
 function misalignedDailyForIndicator(candidate: ExtractedTaskCandidate, readCadenceFn: MergeExtractedTasksOptions['readCadence']): boolean {

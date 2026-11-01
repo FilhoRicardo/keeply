@@ -239,6 +239,16 @@ describe('readCadence indicator-driven refills', () => {
     expect(readCadenceFromContext('refill salt when the indicator is on.', page26)).toEqual(unstated('when the indicator'))
   })
 
+  it('does not treat "daily use" in the salt section as a daily maintenance schedule', () => {
+    const page8 =
+      'the salt is used to recharge the resin in the water softener and to assure good washing results in daily use.'
+    const saltIndicatorQuote = 'salt indicator. it is on when the salt container needs refilling.'
+    expect(readCadenceFromContext(saltIndicatorQuote, page8, 'Check and refill salt container')).toEqual(
+      unstated('it is on when'),
+    )
+    expect(readCadence(page8, 'Check and refill salt container')).toEqual(unstated(null))
+  })
+
   it('does not treat a widened indicator salt quote as daily when another bullet mentions every day', () => {
     const widened =
       'use a descaler or a cleaning product designed specifically for dishwashers every day. refill salt when the indicator is on.'
