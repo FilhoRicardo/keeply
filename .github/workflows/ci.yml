@@ -1,3 +1,4 @@
+# No repository secrets required for verify, database, or e2e (fixtures stand in for external APIs).
 name: CI
 
 on:

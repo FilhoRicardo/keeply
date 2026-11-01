@@ -24,7 +24,7 @@ Live test of label scanning with a real AI key, privately: `docs/live-testing.md
 | `PGURL=… scripts/db-test.sh` | pgTAP schema rules on a fresh Postgres (same files as `supabase test db`) |
 | `PGURL=… scripts/db-integration.sh` | supabase-js → PostgREST → Postgres with RLS, plus the calendar route |
 
-CI runs all four on every pull request.
+CI runs all four on every pull request. Contributors need no repository secrets; see [`docs/ci.md`](docs/ci.md).
 
 ## Go live
 
