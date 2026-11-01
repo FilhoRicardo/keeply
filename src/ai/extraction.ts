@@ -1,4 +1,5 @@
 import 'server-only'
+import { KEEPLY_DEFAULT_INTERVAL, readCadence } from '@/domain/cadence'
 import { extractJsonObject } from './identity'
 
 // One page of a manufacturer manual in the same shape that `src/search/extract-pages` returns.
@@ -55,7 +56,9 @@ function cleanCandidate(raw: unknown, pageNumbers: ReadonlySet<number>): Extract
   const unit = intervalRaw && typeof intervalRaw.unit === 'string' ? intervalRaw.unit : ''
   if (!Number.isInteger(count) || count < 1 || count > 365) return null
   if (!INTERVAL_UNITS.has(unit)) return null
-  return { task, instructions, quote, page, interval: { count, unit: unit as ExtractedTaskCandidate['interval']['unit'] } }
+  const cadence = readCadence(quote)
+  const interval = cadence.stated ? cadence.interval : KEEPLY_DEFAULT_INTERVAL
+  return { task, instructions, quote, page, interval }
 }
 
 // Finds the model reply's `candidates` array and returns the cleaned candidates. Drops malformed
@@ -239,8 +242,8 @@ export function mergeExtractedTasks(
     }
     const existingPage = pageTextByNumber.get(existing.page)
     const existingStated = readCadenceFn(existing.quote, existingPage).stated
-    const score = mergeScore(candidate, stated, readCadenceFn)
-    const existingScore = mergeScore(existing, existingStated, readCadenceFn)
+    const score = mergeScore(candidate, stated, readCadenceFn, maintenanceComponentKey(candidate))
+    const existingScore = mergeScore(existing, existingStated, readCadenceFn, maintenanceComponentKey(existing))
     if (score > existingScore || (score === existingScore && candidate.quote.length > existing.quote.length)) {
       best.set(key, candidate)
     }
