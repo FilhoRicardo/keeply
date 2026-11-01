@@ -3,6 +3,10 @@ name: Secret scan
 on:
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   gitleaks:
     runs-on: ubuntu-latest
