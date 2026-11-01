@@ -5,6 +5,9 @@ import type { ProposalMeta } from '@/domain/model'
 export type PlanFallbackReason =
   | 'no_search_key'
   | 'no_results'
+  | 'search_empty'
+  | 'search_error'
+  | 'manual_found_ai_no_tasks'
   | 'fetch_failed'
   | 'extraction_unavailable'
   | 'unreadable'
@@ -34,6 +37,9 @@ export function planFallbackReason(meta: ProposalMeta | null): PlanFallbackReaso
   if (meta.searchReason === 'plan_search_refused') return 'plan_search_refused'
   if (meta.searchReason === 'network_error') return 'network_error'
   if (meta.searchReason === 'timeout') return 'search_timeout'
+  if (meta.searchOutcome === 'search_empty') return 'search_empty'
+  if (meta.searchOutcome === 'search_error') return 'search_error'
+  if (meta.searchOutcome === 'manual_found_ai_no_tasks') return 'manual_found_ai_no_tasks'
   if (meta.searchOutcome === 'no_results') return 'no_results'
   return 'no_search_key'
 }
@@ -67,9 +73,27 @@ const REASON_COPY: Record<PlanFallbackReason, { eyebrow: string; title: string; 
   },
   no_results: {
     eyebrow: 'General guidance',
+    title: 'No manufacturer manual matched this model',
+    body:
+      'Keeply found manuals but none named this model on the cover. These are general guidance tasks. They are not a manufacturer recommendation.',
+  },
+  search_empty: {
+    eyebrow: 'General guidance',
     title: 'No manufacturer manual found for this model',
     body:
-      'Keeply could not find a manual for this model. These are general guidance tasks. They are not a manufacturer recommendation.',
+      'Keeply search returned no suitable manual links. These are general guidance tasks. They are not a manufacturer recommendation.',
+  },
+  search_error: {
+    eyebrow: 'General guidance',
+    title: 'Keeply could not complete the manual search',
+    body:
+      'The search service failed or was unavailable. These are general guidance tasks. They are not a manufacturer recommendation.',
+  },
+  manual_found_ai_no_tasks: {
+    eyebrow: 'General guidance',
+    title: 'We found the manual but could not extract tasks from it yet',
+    body:
+      'Keeply matched a manufacturer manual for this model but could not turn it into verified tasks. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
   fetch_failed: {
     eyebrow: 'General guidance',
@@ -125,12 +149,20 @@ const REASON_COPY: Record<PlanFallbackReason, { eyebrow: string; title: string; 
 export function PlanFallbackBanner({ meta }: { meta: ProposalMeta | null }) {
   const reason = planFallbackReason(meta)
   const copy = REASON_COPY[reason]
+  const manualUrl = meta?.manualUrl?.trim()
   return (
     <section className="plan-fallback" data-testid="plan-fallback-banner" data-fallback-reason={reason}>
       <p className="plan-fallback-eyebrow">{copy.eyebrow}</p>
       <p>
         <strong>{copy.title}.</strong> {copy.body}
       </p>
+      {reason === 'manual_found_ai_no_tasks' && manualUrl ? (
+        <p>
+          <a href={manualUrl} rel="noopener noreferrer" target="_blank">
+            Open the manufacturer manual
+          </a>
+        </p>
+      ) : null}
     </section>
   )
 }

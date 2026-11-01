@@ -10,6 +10,8 @@ import type { FetchResult, DocType } from '@/search/fetch-document'
 import type { ExtractResult } from '@/search/extract-pages'
 import type { BraveReserveResult } from '@/db/brave-quota'
 import type { ManufacturerDomainMap } from '@/search/rank'
+import { emptySearchToPlanOutcome } from './plan-search-outcomes'
+import type { PlanRunLog } from './plan-run-log'
 
 // Orchestrates Phase 3's manual search for a confirmed appliance: confirmed model -> Brave Search
 // -> fetchDocument + extractPages -> extractTasks -> classifyEvidence -> TaskProposal[]. The model
@@ -63,11 +65,16 @@ export type PlanDeps = {
   // Each candidate download gives up after CANDIDATE_FETCH_TIMEOUT_MS. Tests replace this so
   // they can fire that deadline without waiting on the wall clock. Default is setTimeout.
   scheduleTimeout?: (ms: number, onFire: () => void) => () => void
+  // Filled during proposePlan for the route's counts-only log line.
+  runLog?: Partial<PlanRunLog>
 }
 
 export type SearchOutcome =
   | 'ok'
   | 'no_results'
+  | 'search_error'
+  | 'search_empty'
+  | 'manual_found_ai_no_tasks'
   | 'quota_exhausted'
   | 'fetch_failed'
   | 'extraction_unavailable'
@@ -92,6 +99,8 @@ export type PlanOutcome = {
   // The Brave search reason when the search itself didn't yield ok (e.g. 'rate_limited'). UI text
   // can interpret this; the outcome field above is enough to drive the funnel.
   searchReason: string | null
+  // When a manual matched on the cover but no tasks could be extracted. Omitted from DB storage.
+  manualUrl?: string | null
 }
 
 const GENERAL_GUIDANCE_TITLE = 'Keeply general dishwasher maintenance guidance'
@@ -295,8 +304,8 @@ async function findPlans(
     candidates: readonly { url: string; title: string }[]
   },
   deps: PlanDeps,
-): Promise<{ outcome: SearchOutcome; proposals: TaskProposal[] }> {
-  if (timedOut(deps.signal)) return { outcome: 'timeout', proposals: [] }
+): Promise<{ outcome: SearchOutcome; proposals: TaskProposal[]; manualUrl: string | null; aiTasks: number; quotePass: number }> {
+  if (timedOut(deps.signal)) return { outcome: 'timeout', proposals: [], manualUrl: null, aiTasks: 0, quotePass: 0 }
   const domains = deps.manufacturerDomains[args.manufacturer.toLowerCase()] ?? []
   const downloaded = await Promise.all(
     args.candidates.slice(0, MAX_DOWNLOAD_CANDIDATES).map((candidate, rank) =>
@@ -305,14 +314,17 @@ async function findPlans(
   )
   // The plan budget fired while downloads were in flight. A single slow file is not this case:
   // that download is skipped above and the others are still used.
-  if (timedOut(deps.signal)) return { outcome: 'timeout', proposals: [] }
+  if (timedOut(deps.signal)) return { outcome: 'timeout', proposals: [], manualUrl: null, aiTasks: 0, quotePass: 0 }
 
   const ready = downloaded.filter(isReady).sort((a, b) => aiGroup(a) - aiGroup(b) || a.rank - b.rank)
+  if (deps.runLog) deps.runLog.coverMatches = ready.length
   if (ready.length === 0) {
-    if (downloaded.some((item) => 'missedCover' in item)) return { outcome: 'no_results', proposals: [] }
+    if (downloaded.some((item) => 'missedCover' in item)) {
+      return { outcome: 'no_results', proposals: [], manualUrl: null, aiTasks: 0, quotePass: 0 }
+    }
     const failures = downloaded.filter((item): item is { rank: number; failure: SearchOutcome } => 'failure' in item)
     const last = failures.sort((a, b) => a.rank - b.rank).at(-1)
-    return { outcome: last?.failure ?? 'no_results', proposals: [] }
+    return { outcome: last?.failure ?? 'no_results', proposals: [], manualUrl: null, aiTasks: 0, quotePass: 0 }
   }
 
   const exact: TaskProposal[] = []
@@ -322,17 +334,24 @@ async function findPlans(
     .sort((a, b) => a.rank - b.rank)
     .at(-1)
   let lastReason: SearchOutcome = priorFailure?.failure ?? 'no_results'
+  let manualUrl: string | null = ready[0]?.url ?? null
+  let aiTasks = 0
+  let quotePass = 0
+  let triedAiOnCoverMatch = false
   for (const item of ready.slice(0, MAX_EXTRACT_TASKS)) {
-    if (timedOut(deps.signal)) return { outcome: 'timeout', proposals: [] }
+    if (timedOut(deps.signal)) return { outcome: 'timeout', proposals: [], manualUrl, aiTasks, quotePass }
     const candidates = await deps.extractTasks({ model: args.model, pages: item.pages })
     if (candidates === 'unavailable') {
       lastReason = 'extraction_unavailable'
       continue
     }
+    triedAiOnCoverMatch = true
+    manualUrl = item.url
     if (candidates.length === 0) {
-      lastReason = 'no_results'
+      lastReason = 'manual_found_ai_no_tasks'
       continue
     }
+    aiTasks += candidates.length
     const resolved = deps.resolveSource(item.url)
     const documentModels = [...resolved.documentModels]
     if (coversModel(item.pages, args.model) && !documentModels.includes(args.model)) documentModels.push(args.model)
@@ -369,6 +388,7 @@ async function findPlans(
       })
       const interval = presentInterval({ quote: c.quote, stored: c.interval, generalGuidance: false }).interval
       if (verdict.level === 'manufacturer_verified') {
+        quotePass++
         exact.push({
           name: c.task,
           instructions: c.instructions,
@@ -377,6 +397,7 @@ async function findPlans(
           source: manufacturerSource({ url: item.url, title: verifiedTitle, page: c.page, quote: c.quote }),
         })
       } else if (verdict.level === 'similar_model' && coveredModel) {
+        quotePass++
         similar.push({
           name: c.task,
           instructions: c.instructions,
@@ -389,13 +410,21 @@ async function findPlans(
       // and will fall back to it when the manual yielded nothing better.
     }
     // The first manual that returned at least one verified task ends the exact-model search.
-    if (exact.length > 0) return { outcome: 'ok', proposals: exact }
+    if (exact.length > 0) return { outcome: 'ok', proposals: exact, manualUrl: null, aiTasks, quotePass }
   }
   if (similar.length > 0) {
-    const outcome = lastReason === 'no_results' ? 'no_results' : lastReason
-    return { outcome, proposals: similar }
+    const outcome = lastReason === 'manual_found_ai_no_tasks' ? lastReason : lastReason === 'no_results' ? 'no_results' : lastReason
+    return { outcome, proposals: similar, manualUrl: null, aiTasks, quotePass }
   }
-  return { outcome: lastReason, proposals: [] }
+  if (
+    triedAiOnCoverMatch &&
+    exact.length === 0 &&
+    similar.length === 0 &&
+    (lastReason === 'no_results' || (aiTasks > 0 && quotePass === 0))
+  ) {
+    lastReason = 'manual_found_ai_no_tasks'
+  }
+  return { outcome: lastReason, proposals: [], manualUrl: lastReason === 'manual_found_ai_no_tasks' ? manualUrl : null, aiTasks, quotePass }
 }
 
 // Drives the full orchestration. Every failure returns the general-guidance fallback so the route
@@ -441,8 +470,24 @@ export async function proposePlan(
     return { ...noPlan(), searchReason: 'no_key' }
   }
   if (search.status === 'empty') {
-    if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'no_results', searchReason: search.reason }
-    return { ...noPlan(), searchReason: search.reason }
+    const mapped = emptySearchToPlanOutcome(search.reason)
+    if (deps.runLog) {
+      deps.runLog.braveStatus = search.braveStatus
+      deps.runLog.candidates = 0
+      deps.runLog.coverMatches = 0
+      deps.runLog.aiTasks = 0
+      deps.runLog.quotePass = 0
+      deps.runLog.outcome = mapped.searchOutcome
+    }
+    if (isDish) {
+      return {
+        proposals: fallbackGeneral(),
+        fallback: 'general',
+        searchOutcome: mapped.searchOutcome,
+        searchReason: mapped.searchReason,
+      }
+    }
+    return { ...noPlan(), searchOutcome: mapped.searchOutcome, searchReason: mapped.searchReason }
   }
   // search.status === 'ok'. Candidates exist, so a timeout from here on is download or reading,
   // not the search step. searchReason stays null so the banner does not claim the search timed out.
@@ -450,16 +495,34 @@ export async function proposePlan(
     if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: 'timeout', searchReason: null }
     return { proposals: [], fallback: 'general', searchOutcome: 'timeout', searchReason: null }
   }
+  if (deps.runLog) {
+    deps.runLog.braveStatus = search.braveStatus
+    deps.runLog.candidates = search.candidates.length
+  }
   const find = await findPlans(
     { manufacturer: args.manufacturer, model: args.model, candidates: search.candidates },
     deps,
   )
+  if (deps.runLog) {
+    deps.runLog.aiTasks = find.aiTasks
+    deps.runLog.quotePass = find.quotePass
+    deps.runLog.outcome = find.outcome
+  }
   if (find.proposals.length > 0) {
     const fallback: PlanOutcome['fallback'] = find.proposals.some((p) => p.evidenceLevel === 'manufacturer_verified')
       ? 'exact'
       : 'similar'
     return { proposals: find.proposals, fallback, searchOutcome: find.outcome, searchReason: null }
   }
-  if (isDish) return { proposals: fallbackGeneral(), fallback: 'general', searchOutcome: find.outcome, searchReason: null }
-  return { ...noPlan(), searchOutcome: find.outcome }
+  const manualUrl = find.manualUrl
+  if (isDish) {
+    return {
+      proposals: fallbackGeneral(),
+      fallback: 'general',
+      searchOutcome: find.outcome,
+      searchReason: null,
+      ...(manualUrl ? { manualUrl } : {}),
+    }
+  }
+  return { ...noPlan(), searchOutcome: find.outcome, ...(manualUrl ? { manualUrl } : {}) }
 }

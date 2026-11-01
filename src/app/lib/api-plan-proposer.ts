@@ -17,6 +17,9 @@ export type ProposalOutcome = {
   searchOutcome:
     | 'ok'
     | 'no_results'
+    | 'search_error'
+    | 'search_empty'
+    | 'manual_found_ai_no_tasks'
     | 'quota_exhausted'
     | 'fetch_failed'
     | 'extraction_unavailable'
@@ -27,6 +30,7 @@ export type ProposalOutcome = {
     | 'no_plan'
   // Optional human-readable reason, e.g. the Brave search reason or a missing key.
   searchReason: string | null
+  manualUrl?: string | null
 }
 
 export type LiveProposalResult = {
@@ -78,6 +82,9 @@ function asOutcome(input: unknown): ProposalOutcome {
     [
       'ok',
       'no_results',
+      'search_error',
+      'search_empty',
+      'manual_found_ai_no_tasks',
       'quota_exhausted',
       'fetch_failed',
       'extraction_unavailable',
@@ -94,6 +101,7 @@ function asOutcome(input: unknown): ProposalOutcome {
     fallback,
     searchOutcome,
     searchReason: typeof o.searchReason === 'string' ? o.searchReason : null,
+    manualUrl: typeof o.manualUrl === 'string' ? o.manualUrl : null,
   }
 }
 

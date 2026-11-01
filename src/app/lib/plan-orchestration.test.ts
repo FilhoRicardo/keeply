@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { presentInterval } from '@/domain/cadence'
 import { GENERAL_DISHWASHER_TASKS } from '@/domain/general-guidance'
@@ -20,7 +22,9 @@ function makeDeps(overrides: Partial<PlanDeps> = {}): PlanDeps {
   const controller = new AbortController()
   return {
     reserveBraveSearch: overrides.reserveBraveSearch ?? (async () => 'allowed'),
-    searchManuals: overrides.searchManuals ?? (async () => ({ status: 'empty', candidates: [], reason: 'no_results' })),
+    searchManuals:
+      overrides.searchManuals ??
+      (async () => ({ status: 'empty', candidates: [], reason: 'no_results', braveStatus: [] as const })),
     fetchDocument: overrides.fetchDocument ?? (async () => ({ ok: false, reason: 'fetch_failed' as const })),
     extractPages: overrides.extractPages ?? (async () => ({ ok: false, reason: 'unreadable' as const })),
     extractTasks: overrides.extractTasks ?? (async () => []),
@@ -34,7 +38,11 @@ function makeDeps(overrides: Partial<PlanDeps> = {}): PlanDeps {
 }
 
 function searchOkWith(url: string, title = 'PDF manual'): PlanDeps['searchManuals'] {
-  return async () => ({ status: 'ok', candidates: [{ url, title, snippet: '', host: new URL(url).host }] })
+  return async () => ({
+    status: 'ok',
+    candidates: [{ url, title, snippet: '', host: new URL(url).host }],
+    braveStatus: [200, 200, 200],
+  })
 }
 
 function fetchOk(bytes: Uint8Array, type: 'pdf' | 'html' = 'html'): PlanDeps['fetchDocument'] {
@@ -105,6 +113,7 @@ describe('proposePlan', () => {
           searchManuals: async () => ({
             status: 'ok',
             candidates: [{ url, title: 'Electrolux-medialibrary', snippet: '', host: 'api.electrolux-medialibrary.com' }],
+            braveStatus: [200],
           }),
           fetchDocument: fetchOk(new TextEncoder().encode(page), 'pdf'),
           extractPages: async () => ({ ok: true, pages: [{ page: 1, text: page }], documentTitle }),
@@ -456,6 +465,7 @@ describe('proposePlan', () => {
               { url: related, title: 'related', snippet: '', host: 'www.smeg.com' },
               { url: exact, title: 'exact', snippet: '', host: 'www.smeg.com' },
             ],
+            braveStatus: [200],
           }),
           fetchDocument: async (url: string) => ({
             ok: true as const,
@@ -512,10 +522,10 @@ describe('proposePlan', () => {
 
   it('returns general guidance when searchManuals reports no_results', async () => {
     const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
-      searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'no_results' }),
+      searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'no_results', braveStatus: [200, 200, 200] }),
     }))
     expect(result.fallback).toBe('general')
-    expect(result.searchOutcome).toBe('no_results')
+    expect(result.searchOutcome).toBe('search_empty')
     expect(result.searchReason).toBe('no_results')
     expect(result.proposals).toEqual(GENERAL_DISHWASHER_TASKS)
   })
@@ -551,11 +561,32 @@ describe('proposePlan', () => {
 
   it('reports typed rate_limited and falls back to general guidance when Brave returns 429', async () => {
     const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
-      searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'rate_limited' }),
+      searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'rate_limited', braveStatus: [429, 429, 429] }),
     }))
     expect(result.fallback).toBe('general')
-    expect(result.searchOutcome).toBe('no_results')
+    expect(result.searchOutcome).toBe('search_error')
     expect(result.searchReason).toBe('rate_limited')
+    expect(result.proposals).toEqual(GENERAL_DISHWASHER_TASKS)
+  })
+
+  it('reports manual_found_ai_no_tasks when the cover matches but AI returns no tasks', async () => {
+    const coverPath = fileURLToPath(new URL('../../test-fixtures/electrolux-keqb7300l-cover.txt', import.meta.url))
+    const cover = readFileSync(coverPath, 'utf8')
+    const model = 'KEQB7300L'
+    const manualUrl =
+      'https://api.electrolux-medialibrary.com/asset/example/E4RM3Q/example/ORIGINAL/manual.pdf'
+    const result = await proposePlan(
+      { manufacturer: 'Electrolux', model, applianceType: 'dishwasher' },
+      makeDeps({
+        manufacturerDomains: { electrolux: ['electrolux-medialibrary.com'] },
+        searchManuals: searchOkWith(manualUrl),
+        fetchDocument: fetchOk(new TextEncoder().encode(cover), 'pdf'),
+        extractPages: extractPagesOk(cover),
+        extractTasks: async () => [],
+      }),
+    )
+    expect(result.searchOutcome).toBe('manual_found_ai_no_tasks')
+    expect(result.manualUrl).toBe(manualUrl)
     expect(result.proposals).toEqual(GENERAL_DISHWASHER_TASKS)
   })
 
@@ -572,6 +603,7 @@ describe('proposePlan', () => {
       extractTasks: extractedTasksOk([{ ...CANDIDATE, quote: 'A quote that is not in the page text at all.' }]),
     }))
     expect(result.fallback).toBe('general')
+    expect(result.searchOutcome).toBe('manual_found_ai_no_tasks')
     expect(result.proposals).toEqual(GENERAL_DISHWASHER_TASKS)
   })
 
@@ -584,6 +616,7 @@ describe('proposePlan', () => {
         { url: badUrl, title: 'broken', snippet: '', host: BOSCH_DOMAIN },
         { url: goodUrl, title: 'good', snippet: '', host: BOSCH_DOMAIN },
       ],
+      braveStatus: [200],
     }))
     const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY, applianceType: 'dishwasher' }, makeDeps({
       searchManuals: search,
@@ -609,6 +642,7 @@ describe('proposePlan', () => {
         { url: badUrl, title: 'empty', snippet: '', host: BOSCH_DOMAIN },
         { url: goodUrl, title: 'good', snippet: '', host: BOSCH_DOMAIN },
       ],
+      braveStatus: [200],
     }))
     let extractCall = 0
     const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, modelFamily: FAMILY, applianceType: 'dishwasher' }, makeDeps({
@@ -660,10 +694,10 @@ describe('proposePlan', () => {
       throw new Error('fetch must not run when search times out')
     })
     const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
-      searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'timeout' }),
+      searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'timeout', braveStatus: [408, 408, 408] }),
       fetchDocument: fetch as unknown as PlanDeps['fetchDocument'],
     }))
-    expect(result.searchOutcome).toBe('no_results')
+    expect(result.searchOutcome).toBe('search_error')
     expect(result.searchReason).toBe('timeout')
     expect(result.proposals).toEqual(GENERAL_DISHWASHER_TASKS)
     expect(fetch).not.toHaveBeenCalled()
@@ -676,7 +710,11 @@ describe('proposePlan', () => {
       signal: controller.signal,
       searchManuals: async () => {
         controller.abort()
-        return { status: 'ok' as const, candidates: [{ url: PDF_URL, title: 'manual', snippet: '', host: BOSCH_DOMAIN }] }
+        return {
+          status: 'ok' as const,
+          candidates: [{ url: PDF_URL, title: 'manual', snippet: '', host: BOSCH_DOMAIN }],
+          braveStatus: [200],
+        }
       },
       fetchDocument: fetch,
     }))
@@ -717,7 +755,7 @@ describe('proposePlan', () => {
     ]
     const result = await proposePlan({ manufacturer: BOSCH, model: MODEL, applianceType: 'dishwasher' }, makeDeps({
       generalGuidance: () => general,
-      searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'no_results' }),
+      searchManuals: async () => ({ status: 'empty', candidates: [], reason: 'no_results', braveStatus: [] }),
     }))
     // The orchestration clones with generalSource() so the caller sees a fresh, honest source.
     expect(result.proposals).toHaveLength(general.length)
@@ -734,7 +772,10 @@ describe('proposePlan', () => {
     const order: string[] = []
     const deps = makeDeps({
       reserveBraveSearch: vi.fn(async () => { order.push('reserve'); return 'allowed' as const }),
-      searchManuals: vi.fn(async () => { order.push('search'); return { status: 'ok' as const, candidates: [] } }),
+      searchManuals: vi.fn(async () => {
+        order.push('search')
+        return { status: 'ok' as const, candidates: [], braveStatus: [200] }
+      }),
       fetchDocument: vi.fn(async () => { order.push('fetch'); return { ok: false as const, reason: 'fetch_failed' as const } }),
       extractPages: vi.fn(async () => { order.push('pages'); return { ok: false as const, reason: 'unreadable' as const } }),
       extractTasks: vi.fn(async () => { order.push('tasks'); return [] }),
@@ -767,13 +808,18 @@ describe('proposePlan', () => {
       { manufacturer: 'LG', model: 'LRFXS2503S', applianceType: 'fridge' },
       makeDeps({
         generalGuidance: generalSpy,
-        searchManuals: async () => ({ status: 'empty' as const, candidates: [], reason: 'no_results' as const }),
+        searchManuals: async () => ({
+          status: 'empty' as const,
+          candidates: [],
+          reason: 'no_results' as const,
+          braveStatus: [],
+        }),
       }),
     )
     expect(result.proposals).toEqual([])
     expect(result.fallback).toBe('general')
     // The UI looks at searchOutcome first; the reason carries the underlying search detail.
-    expect(result.searchOutcome).toBe('no_plan')
+    expect(result.searchOutcome).toBe('search_empty')
     expect(result.searchReason).toBe('no_results')
     // Never called the general list for a non-dishwasher; never fabricated dishwasher tasks.
     expect(generalSpy).not.toHaveBeenCalled()
@@ -784,13 +830,18 @@ describe('proposePlan', () => {
     // manual is found, the orchestration must return a no_plan outcome so the UI shows the
     // manual-entry path instead of pretending a search happened.
     const reserve = vi.fn(async () => 'allowed' as const)
-    const search = vi.fn(async (): ReturnType<PlanDeps['searchManuals']> => ({ status: 'empty', candidates: [], reason: 'no_results' }))
+    const search = vi.fn(async (): ReturnType<PlanDeps['searchManuals']> => ({
+      status: 'empty',
+      candidates: [],
+      reason: 'no_results',
+      braveStatus: [],
+    }))
     const result = await proposePlan(
       { manufacturer: 'Miele', model: 'WSD663', applianceType: 'washing machine' },
       makeDeps({ reserveBraveSearch: reserve, searchManuals: search }),
     )
     expect(result.proposals).toEqual([])
-    expect(result.searchOutcome).toBe('no_plan')
+    expect(result.searchOutcome).toBe('search_empty')
     // We still consulted the durable counter; the search ran and was empty. We do not retry.
     expect(reserve).toHaveBeenCalledTimes(1)
     expect(search).toHaveBeenCalledTimes(1)
@@ -840,7 +891,7 @@ describe('proposePlan candidate window', () => {
     candidates: { url: string; title: string; snippet: string; host: string }[],
     deps: Partial<PlanDeps>,
   ) {
-    const search = vi.fn(async () => ({ status: 'ok' as const, candidates }))
+    const search = vi.fn(async () => ({ status: 'ok' as const, candidates, braveStatus: [200] }))
     const result = proposePlan(
       { manufacturer: 'Electrolux', model: MODEL, applianceType: 'oven' },
       makeDeps({

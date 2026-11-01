@@ -32,6 +32,7 @@ export type SearchReason =
   | 'timeout'
   | 'network_error'
   | 'http_error'
+  | `http_${number}`
   | 'malformed_response'
   | 'no_results'
   | 'quota_exhausted'
@@ -44,8 +45,8 @@ export type SearchCandidate = {
 }
 
 export type SearchResult =
-  | { status: 'ok'; candidates: SearchCandidate[] }
-  | { status: 'empty'; candidates: []; reason: SearchReason }
+  | { status: 'ok'; candidates: SearchCandidate[]; braveStatus: readonly number[] }
+  | { status: 'empty'; candidates: []; reason: SearchReason; braveStatus: readonly number[] }
   | { status: 'unavailable' }
 
 export type BraveSearchCallOptions = {
@@ -154,7 +155,7 @@ export async function searchManuals(
   // would auto-route to a card on file, which is out of scope for this product.
   const freeQuotaCap = resolveFreeQuotaCap(env, options.freeQuotaCap)
   if (callCount >= freeQuotaCap) {
-    return { status: 'empty', candidates: [], reason: 'quota_exhausted' }
+    return { status: 'empty', candidates: [], reason: 'quota_exhausted', braveStatus: [] }
   }
 
   const fetchImpl = withE2eFixtures(options.fetchImpl ?? fetch)
@@ -165,22 +166,33 @@ export async function searchManuals(
 
   const queries = buildQueries(args.manufacturer.trim(), args.model.trim())
   const collected: RawCandidate[] = []
+  const braveStatus: number[] = []
   let lastReason: SearchReason = 'no_results'
   let lastRetryAfterMs: number | null = null
   let nextCallAllowedAt = now()
+
+  const recordStatus = (response: BraveCallOutcome) => {
+    if (response.kind === 'ok') braveStatus.push(200)
+    else if (response.kind === 'rate_limited') braveStatus.push(429)
+    else if (response.kind === 'timeout') braveStatus.push(408)
+    else if (response.kind === 'network_error') braveStatus.push(0)
+    else if (response.kind === 'http_error') braveStatus.push(response.status)
+    else if (response.kind === 'malformed_response') braveStatus.push(502)
+  }
 
   for (const q of queries) {
     // Hard stop, also inside the loop: if a previous call advanced the counter to the cap,
     // do not issue another fetch on this iteration either. The per-process counter must not
     // exceed freeQuotaCap, so we check before callCount++ (and before any network work).
     if (callCount >= freeQuotaCap) {
-      return { status: 'empty', candidates: [], reason: 'quota_exhausted' }
+      return { status: 'empty', candidates: [], reason: 'quota_exhausted', braveStatus }
     }
     const gap = Math.max(0, nextCallAllowedAt - now())
     if (gap > 0) await sleep(gap)
     callCount++
 
     const response = await callBrave(fetchImpl, apiKey, q, timeoutMs, options.abortSignal)
+    recordStatus(response)
     if (response.kind === 'rate_limited') {
       // Honour Retry-After for the next call's pacing but keep issuing the remaining
       // query variants so the CFO cost view reflects the calls we actually made. We
@@ -192,7 +204,7 @@ export async function searchManuals(
     } else if (response.kind === 'network_error') {
       lastReason = 'network_error'
     } else if (response.kind === 'http_error') {
-      lastReason = 'http_error'
+      lastReason = `http_${response.status}` as SearchReason
     } else if (response.kind === 'malformed_response') {
       lastReason = 'malformed_response'
     } else if (response.kind === 'ok') {
@@ -213,9 +225,9 @@ export async function searchManuals(
   })
 
   if (ranked.length === 0) {
-    return { status: 'empty', candidates: [], reason: lastReason }
+    return { status: 'empty', candidates: [], reason: lastReason, braveStatus }
   }
-  return { status: 'ok', candidates: ranked.map(rankToSearchCandidate) }
+  return { status: 'ok', candidates: ranked.map(rankToSearchCandidate), braveStatus }
 }
 
 type BraveCallOutcome =
@@ -223,7 +235,7 @@ type BraveCallOutcome =
   | { kind: 'rate_limited'; resetMs: number }
   | { kind: 'timeout' }
   | { kind: 'network_error' }
-  | { kind: 'http_error' }
+  | { kind: 'http_error'; status: number }
   | { kind: 'malformed_response' }
 
 async function callBrave(
@@ -254,7 +266,7 @@ async function callBrave(
       return { kind: 'rate_limited', resetMs: parseRetryAfter(response.headers.get('retry-after')) }
     }
     if (!response.ok) {
-      return { kind: 'http_error' }
+      return { kind: 'http_error', status: response.status }
     }
     const body = (await response.json()) as unknown
     if (!isValidBraveResponse(body)) {

@@ -465,10 +465,11 @@ async function expectPlanReason(page: Page, item: (typeof RELOAD_CASES)[number])
   await expect(banner).toBeVisible()
   await expect(banner).toHaveAttribute('data-fallback-reason', item.reason!)
   if (item.reason === 'no_results') {
-    await expect(banner).toContainText('No manufacturer manual found for this model')
+    await expect(banner).toContainText('No manufacturer manual matched this model')
+    await expect(banner).toContainText('none named this model on the cover')
     return
   }
-  await expect(banner).not.toContainText('No manufacturer manual found')
+  await expect(banner).not.toContainText('No manufacturer manual matched this model')
   await expect(banner).not.toContainText('could not find a manual')
   await expect(page.getByText(/found no guidance for your exact model/i)).toHaveCount(0)
 }

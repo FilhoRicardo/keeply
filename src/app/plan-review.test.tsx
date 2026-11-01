@@ -366,8 +366,8 @@ describe('PlanReview — fallback banner when the search cannot find a manual', 
 
     const banner = await screen.findByTestId('plan-fallback-banner')
     expect(banner).toHaveAttribute('data-fallback-reason', 'no_results')
-    expect(banner).toHaveTextContent('No manufacturer manual found for this model.')
-    expect(banner).toHaveTextContent('Keeply could not find a manual for this model.')
+    expect(banner).toHaveTextContent('No manufacturer manual matched this model.')
+    expect(banner).toHaveTextContent('none named this model on the cover')
     expect(screen.getByText(/found no guidance for your exact model/i)).toBeInTheDocument()
   })
 

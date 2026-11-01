@@ -31,7 +31,8 @@ afterEach(() => {
 function expectEmpty(result: Awaited<ReturnType<typeof searchManuals>>): asserts result is {
   status: 'empty'
   candidates: []
-  reason: 'rate_limited' | 'timeout' | 'network_error' | 'http_error' | 'malformed_response' | 'no_results' | 'quota_exhausted'
+  reason: 'rate_limited' | 'timeout' | 'network_error' | 'http_error' | `http_${number}` | 'malformed_response' | 'no_results' | 'quota_exhausted'
+  braveStatus: readonly number[]
 } {
   if (result.status !== 'empty') throw new Error(`expected empty, got ${result.status}`)
 }
@@ -39,6 +40,7 @@ function expectEmpty(result: Awaited<ReturnType<typeof searchManuals>>): asserts
 function expectOk(result: Awaited<ReturnType<typeof searchManuals>>): asserts result is {
   status: 'ok'
   candidates: { url: string; title: string; snippet: string; host: string }[]
+  braveStatus: readonly number[]
 } {
   if (result.status !== 'ok') throw new Error(`expected ok, got ${result.status}`)
 }
@@ -201,7 +203,7 @@ describe('searchManuals', () => {
       { fetchImpl: fakeFetch(fetchMock), now: () => fakeNow, sleep: fakeSleep },
     )
     expectEmpty(result)
-    expect(result.reason).toBe('http_error')
+    expect(result.reason).toBe('http_500')
   })
 
   it('returns network_error when fetch throws (e.g. timeout)', async () => {

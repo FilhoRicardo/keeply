@@ -16,7 +16,22 @@ export type FunnelEvent =
   | { name: 'calendar_tasks_created'; count: number }
   | { name: 'invite_redeemed' }
   | { name: 'scan_denied'; reason: AccessDenial }
-  | { name: 'plan_search'; outcome: 'ok' | 'no_results' | 'quota_exhausted' | 'fetch_failed' | 'extraction_unavailable' | 'unreadable' | 'no_text' | 'timeout' }
+  | {
+      name: 'plan_search'
+      outcome:
+        | 'ok'
+        | 'no_results'
+        | 'search_error'
+        | 'search_empty'
+        | 'manual_found_ai_no_tasks'
+        | 'quota_exhausted'
+        | 'fetch_failed'
+        | 'extraction_unavailable'
+        | 'unreadable'
+        | 'no_text'
+        | 'timeout'
+        | 'no_plan'
+    }
 
 export type EventSink = (event: FunnelEvent) => void
 

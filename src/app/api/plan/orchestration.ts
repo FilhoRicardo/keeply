@@ -8,6 +8,7 @@ import { extractPages } from '@/search/extract-pages'
 import { braveQuotaStatus, createServiceRoleDb, reserveBraveSearch } from '@/db/brave-quota'
 import { scanEnabled } from '../../lib/features'
 import { CANDIDATE_FETCH_TIMEOUT_MS, proposePlan, type PlanDeps } from '../../lib/plan-orchestration'
+import { logPlanRun, type PlanRunLog } from '../../lib/plan-run-log'
 
 // The P3-5 server route. Same gate as /api/identify: scan on, a billable provider or Brave key
 // configured, the invite/limit reservation, and the per-instance/durable counters. Manual mode
@@ -22,7 +23,19 @@ import type { IntervalUnit } from '@/domain/format-interval'
 // Funnel event added in KEE-42. The migration's check constraint is updated in the same change set.
 // KEE-60: 'no_plan' is returned when the appliance is not a dishwasher and the search yielded
 // nothing — the UI shows a plain "no plan could be built" message with the manual-entry form.
-export type PlanSearchOutcome = 'ok' | 'no_results' | 'quota_exhausted' | 'fetch_failed' | 'extraction_unavailable' | 'unreadable' | 'no_text' | 'timeout' | 'no_plan'
+export type PlanSearchOutcome =
+  | 'ok'
+  | 'no_results'
+  | 'search_error'
+  | 'search_empty'
+  | 'manual_found_ai_no_tasks'
+  | 'quota_exhausted'
+  | 'fetch_failed'
+  | 'extraction_unavailable'
+  | 'unreadable'
+  | 'no_text'
+  | 'timeout'
+  | 'no_plan'
 
 export type PlanProposalJson = {
   name: string
@@ -46,6 +59,7 @@ export type PlanResponse = {
   // The orchestration's existing reason, when it has one. The entry screen uses this to
   // choose an honest recovery message. Null when the search itself succeeded.
   searchReason: string | null
+  manualUrl?: string | null
 }
 
 const PLAN_TIMEOUT_MS = 25_000
@@ -99,6 +113,7 @@ function buildDeps(args: {
   signal: AbortSignal
   manufacturerDomains: ManufacturerDomainMap
   env: Record<string, string | undefined>
+  runLog?: Partial<PlanRunLog>
 }): PlanDeps {
   return {
     reserveBraveSearch: async () => {
@@ -117,6 +132,7 @@ function buildDeps(args: {
     generalGuidance: () => GENERAL_DISHWASHER_TASKS,
     aiModel: args.env.OPENROUTER_MODEL?.trim() || 'openrouter/free',
     signal: args.signal,
+    runLog: args.runLog,
   }
 }
 
@@ -135,8 +151,16 @@ export type PlanRequest = { manufacturer: string; model: string; modelFamily?: s
 // and the banner must keep that timeout distinct from a later failure to read a found manual.
 export function searchReasonForClient(outcome: {
   proposals: readonly unknown[]
+  searchOutcome: PlanSearchOutcome
   searchReason: string | null
 }): string | null {
+  if (outcome.searchReason === 'timeout' && outcome.proposals.length > 0) return 'timeout'
+  const keepWithGeneralGuidance =
+    outcome.proposals.length > 0 &&
+    (outcome.searchOutcome === 'search_error' ||
+      outcome.searchOutcome === 'search_empty' ||
+      outcome.searchOutcome === 'manual_found_ai_no_tasks')
+  if (keepWithGeneralGuidance) return outcome.searchReason
   if (outcome.proposals.length === 0 || outcome.searchReason === 'timeout') return outcome.searchReason
   return null
 }
@@ -152,6 +176,7 @@ export async function runPlan(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), PLAN_TIMEOUT_MS)
   try {
+    const runLog: Partial<PlanRunLog> = { type: 'plan_run' }
     const outcome = await proposePlan(
       {
         manufacturer: request.manufacturer,
@@ -163,13 +188,24 @@ export async function runPlan(
         signal: controller.signal,
         manufacturerDomains: buildDefaultManufacturerDomains(),
         env,
+        runLog,
       }),
     )
+    logPlanRun({
+      type: 'plan_run',
+      braveStatus: runLog.braveStatus ?? [],
+      candidates: runLog.candidates ?? 0,
+      coverMatches: runLog.coverMatches ?? 0,
+      aiTasks: runLog.aiTasks ?? 0,
+      quotePass: runLog.quotePass ?? 0,
+      outcome: outcome.searchOutcome,
+    })
     return {
       proposals: outcome.proposals.map(toJsonProposal),
       fallback: outcome.fallback,
       searchOutcome: outcome.searchOutcome,
       searchReason: searchReasonForClient(outcome),
+      ...(outcome.manualUrl ? { manualUrl: outcome.manualUrl } : {}),
     }
   } finally {
     clearTimeout(timer)

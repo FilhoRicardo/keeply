@@ -62,6 +62,9 @@ export type ProposalMeta = {
   readonly searchOutcome:
     | 'ok'
     | 'no_results'
+    | 'search_error'
+    | 'search_empty'
+    | 'manual_found_ai_no_tasks'
     | 'quota_exhausted'
     | 'fetch_failed'
     | 'extraction_unavailable'
@@ -72,6 +75,7 @@ export type ProposalMeta = {
     | 'no_plan'
   readonly searchReason: string | null
   readonly searched: boolean
+  readonly manualUrl?: string | null
 }
 
 // One dishwasher and its plan. After Approval the owner manages the tasks in their calendar.
