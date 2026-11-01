@@ -56,7 +56,7 @@ function cleanCandidate(raw: unknown, pageNumbers: ReadonlySet<number>): Extract
   const unit = intervalRaw && typeof intervalRaw.unit === 'string' ? intervalRaw.unit : ''
   if (!Number.isInteger(count) || count < 1 || count > 365) return null
   if (!INTERVAL_UNITS.has(unit)) return null
-  const cadence = readCadence(quote)
+  const cadence = readCadence(quote, task)
   const interval = cadence.stated ? cadence.interval : KEEPLY_DEFAULT_INTERVAL
   return { task, instructions, quote, page, interval }
 }
@@ -132,7 +132,7 @@ export function maintenanceComponentKey(candidate: ExtractedTaskCandidate): stri
 
 export type MergeExtractedTasksOptions = {
   pageTextByNumber?: ReadonlyMap<number, string>
-  readCadence?: (quote: string, pageText?: string) => { stated: boolean }
+  readCadence?: (quote: string, pageText?: string, task?: string) => { stated: boolean }
 }
 
 function isIndicatorRefillQuote(quote: string): boolean {
@@ -145,8 +145,7 @@ function misalignedDailyForIndicator(candidate: ExtractedTaskCandidate, readCade
   if (!/\b(refill|top up|fill|replenish|keep)\b/.test(blob)) return false
   if (!/\b(salt|rinse[\s-]*aid)\b/.test(blob)) return false
   if (!/\bindicator\b/.test(blob)) return false
-  const pageText = undefined
-  const stated = readCadenceFn?.(candidate.quote, pageText)?.stated
+  const stated = readCadenceFn?.(candidate.quote, undefined, candidate.task)?.stated
   return stated === true && /\bevery\s+day\b/i.test(candidate.quote)
 }
 
@@ -199,8 +198,8 @@ function pickBetterCandidate(
   const pageTextByNumber = opts.pageTextByNumber ?? new Map()
   const pageA = pageTextByNumber.get(a.page)
   const pageB = pageTextByNumber.get(b.page)
-  const statedA = readCadenceFn(a.quote, pageA).stated
-  const statedB = readCadenceFn(b.quote, pageB).stated
+  const statedA = readCadenceFn(a.quote, pageA, a.task).stated
+  const statedB = readCadenceFn(b.quote, pageB, b.task).stated
   const key = maintenanceComponentKey(a)
   const scoreA = mergeScore(a, statedA, readCadenceFn, key)
   const scoreB = mergeScore(b, statedB, readCadenceFn, key)
@@ -234,14 +233,14 @@ export function mergeExtractedTasks(
   for (const candidate of candidates) {
     const key = normalisedTaskName(candidate.task)
     const pageText = pageTextByNumber.get(candidate.page)
-    const stated = readCadenceFn(candidate.quote, pageText).stated
+    const stated = readCadenceFn(candidate.quote, pageText, candidate.task).stated
     const existing = best.get(key)
     if (!existing) {
       best.set(key, candidate)
       continue
     }
     const existingPage = pageTextByNumber.get(existing.page)
-    const existingStated = readCadenceFn(existing.quote, existingPage).stated
+    const existingStated = readCadenceFn(existing.quote, existingPage, existing.task).stated
     const score = mergeScore(candidate, stated, readCadenceFn, maintenanceComponentKey(candidate))
     const existingScore = mergeScore(existing, existingStated, readCadenceFn, maintenanceComponentKey(existing))
     if (score > existingScore || (score === existingScore && candidate.quote.length > existing.quote.length)) {

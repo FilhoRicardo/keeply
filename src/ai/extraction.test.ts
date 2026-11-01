@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { presentInterval, readCadenceFromContext } from '@/domain/cadence'
+import { presentInterval, quoteWithPageCadence, readCadenceFromContext } from '@/domain/cadence'
 import {
   maintenanceComponentKey,
   mergeExtractedTasks,
@@ -291,7 +291,7 @@ describe('Electrolux KEQB7300L over-extraction consolidation', () => {
     ...carePages.map((p) => [p.page, p.text] as const),
     [26, page26SaltRinse] as const,
   ])
-  const readCadence = (quote: string, pageText?: string) => readCadenceFromContext(quote, pageText)
+  const readCadence = (quote: string, pageText?: string, task?: string) => readCadenceFromContext(quote, pageText, task)
 
   const filterIntro =
     'dirty filters and clogged spray arms negatively affect the washing results. check these elements regularly and, if necessary, clean them.'
@@ -374,6 +374,71 @@ describe('Electrolux KEQB7300L over-extraction consolidation', () => {
     expect(presentInterval({ quote: merged[0]!.quote, stored: merged[0]!.interval, generalGuidance: false }).text).not.toMatch(
       /from the manual/,
     )
+  })
+
+  it('runs normalise → merge → quote cadence → presentInterval for post-#78 prod wrong quotes', () => {
+    const pageNumbers = new Set([...pageTextByNumber.keys()])
+    const rawCandidates = [
+      {
+        task: 'Refill rinse aid',
+        instructions: 'Top up when needed.',
+        interval: { count: 1, unit: 'month' },
+        page: 26,
+        quote: rinseQuote,
+      },
+      {
+        task: 'Check and refill salt container',
+        instructions: 'Refill when the indicator is on.',
+        interval: { count: 1, unit: 'day' },
+        page: 26,
+        quote: 'use a descaler or a cleaning product designed specifically for dishwashers every day.',
+      },
+      {
+        task: 'Run Machine Care programme with descaler',
+        instructions: 'Run the programme.',
+        interval: { count: 1, unit: 'day' },
+        page: 22,
+        quote: 'use a descaler or a cleaning product designed specifically for dishwashers every day.',
+      },
+      {
+        task: 'Run Machine Care programme with descaler or cleaning product',
+        instructions: 'Use dishwasher cleaner.',
+        interval: { count: 2, unit: 'month' },
+        page: 22,
+        quote: machineCareFull,
+      },
+    ]
+    const normalised = normaliseExtraction({ candidates: rawCandidates }, pageNumbers)
+    const merged = mergeExtractedTasks(normalised, { pageTextByNumber, readCadence })
+    const byKey = new Map(merged.map((c) => [maintenanceComponentKey(c), c]))
+    const saltStored = quoteWithPageCadence(byKey.get('salt')!.quote, pageTextByNumber.get(26)!, byKey.get('salt')!.task)
+    expect(
+      presentInterval({
+        quote: saltStored,
+        stored: byKey.get('salt')!.interval,
+        generalGuidance: false,
+        task: byKey.get('salt')!.task,
+      }).text,
+    ).toMatch(/Keeply's suggestion|indicator/i)
+    expect(
+      presentInterval({
+        quote: saltStored,
+        stored: byKey.get('salt')!.interval,
+        generalGuidance: false,
+        task: byKey.get('salt')!.task,
+      }).text,
+    ).not.toMatch(/Every day · from the manual/)
+    const machineCare = byKey.get('machine-care')!
+    const mcStored = quoteWithPageCadence(machineCare.quote, pageTextByNumber.get(22)!, machineCare.task)
+    expect(
+      presentInterval({
+        quote: mcStored,
+        stored: machineCare.interval,
+        generalGuidance: false,
+        pageText: pageTextByNumber.get(22),
+        task: machineCare.task,
+      }).interval,
+    ).toEqual({ count: 2, unit: 'month' })
   })
 
   it('consolidates nine post-PR75 prod duplicates to six maintenance components with correct cadence', () => {

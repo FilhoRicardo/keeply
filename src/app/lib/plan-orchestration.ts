@@ -373,7 +373,7 @@ async function findPlans(
       : verifiedTitle
     for (const c of candidates) {
       const documentText = safePageText(item.pages, c.page)
-      const quote = quoteWithPageCadence(c.quote, documentText)
+      const quote = quoteWithPageCadence(c.quote, documentText, c.task)
       const verdict = classifyEvidence({
         source: {
           url: item.url,
@@ -391,6 +391,8 @@ async function findPlans(
         quote,
         stored: c.interval,
         generalGuidance: false,
+        pageText: documentText,
+        task: c.task,
       }).interval
       if (verdict.level === 'manufacturer_verified') {
         quotePass++

@@ -54,6 +54,31 @@ async function takePhoto() {
 }
 
 describe('ScanFlow without recognition (v0.1)', () => {
+  it('disables the file input until the capture screen is ready', async () => {
+    renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo)
+    const input = screen.getByLabelText('Take or choose a photo') as HTMLInputElement
+    expect(input.disabled).toBe(true)
+    expect(screen.getByText('Loading…')).toBeInTheDocument()
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    })
+    expect(input.disabled).toBe(false)
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument()
+  })
+
+  it('processes a photo already chosen on the file input when capture becomes ready', async () => {
+    renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo)
+    const input = screen.getByLabelText('Take or choose a photo') as HTMLInputElement
+    await act(async () => {
+      Object.defineProperty(input, 'files', { value: [photo], configurable: true })
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      await Promise.resolve()
+    })
+    expect(
+      await screen.findByText(/Reading the label|could not read an appliance label/),
+    ).toBeInTheDocument()
+  })
+
   it('shows the reading state before photo preparation finishes', async () => {
     deferPrepare = true
     renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo)

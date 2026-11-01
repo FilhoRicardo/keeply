@@ -127,6 +127,7 @@ export function ApplianceRecordView({ applianceId }: { applianceId: string }) {
                       quote: task.source.quote,
                       stored: task.interval,
                       generalGuidance: task.evidenceLevel === 'general_guidance',
+                      task: task.name,
                     }).text
                   }
                 </dd>

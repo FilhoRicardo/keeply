@@ -143,6 +143,91 @@ function isRefillMaintenance(text: string): boolean {
   return /\b(refill|top up|top-up|fill|replenish|keep)\b/i.test(text) && /\b(salt|rinse[\s-]*aid)\b/i.test(text)
 }
 
+function maintenanceComponentFromText(text: string): string | null {
+  const blob = text.toLowerCase()
+  if (/\brinse[\s-]*aid\b/.test(blob)) return 'rinse-aid'
+  if (/\bsalt\b/.test(blob)) return 'salt'
+  if (
+    /\bmachine\s+care\b/.test(blob) ||
+    (/\bprogramme\b/.test(blob) && /\b(descaler|cleaning product|internal cleaning)\b/.test(blob))
+  ) {
+    return 'machine-care'
+  }
+  if (/\b(door|gasket|rubber)\b/.test(blob) && /\b(wipe|clean|gasket|door|seal)\b/.test(blob)) return 'door-gasket'
+  if (/\bspray[\s-]*arms?\b/.test(blob)) return 'spray-arms'
+  if (/\bfilters?\b|\bforeign object\b|\bsump\b/.test(blob)) return 'filters'
+  return null
+}
+
+function taskComponent(task?: string | null): string | null {
+  if (!task?.trim()) return null
+  return maintenanceComponentFromText(task)
+}
+
+function sentenceRelatesToComponent(sentence: string, component: string): boolean {
+  const blob = sentence.toLowerCase()
+  switch (component) {
+    case 'salt':
+      return /\bsalt\b/.test(blob)
+    case 'rinse-aid':
+      return /\brinse[\s-]*aid\b/.test(blob)
+    case 'machine-care':
+      return (
+        /\bmachine\s+care\b/.test(blob) ||
+        (/\b(descaler|cleaning product)\b/.test(blob) && /\bat least once every\b/.test(blob))
+      )
+    case 'door-gasket':
+      return /\b(door|gasket|rubber)\b/.test(blob)
+    case 'filters':
+      return /\bfilters?\b|\bsump\b|\bforeign object/.test(blob)
+    case 'spray-arms':
+      return /\bspray[\s-]*arms?\b/.test(blob)
+    default:
+      return true
+  }
+}
+
+function actionTermsFromTask(task: string): string[] {
+  const t = task.toLowerCase()
+  const terms: string[] = []
+  if (/\brefill\b/.test(t)) terms.push('refill', 'top up', 'fill', 'replenish', 'keep')
+  if (/\brun\b/.test(t)) terms.push('run', 'start', 'programme', 'machine care')
+  if (/\bclean\b/.test(t)) terms.push('clean', 'wipe')
+  if (/\bcheck\b/.test(t)) terms.push('check')
+  return terms
+}
+
+/** Keeps only quote sentences about the task's maintenance component; resolves conflicting cadences. */
+function quoteScopeForTask(quote: string, task?: string | null): string {
+  if (!task?.trim()) return quote
+  const component = taskComponent(task)
+  if (!component) return quote
+  const trimmed = quote.trim()
+  const sentences = trimmed
+    .split(/\.\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (sentences.length <= 1) {
+    return sentenceRelatesToComponent(trimmed, component) ? trimmed : ''
+  }
+  const matching = sentences.filter((sentence) => sentenceRelatesToComponent(sentence, component))
+  if (matching.length === 0) return ''
+  if (matching.length === 1) return matching[0]!
+  const withStatedCadence = matching.filter((sentence) => readCadenceFromText(sentence, quote).stated)
+  if (withStatedCadence.length === 1) return withStatedCadence[0]!
+  const actions = actionTermsFromTask(task)
+  const withAction = matching.filter((sentence) => actions.some((term) => sentence.toLowerCase().includes(term)))
+  if (withAction.length === 1) return withAction[0]!
+  if (withAction.length > 1) return withAction.join('. ')
+  return matching.join('. ')
+}
+
+function segmentRelatesToTask(segment: string, task?: string | null): boolean {
+  const component = taskComponent(task)
+  if (!component) return true
+  return sentenceRelatesToComponent(segment, component)
+}
+
 /** Previous bullet/sentence carries a schedule that applies to the current maintenance line (e.g. Machine Care). */
 export function adjacentScheduleApplies(previous: string, current: string): boolean {
   if (!/\bmachine\s+care\b/.test(current)) return false
@@ -207,8 +292,8 @@ function indicatorRefillSentence(quote: string): string | null {
   )
 }
 
-export function readCadence(quote: string): CadenceReading {
-  const indicatorSentence = indicatorRefillSentence(quote)
+function readCadenceFromText(cadenceText: string, fullQuote: string): CadenceReading {
+  const indicatorSentence = indicatorRefillSentence(cadenceText)
   if (indicatorSentence) {
     const indicatorWording = earliestPhrase(indicatorSentence, INDICATOR_PATTERNS)
     const cadence = earliestCadence(indicatorSentence)
@@ -220,9 +305,9 @@ export function readCadence(quote: string): CadenceReading {
     }
     if (indicatorWording) return { stated: false, wording: indicatorWording }
   }
-  const indicatorWording = earliestPhrase(quote, INDICATOR_PATTERNS)
-  const cadence = earliestCadence(quote)
-  if (cadence?.stated && indicatorWording && isRefillMaintenance(quote)) {
+  const indicatorWording = earliestPhrase(cadenceText, INDICATOR_PATTERNS)
+  const cadence = earliestCadence(cadenceText)
+  if (cadence?.stated && indicatorWording && isRefillMaintenance(cadenceText)) {
     if (cadence.interval.count === 1 && cadence.interval.unit === 'day') {
       return { stated: false, wording: indicatorWording }
     }
@@ -232,10 +317,25 @@ export function readCadence(quote: string): CadenceReading {
       stated: false,
       wording:
         indicatorWording ??
-        earliestPhrase(quote, USAGE_PATTERNS) ??
-        earliestPhrase(quote, VAGUE_PATTERNS),
+        earliestPhrase(cadenceText, USAGE_PATTERNS) ??
+        earliestPhrase(cadenceText, VAGUE_PATTERNS) ??
+        earliestPhrase(fullQuote, USAGE_PATTERNS) ??
+        earliestPhrase(fullQuote, VAGUE_PATTERNS),
     }
   )
+}
+
+export function readCadence(quote: string, task?: string | null): CadenceReading {
+  const scoped = quoteScopeForTask(quote, task)
+  if (task?.trim() && !scoped.trim()) {
+    const indicatorSentence = indicatorRefillSentence(quote)
+    if (indicatorSentence) {
+      const indicatorWording = earliestPhrase(indicatorSentence, INDICATOR_PATTERNS)
+      if (indicatorWording) return { stated: false, wording: indicatorWording }
+    }
+    return { stated: false, wording: null }
+  }
+  return readCadenceFromText(scoped.trim() || quote, quote)
 }
 
 /** Bullet or sentence segments that may carry the schedule phrase for this quote. */
@@ -285,8 +385,8 @@ export function cadenceContextSegments(pageText: string, quote: string): string[
 }
 
 // Reads cadence from the quote, then from the manual bullet/sentence that contains it.
-export function readCadenceFromContext(quote: string, pageText?: string | null): CadenceReading {
-  const inQuote = readCadence(quote)
+export function readCadenceFromContext(quote: string, pageText?: string | null, task?: string | null): CadenceReading {
+  const inQuote = readCadence(quote, task)
   if (inQuote.stated || !pageText?.trim()) return inQuote
   if (isRefillMaintenance(quote) && earliestPhrase(quote, INDICATOR_PATTERNS)) return inQuote
   const q = normalizeText(quote)
@@ -301,13 +401,13 @@ export function readCadenceFromContext(quote: string, pageText?: string | null):
     }
     if (matchIndex >= 0) {
       const current = bullets[matchIndex] ?? ''
-      const fromCurrent = readCadence(current)
+      const fromCurrent = readCadence(current, task)
       if (fromCurrent.stated) return fromCurrent
       if (matchIndex > 0) {
         const previous = bullets[matchIndex - 1] ?? ''
         if (adjacentScheduleApplies(previous, current)) {
           const merged = `${previous} ${current}`.replace(/\s+/g, ' ').trim()
-          const fromMerged = readCadence(merged)
+          const fromMerged = readCadence(merged, task)
           if (fromMerged.stated) return fromMerged
         }
       }
@@ -315,7 +415,8 @@ export function readCadenceFromContext(quote: string, pageText?: string | null):
     return inQuote
   }
   for (const segment of cadenceContextSegments(pageText, quote)) {
-    const reading = readCadence(segment)
+    if (!segmentRelatesToTask(segment, task)) continue
+    const reading = readCadence(segment, task)
     if (reading.stated) return reading
   }
   return inQuote
@@ -367,12 +468,12 @@ export function fitSourceQuoteForStorage(widened: string, pageText: string, orig
 }
 
 // When the model quote omits the schedule phrase, widen to a verified page span that includes it.
-export function quoteWithPageCadence(quote: string, pageText: string): string {
+export function quoteWithPageCadence(quote: string, pageText: string, task?: string | null): string {
   const original = quote.trim()
   if (isRefillMaintenance(original) && earliestPhrase(original, INDICATOR_PATTERNS)) {
     return fitSourceQuoteForStorage(original, pageText, original)
   }
-  if (readCadence(original).stated) return fitSourceQuoteForStorage(original, pageText, original)
+  if (readCadence(original, task).stated) return fitSourceQuoteForStorage(original, pageText, original)
   const q = normalizeText(quote)
   const raw = pageText.replace(/\r\n/g, '\n')
   const lines = raw.split('\n').filter((line) => line.trim().length > 0)
@@ -389,14 +490,14 @@ export function quoteWithPageCadence(quote: string, pageText: string): string {
     const current = bullets[i] ?? ''
     if (!current.includes(q)) continue
     const cleaned = current.replace(/\s+/g, ' ').trim()
-    if (readCadence(cleaned).stated && verifyQuote(pageText, cleaned)) {
+    if (readCadence(cleaned, task).stated && verifyQuote(pageText, cleaned)) {
       return fitSourceQuoteForStorage(cleaned, pageText, original)
     }
     if (i > 0) {
       const previous = bullets[i - 1] ?? ''
       if (adjacentScheduleApplies(previous, cleaned)) {
         const merged = `${previous} ${cleaned}`.replace(/\s+/g, ' ').trim()
-        if (readCadence(merged).stated && verifyQuote(pageText, merged)) {
+        if (readCadence(merged, task).stated && verifyQuote(pageText, merged)) {
           return fitSourceQuoteForStorage(merged, pageText, original)
         }
       }
@@ -405,7 +506,8 @@ export function quoteWithPageCadence(quote: string, pageText: string): string {
   }
   }
   for (const segment of cadenceContextSegments(pageText, quote)) {
-    if (!readCadence(segment).stated) continue
+    if (!segmentRelatesToTask(segment, task)) continue
+    if (!readCadence(segment, task).stated) continue
     const cleaned = segment.replace(/\s+/g, ' ').trim()
     if (cleaned.length >= MIN_QUOTE_LENGTH && verifyQuote(pageText, cleaned)) {
       return fitSourceQuoteForStorage(cleaned, pageText, original)
@@ -424,9 +526,10 @@ export function presentInterval(input: {
   stored: Interval
   generalGuidance: boolean
   pageText?: string | null
+  task?: string | null
 }): IntervalPresentation {
   if (input.generalGuidance) return { interval: input.stored, text: formatInterval(input.stored) }
-  const reading = readCadenceFromContext(input.quote ?? '', input.pageText)
+  const reading = readCadenceFromContext(input.quote ?? '', input.pageText, input.task)
   if (reading.stated) {
     return { interval: reading.interval, text: `${formatInterval(reading.interval)} · from the manual` }
   }
