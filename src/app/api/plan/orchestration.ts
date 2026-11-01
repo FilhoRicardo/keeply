@@ -63,6 +63,28 @@ export type PlanResponse = {
 }
 
 const PLAN_TIMEOUT_MS = 25_000
+// Three Brave queries plus 1 s pacing must stay inside PLAN_TIMEOUT_MS on Hobby (30 s hard cap).
+const PLAN_BRAVE_QUERY_TIMEOUT_MS = 7_000
+
+async function extractTasksWithinBudget(
+  env: Record<string, string | undefined>,
+  signal: AbortSignal,
+  input: { model: string; pages: readonly { page: number; text: string }[] },
+) {
+  if (signal.aborted) return 'unavailable' as const
+  return new Promise<Awaited<ReturnType<typeof extractTasksFromProvider>>>((resolve) => {
+    let settled = false
+    const finish = (value: Awaited<ReturnType<typeof extractTasksFromProvider>>) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', onAbort)
+      resolve(value)
+    }
+    const onAbort = () => finish('unavailable')
+    signal.addEventListener('abort', onAbort, { once: true })
+    extractTasksFromProvider(env, input).then(finish, () => finish('unavailable'))
+  })
+}
 
 // The selected provider reads the manual. Manual (no key) and a thrown provider failure both
 // become 'unavailable', which the orchestration reports as extraction_unavailable — the honest
@@ -123,10 +145,11 @@ function buildDeps(args: {
       // cap (KEE-50) and the SQL function together enforce the quota in production.
       return reserveBraveSearch(db)
     },
-    searchManuals: ({ manufacturer, model }) => searchManuals({ manufacturer, model }),
+    searchManuals: ({ manufacturer, model }) =>
+      searchManuals({ manufacturer, model }, { abortSignal: args.signal, timeoutMs: PLAN_BRAVE_QUERY_TIMEOUT_MS }),
     fetchDocument: (url) => fetchDocument(url, undefined, { timeoutMs: CANDIDATE_FETCH_TIMEOUT_MS }),
     extractPages: (bytes, type) => extractPages(bytes, type),
-    extractTasks: ({ model, pages }) => extractTasksFromProvider(args.env, { model, pages }),
+    extractTasks: ({ model, pages }) => extractTasksWithinBudget(args.env, args.signal, { model, pages }),
     resolveSource: resolveSourceFromUrl,
     manufacturerDomains: args.manufacturerDomains,
     generalGuidance: () => GENERAL_DISHWASHER_TASKS,
@@ -173,11 +196,13 @@ export async function runPlan(
   request: PlanRequest,
   env: Record<string, string | undefined> = process.env,
 ): Promise<PlanResponse> {
+  const started = Date.now()
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), PLAN_TIMEOUT_MS)
+  const runLog: Partial<PlanRunLog> = { type: 'plan_run' }
+  let outcome: Awaited<ReturnType<typeof proposePlan>> | null = null
   try {
-    const runLog: Partial<PlanRunLog> = { type: 'plan_run' }
-    const outcome = await proposePlan(
+    outcome = await proposePlan(
       {
         manufacturer: request.manufacturer,
         model: request.model,
@@ -191,15 +216,6 @@ export async function runPlan(
         runLog,
       }),
     )
-    logPlanRun({
-      type: 'plan_run',
-      braveStatus: runLog.braveStatus ?? [],
-      candidates: runLog.candidates ?? 0,
-      coverMatches: runLog.coverMatches ?? 0,
-      aiTasks: runLog.aiTasks ?? 0,
-      quotePass: runLog.quotePass ?? 0,
-      outcome: outcome.searchOutcome,
-    })
     return {
       proposals: outcome.proposals.map(toJsonProposal),
       fallback: outcome.fallback,
@@ -209,6 +225,18 @@ export async function runPlan(
     }
   } finally {
     clearTimeout(timer)
+    const timedOut = controller.signal.aborted
+    logPlanRun({
+      type: 'plan_run',
+      braveStatus: runLog.braveStatus ?? [],
+      candidates: runLog.candidates ?? 0,
+      coverMatches: runLog.coverMatches ?? 0,
+      aiTasks: runLog.aiTasks ?? 0,
+      quotePass: runLog.quotePass ?? 0,
+      outcome: outcome?.searchOutcome ?? (timedOut ? 'timeout' : 'no_plan'),
+      timedOut,
+      elapsedMs: Date.now() - started,
+    })
   }
 }
 

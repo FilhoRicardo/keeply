@@ -181,6 +181,9 @@ export async function searchManuals(
   }
 
   for (const q of queries) {
+    if (options.abortSignal?.aborted) {
+      return { status: 'empty', candidates: [], reason: 'timeout', braveStatus }
+    }
     // Hard stop, also inside the loop: if a previous call advanced the counter to the cap,
     // do not issue another fetch on this iteration either. The per-process counter must not
     // exceed freeQuotaCap, so we check before callCount++ (and before any network work).

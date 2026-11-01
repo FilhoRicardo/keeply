@@ -18,7 +18,13 @@ export type PlanFallbackReason =
   | 'plan_search_disabled'
   | 'plan_search_refused'
   | 'network_error'
+  | 'plan_time_budget'
+  | 'service_error'
   | 'no_proposal_meta'
+
+function isHttpSearchReason(reason: string | null): reason is `http_${number}` {
+  return typeof reason === 'string' && /^http_\d{3}$/.test(reason)
+}
 
 // Maps a ProposalMeta (or its absence) to a stable, UI-friendly reason. Kept in one place so the
 // e2e / component tests can pin the same data-fallback-reason the banner shows.
@@ -41,7 +47,9 @@ export function planFallbackReason(meta: ProposalMeta | null): PlanFallbackReaso
   if (meta.searchOutcome === 'search_error') return 'search_error'
   if (meta.searchOutcome === 'manual_found_ai_no_tasks') return 'manual_found_ai_no_tasks'
   if (meta.searchOutcome === 'no_results') return 'no_results'
-  return 'no_search_key'
+  if (meta.searchReason === 'http_504' || meta.searchReason === 'http_408') return 'plan_time_budget'
+  if (isHttpSearchReason(meta.searchReason)) return 'service_error'
+  return 'service_error'
 }
 
 // This banner only appears when every task is the dishwasher general-guidance list. Other
@@ -133,6 +141,18 @@ const REASON_COPY: Record<PlanFallbackReason, { eyebrow: string; title: string; 
     title: 'Could not reach the search service',
     body:
       'Keeply could not reach its own search service. These are general guidance tasks. They are not a manufacturer recommendation.',
+  },
+  plan_time_budget: {
+    eyebrow: 'General guidance',
+    title: 'Keeply ran out of time looking for the manual',
+    body:
+      'These are general guidance tasks for now; try again later. They are not a manufacturer recommendation.',
+  },
+  service_error: {
+    eyebrow: 'General guidance',
+    title: 'Keeply could not finish building this plan',
+    body:
+      'Something went wrong while looking for a manufacturer manual. These are general guidance tasks. They are not a manufacturer recommendation.',
   },
   // Older rows have no stored outcome. Say only what the tasks are. Never claim the search
   // found nothing: that reason belongs to a saved no_results outcome.

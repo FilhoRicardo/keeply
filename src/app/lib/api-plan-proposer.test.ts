@@ -217,5 +217,7 @@ describe('fallbackReason', () => {
     expect(fallbackReason({ fallback: 'general', searchOutcome: 'unavailable', searchReason: 'plan_search_disabled' })).toBe('plan_search_disabled')
     expect(fallbackReason({ fallback: 'general', searchOutcome: 'unavailable', searchReason: 'network_error' })).toBe('network_error')
     expect(fallbackReason({ fallback: 'general', searchOutcome: 'fetch_failed', searchReason: null })).toBe('fetch_failed')
+    expect(fallbackReason({ fallback: 'general', searchOutcome: 'unavailable', searchReason: 'http_504' })).toBe('plan_time_budget')
+    expect(fallbackReason({ fallback: 'general', searchOutcome: 'unavailable', searchReason: 'http_502' })).toBe('service_error')
   })
 })
