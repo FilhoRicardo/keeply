@@ -244,6 +244,24 @@ describe('readCadence indicator-driven refills', () => {
       'use a descaler or a cleaning product designed specifically for dishwashers every day. refill salt when the indicator is on.'
     expect(readCadence(widened)).toEqual(unstated('when the indicator'))
   })
+
+  it('ignores a descaler daily sentence when the task is salt refill', () => {
+    const dailyDescaler = 'use a descaler or a cleaning product designed specifically for dishwashers every day.'
+    expect(readCadence(dailyDescaler, 'Check and refill salt container')).toEqual(unstated(null))
+    expect(
+      presentInterval({
+        quote: dailyDescaler,
+        stored: { count: 1, unit: 'day' },
+        generalGuidance: false,
+        task: 'Check and refill salt container',
+      }).text,
+    ).not.toMatch(/from the manual/)
+  })
+
+  it('does not treat Machine Care as daily when the quote is a descaler-only daily line', () => {
+    const dailyDescaler = 'use a descaler or a cleaning product designed specifically for dishwashers every day.'
+    expect(readCadence(dailyDescaler, 'Run Machine Care programme with descaler')).toEqual(unstated(null))
+  })
 })
 
 describe('readCadenceFromContext', () => {

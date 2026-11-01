@@ -18,6 +18,7 @@ function howOften(task: MaintenanceTask): string {
     quote: task.source.quote,
     stored: task.interval,
     generalGuidance: task.evidenceLevel === 'general_guidance',
+    task: task.name,
   }).text
 }
 

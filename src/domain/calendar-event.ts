@@ -31,6 +31,7 @@ export function toCalendarEvent(task: MaintenanceTask, appliance: Appliance, sta
     quote: source.quote,
     stored: task.interval,
     generalGuidance: task.evidenceLevel === 'general_guidance',
+    task: task.name,
   })
   const description = [
     task.instructions,

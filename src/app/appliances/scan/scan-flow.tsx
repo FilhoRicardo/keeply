@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   editIdentification,
   emptyIdentification,
@@ -126,9 +126,19 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
   const [error, setError] = useState<string | null>(null)
   const [recovery, setRecovery] = useState<NoPlanRecovery | null>(null)
   const [busy, setBusy] = useState(false)
+  const [captureReady, setCaptureReady] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const preview = step.kind === 'capture' ? null : step.preview
   // Release the preview's object URL when the photo changes or the screen closes.
   useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview])
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      setCaptureReady(true)
+      const pending = fileInputRef.current?.files?.[0]
+      if (pending) void onPhoto(pending)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [])
 
   async function onPhoto(file: File | undefined) {
     if (!file) return
@@ -167,6 +177,12 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
     })
   }
 
+  useEffect(() => {
+    if (!captureReady || step.kind !== 'capture') return
+    const pending = fileInputRef.current?.files?.[0]
+    if (pending) void onPhoto(pending)
+  }, [captureReady, step.kind])
+
   if (step.kind === 'capture') {
     return (
       <section className="aster-glass form-panel" aria-label="Photograph the label">
@@ -181,13 +197,20 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
         ) : account && !anonymousWithoutAccess ? (
           <p className="settings-footnote">{SIGN_IN_FOR_AI}</p>
         ) : null}
-        <label className="aster-btn aster-btn--primary full-width file-button">
+        {!captureReady ? (
+          <p className="notice" role="status">
+            Loading…
+          </p>
+        ) : null}
+        <label className={`aster-btn aster-btn--primary full-width file-button${captureReady ? '' : ' file-button--disabled'}`}>
           Take or choose a photo
           <input
+            ref={fileInputRef}
             className="visually-hidden"
             type="file"
             accept="image/*"
             capture="environment"
+            disabled={!captureReady}
             onChange={(e) => {
               const input = e.target
               const file = input.files?.[0]

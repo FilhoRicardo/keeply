@@ -332,7 +332,7 @@ export async function extractTasksWithOpenRouter(
   const chunks = chunkPagesForExtraction(pages)
   const deadline = AbortSignal.timeout(EXTRACT_PARALLEL_TIMEOUT_MS)
   const pageTextByNumber = new Map(pages.map((p) => [p.page, p.text]))
-  const readCadence = (quote: string, pageText?: string) => readCadenceFromContext(quote, pageText)
+  const readCadence = (quote: string, pageText?: string, task?: string) => readCadenceFromContext(quote, pageText, task)
   const batchResults = await Promise.allSettled(
     chunks.map((chunkPages) => extractTasksFromChunk(config, chunkPages, fetchImpl, deadline)),
   )
@@ -341,6 +341,6 @@ export async function extractTasksWithOpenRouter(
   if (mergedChunks.length === 0 && rejected.length > 0) throw rejected[0]?.reason
   return mergeExtractedTasks(mergedChunks, {
     pageTextByNumber,
-    readCadence: (quote, pageText) => readCadence(quote, pageText),
+    readCadence: (quote, pageText, task) => readCadence(quote, pageText, task),
   })
 }
