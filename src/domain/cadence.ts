@@ -1,5 +1,7 @@
+import { MIN_QUOTE_LENGTH, verifyQuote } from './evidence-check'
 import type { Interval, IntervalUnit } from './format-interval'
 import { formatInterval } from './format-interval'
+import { normalizeText } from './normalize'
 
 // How often a manual-derived task repeats. Read from the verified quote only.
 // A stated cadence is the manual's. Anything else is Keeply's fixed default.
@@ -136,6 +138,21 @@ const VAGUE_PATTERNS = [
   '\\bfrom\\s+time\\s+to\\s+time\\b',
 ]
 
+function readCadenceLastBefore(text: string, anchorIndex: number): CadenceReading | null {
+  let best: { index: number; reading: CadenceReading } | null = null
+  for (const pattern of CADENCE_PATTERNS) {
+    for (const match of text.matchAll(new RegExp(pattern.source, 'gi'))) {
+      const parsed = pattern.interval(match)
+      if (!parsed || parsed === 'unexpressed') continue
+      const index = match.index ?? 0
+      if (index > anchorIndex) continue
+      const reading: CadenceReading = { stated: true, interval: parsed }
+      if (!best || index > best.index) best = { index, reading }
+    }
+  }
+  return best?.reading ?? null
+}
+
 function earliestCadence(quote: string): CadenceReading | null {
   let best: { index: number; reading: CadenceReading } | null = null
   for (const pattern of CADENCE_PATTERNS) {
@@ -178,6 +195,126 @@ export function readCadence(quote: string): CadenceReading {
   )
 }
 
+/** Bullet or sentence segments that may carry the schedule phrase for this quote. */
+export function cadenceContextSegments(pageText: string, quote: string): string[] {
+  const doc = normalizeText(pageText)
+  const q = normalizeText(quote)
+  if (q.length < MIN_QUOTE_LENGTH) return [quote]
+
+  const bullets = pageText
+    .split(/\s*•\s*/)
+    .map((part) => normalizeText(part))
+    .filter(Boolean)
+  for (let i = 0; i < bullets.length; i += 1) {
+    const segment = bullets[i] ?? ''
+    if (!segment.includes(q)) continue
+    const previous = i > 0 ? (bullets[i - 1] ?? '') : ''
+    return previous ? [segment, previous] : [segment]
+  }
+
+  const raw = pageText.replace(/\r\n/g, '\n')
+  const quoteLine = raw.split('\n').find((line) => normalizeText(line).includes(q))
+  if (quoteLine && !quoteLine.includes('•')) {
+    return [normalizeText(quoteLine)]
+  }
+
+  const sentences = doc.split(/\.\s+/).filter(Boolean)
+  for (let i = 0; i < sentences.length; i += 1) {
+    const sentence = sentences[i] ?? ''
+    if (!sentence.includes(q)) continue
+    const previous = i > 0 ? (sentences[i - 1] ?? '') : ''
+    return previous ? [sentence, previous] : [sentence]
+  }
+
+  const idx = doc.indexOf(q)
+  if (idx >= 0) {
+    const start = Math.max(0, idx - 120)
+    const end = Math.min(doc.length, idx + q.length + 40)
+    return [doc.slice(start, end)]
+  }
+  return [quote]
+}
+
+// Reads cadence from the quote, then from the manual bullet/sentence that contains it.
+export function readCadenceFromContext(quote: string, pageText?: string | null): CadenceReading {
+  const inQuote = readCadence(quote)
+  if (inQuote.stated || !pageText?.trim()) return inQuote
+  const doc = normalizeText(pageText)
+  const q = normalizeText(quote)
+  if (pageText.includes('•')) {
+    const bullets = pageText
+      .split(/\s*•\s*/)
+      .map((part) => normalizeText(part))
+      .filter(Boolean)
+    let matchIndex = -1
+    for (let i = 0; i < bullets.length; i += 1) {
+      if (bullets[i]?.includes(q)) matchIndex = i
+    }
+    if (matchIndex >= 0) {
+      if (matchIndex > 0) {
+        const fromPrevious = readCadence(bullets[matchIndex - 1] ?? '')
+        if (fromPrevious.stated) return fromPrevious
+      }
+      const fromCurrent = readCadence(bullets[matchIndex] ?? '')
+      if (fromCurrent.stated) return fromCurrent
+    }
+    return inQuote
+  }
+  for (const segment of cadenceContextSegments(pageText, quote)) {
+    const reading = readCadence(segment)
+    if (reading.stated) return reading
+  }
+  const raw = pageText.replace(/\r\n/g, '\n')
+  const quoteLine = raw.split('\n').find((line) => normalizeText(line).includes(q))
+  if (quoteLine && !quoteLine.includes('•')) return inQuote
+
+  if (q.length >= MIN_QUOTE_LENGTH) {
+    const idx = doc.indexOf(q)
+    if (idx >= 0) {
+      const start = Math.max(0, idx - 320)
+      const window = doc.slice(start, idx + q.length)
+      const near = readCadenceLastBefore(window, idx - start)
+      if (near) return near
+    }
+  }
+  return inQuote
+}
+
+// When the model quote omits the schedule phrase, widen to a verified page span that includes it.
+export function quoteWithPageCadence(quote: string, pageText: string): string {
+  if (readCadence(quote).stated) return quote
+  const q = normalizeText(quote)
+  const raw = pageText.replace(/\r\n/g, '\n')
+  const lines = raw.split('\n').filter((line) => line.trim().length > 0)
+  if (lines.length > 1) {
+    const quoteLine = lines.find((line) => normalizeText(line).includes(q))
+    if (quoteLine) return quote.trim()
+  }
+  if (pageText.includes('•')) {
+  const bullets = pageText
+    .split(/\s*•\s*/)
+    .map((part) => normalizeText(part))
+    .filter(Boolean)
+  for (let i = 0; i < bullets.length; i += 1) {
+    const current = bullets[i] ?? ''
+    if (!current.includes(q)) continue
+    const cleaned = current.replace(/\s+/g, ' ').trim()
+    if (readCadence(cleaned).stated && verifyQuote(pageText, cleaned)) return cleaned
+    if (i > 0) {
+      const merged = `${bullets[i - 1] ?? ''} ${cleaned}`.replace(/\s+/g, ' ').trim()
+      if (readCadence(merged).stated && verifyQuote(pageText, merged)) return merged
+    }
+    break
+  }
+  }
+  for (const segment of cadenceContextSegments(pageText, quote)) {
+    if (!readCadence(segment).stated) continue
+    const cleaned = segment.replace(/\s+/g, ' ').trim()
+    if (cleaned.length >= MIN_QUOTE_LENGTH && verifyQuote(pageText, cleaned)) return cleaned
+  }
+  return quote
+}
+
 export type IntervalPresentation = { interval: Interval; text: string }
 
 // The interval and "how often" line for a task. Manual-derived tasks are recomputed
@@ -187,9 +324,10 @@ export function presentInterval(input: {
   quote: string | null
   stored: Interval
   generalGuidance: boolean
+  pageText?: string | null
 }): IntervalPresentation {
   if (input.generalGuidance) return { interval: input.stored, text: formatInterval(input.stored) }
-  const reading = readCadence(input.quote ?? '')
+  const reading = readCadenceFromContext(input.quote ?? '', input.pageText)
   if (reading.stated) {
     return { interval: reading.interval, text: `${formatInterval(reading.interval)} · from the manual` }
   }

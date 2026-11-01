@@ -80,3 +80,43 @@ export function parseExtractionReply(reply: string, pageNumbers: ReadonlySet<num
   if (parsed === null) return []
   return normaliseExtraction(parsed, pageNumbers)
 }
+
+export function normalisedTaskName(task: string): string {
+  return task.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function mergeScore(candidate: ExtractedTaskCandidate, cadenceStated: boolean): number {
+  return (cadenceStated ? 100 : 0) + Math.min(candidate.quote.length, 500) / 500
+}
+
+// Combines parallel per-chunk extractions. One entry per normalised task name; prefers a manual
+// cadence in the quote and a longer verbatim quote.
+export function mergeExtractedTasks(
+  candidates: readonly ExtractedTaskCandidate[],
+  opts: {
+    pageTextByNumber?: ReadonlyMap<number, string>
+    readCadence?: (quote: string, pageText?: string) => { stated: boolean }
+  } = {},
+): ExtractedTaskCandidate[] {
+  const pageTextByNumber = opts.pageTextByNumber ?? new Map()
+  const readCadenceFn = opts.readCadence ?? (() => ({ stated: false }))
+  const best = new Map<string, ExtractedTaskCandidate>()
+  for (const candidate of candidates) {
+    const key = normalisedTaskName(candidate.task)
+    const pageText = pageTextByNumber.get(candidate.page)
+    const stated = readCadenceFn(candidate.quote, pageText).stated
+    const existing = best.get(key)
+    if (!existing) {
+      best.set(key, candidate)
+      continue
+    }
+    const existingPage = pageTextByNumber.get(existing.page)
+    const existingStated = readCadenceFn(existing.quote, existingPage).stated
+    const score = mergeScore(candidate, stated)
+    const existingScore = mergeScore(existing, existingStated)
+    if (score > existingScore || (score === existingScore && candidate.quote.length > existing.quote.length)) {
+      best.set(key, candidate)
+    }
+  }
+  return [...best.values()]
+}

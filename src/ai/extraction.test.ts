@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { normaliseExtraction, parseExtractionReply, type ExtractedTaskCandidate } from './extraction'
+import {
+  mergeExtractedTasks,
+  normaliseExtraction,
+  parseExtractionReply,
+  type ExtractedTaskCandidate,
+} from './extraction'
 
 const PAGES = new Set([1, 2, 3])
 const P2 = 'Run a cleaning cycle every three months to keep the interior fresh. Page two.'
@@ -117,6 +122,45 @@ describe('normaliseExtraction', () => {
       goodCandidate({ task: 'Check the spray arms', page: 3, quote: 'Check the spray arms every 6 months.', interval: { count: 6, unit: 'month' } }),
     ]
     expect(normaliseExtraction({ candidates: list }, PAGES)).toEqual(list)
+  })
+})
+
+describe('mergeExtractedTasks', () => {
+  it('keeps one entry per normalised task name and prefers a stated manual cadence', () => {
+    const chunkA: ExtractedTaskCandidate[] = [
+      goodCandidate({
+        task: 'Clean the filters',
+        quote: 'dirty filters and clogged spray arms negatively affect the washing results. check these elements regularly and, if necessary, clean them.',
+        page: 21,
+      }),
+      goodCandidate({
+        task: 'Wipe the door gasket',
+        quote: 'wipe clean the door, including the rubber gasket, once a week.',
+        page: 22,
+        interval: { count: 1, unit: 'week' },
+      }),
+    ]
+    const chunkB: ExtractedTaskCandidate[] = [
+      goodCandidate({
+        task: 'Run Machine Care with dishwasher cleaner',
+        quote: 'for optimal cleaning results, start the programme machine care.',
+        page: 22,
+      }),
+      goodCandidate({
+        task: 'Clean the spray arms',
+        quote: 'we recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.',
+        page: 23,
+      }),
+    ]
+    const readCadence = (quote: string) => ({ stated: /once a week|every two months|every month/i.test(quote) })
+    const merged = mergeExtractedTasks([...chunkA, ...chunkB], { readCadence })
+    expect(merged.map((c) => c.task).sort()).toEqual([
+      'Clean the filters',
+      'Clean the spray arms',
+      'Run Machine Care with dishwasher cleaner',
+      'Wipe the door gasket',
+    ])
+    expect(merged.find((c) => c.task === 'Wipe the door gasket')?.interval).toEqual({ count: 1, unit: 'week' })
   })
 })
 

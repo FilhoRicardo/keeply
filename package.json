@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+    "eval:extract-electrolux": "vitest run src/ai/electrolux-extract-live.eval.test.ts",
     "e2e": "playwright test"
   },
   "devDependencies": {

@@ -11,6 +11,9 @@ import { IDENTITY_INSTRUCTIONS, type LabelPhoto } from './identity'
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const
 const MAX_IMAGE_BYTES = 10_000_000
 export const CHAT_TEMPERATURE = 0.1
+export const EXTRACT_TEMPERATURE = 0
+export const EXTRACT_CHUNK_SIZE = 4
+export const EXTRACT_PARALLEL_TIMEOUT_MS = 18_000
 export const IDENTIFY_MAX_TOKENS = 400
 export const EXTRACT_MAX_TOKENS = 4_000
 export const IDENTIFY_TIMEOUT_MS = 25_000
@@ -32,9 +35,8 @@ function maintenanceScore(text: string): number {
   return score
 }
 
-/** Prefer cover pages and maintenance-heavy sections when a manual exceeds the page cap. */
-export function selectPagesForExtraction(pages: readonly ExtractedPage[]): ExtractedPage[] {
-  if (pages.length <= MAX_PAGES) return [...pages]
+/** Cover pages plus maintenance-heavy pages, up to MAX_PAGES. */
+export function rankPagesForExtraction(pages: readonly ExtractedPage[]): ExtractedPage[] {
   const byPage = new Map(pages.map((p) => [p.page, p]))
   const chosen = new Set<number>()
   for (const p of pages) {
@@ -48,22 +50,29 @@ export function selectPagesForExtraction(pages: readonly ExtractedPage[]): Extra
     if (chosen.size >= MAX_PAGES) break
     chosen.add(p.page)
   }
-  if (chosen.size <= COVER_PAGE_COUNT) return pages.slice(0, MAX_PAGES)
+  if (chosen.size <= COVER_PAGE_COUNT) {
+    return pages.length <= MAX_PAGES ? [...pages] : pages.slice(0, MAX_PAGES)
+  }
   return [...chosen]
     .sort((a, b) => a - b)
     .map((n) => byPage.get(n))
     .filter((p): p is ExtractedPage => p != null)
 }
 
+/** Prefer cover pages and maintenance-heavy sections when a manual exceeds the page cap. */
+export function selectPagesForExtraction(pages: readonly ExtractedPage[]): ExtractedPage[] {
+  if (pages.length <= MAX_PAGES) return [...pages]
+  return rankPagesForExtraction(pages)
+}
+
 function appendPageBlock(prompt: string, page: ExtractedPage): string {
   return `${prompt}[Page ${page.page}]\n${page.text}\n\n`
 }
 
-export function manualPagesPrompt(pages: readonly ExtractedPage[]): { prompt: string; pageNumbers: Set<number> } {
-  const safePages = selectPagesForExtraction(pages)
+export function buildManualPagesPrompt(pages: readonly ExtractedPage[]): { prompt: string; pageNumbers: Set<number> } {
   const pageNumbers = new Set<number>()
   let prompt = ''
-  for (const page of safePages) {
+  for (const page of pages) {
     const next = appendPageBlock(prompt, page)
     if (next.length > MAX_PROMPT_CHARS && prompt.length > 0) break
     prompt = next
@@ -74,6 +83,24 @@ export function manualPagesPrompt(pages: readonly ExtractedPage[]): { prompt: st
     }
   }
   return { prompt, pageNumbers }
+}
+
+export function manualPagesPrompt(pages: readonly ExtractedPage[]): { prompt: string; pageNumbers: Set<number> } {
+  return buildManualPagesPrompt(selectPagesForExtraction(pages))
+}
+
+/** Splits selected maintenance pages into parallel extraction chunks (cover pages on the first chunk only). */
+export function chunkPagesForExtraction(pages: readonly ExtractedPage[], chunkSize = EXTRACT_CHUNK_SIZE): ExtractedPage[][] {
+  const selected = rankPagesForExtraction(pages)
+  const cover = selected.filter((p) => p.page <= COVER_PAGE_COUNT)
+  const rest = selected.filter((p) => p.page > COVER_PAGE_COUNT)
+  if (rest.length === 0) return [selected.length > 0 ? selected : [...pages].slice(0, 1)]
+  const chunks: ExtractedPage[][] = []
+  for (let i = 0; i < rest.length; i += chunkSize) {
+    const slice = rest.slice(i, i + chunkSize)
+    chunks.push(i === 0 ? [...cover, ...slice] : slice)
+  }
+  return chunks
 }
 
 type ImagePart = { type: 'image_url'; image_url: { url: string; detail: 'high' } }
