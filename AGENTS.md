@@ -23,7 +23,7 @@ Route here for work on Keeply (`active/Keeply/`). Outcome: mobile-first PWA — 
 |---|---|
 | `docs/HANDOFF.md` | Scope or product rules: use its index; read only relevant sections. |
 | `CONTEXT.md` | Using or naming domain terms (evidence levels, recommendation vs task). |
-| `/Users/ricardofilho/Documents/Projects/resources/branding/aster/BRAND.md` | Building UI, unless a Keeply brand is later chosen (the handoff lists branding as open). |
+| External Aster branding reference (outside this repo; path varies by checkout) | Building UI, unless a Keeply brand is later chosen (the handoff lists branding as open). |
 
 ## Non-negotiables (from the handoff)
 
@@ -38,13 +38,11 @@ Route here for work on Keeply (`active/Keeply/`). Outcome: mobile-first PWA — 
 
 ## Workflow
 
-1. Read this file. Read only the `docs/HANDOFF.md` section(s) relevant to the task (use its index). Read `MEMORY.md` only when planning or when the task touches a gate it lists.
+1. Read this file. Read only the `docs/HANDOFF.md` section(s) relevant to the task (use its index).
 2. Current state: the MVP (§24) and manual search (§23) are built. A demo deployment may exist separately from this repo; self-hosters follow `docs/self-host.md`. Where each setting lives: `docs/environments.md`.
 3. Query `codebase-memory-mcp` before broad code exploration when indexed.
 4. Follow `docs/agents/workflow.md`: `grill-with-docs` for planning/new scope only; scoped tickets → confirmed spec/ticket, branch, PR, Codex review, merge. Human approval for production, schema, secrets, calendar/email sends. Done = real-input browser evidence + merged PR.
 5. Verify with the checks below.
-6. Update `MEMORY.md` only when durable context changes.
-
 ## Context budget
 
 - One scoped task per thread; start a fresh thread instead of steering a derailed one.

@@ -81,7 +81,7 @@ Copy `.env.example` to `.env.local` for local dev, or set the same names on Verc
 |---|---|
 | `NEXT_PUBLIC_KEEPLY_SCAN` | Set to `1` at **build time** to enable the scan UI and `/api/identify` |
 | `OPENROUTER_API_KEY` | Enables AI; omit for Manual-only |
-| `OPENROUTER_MODEL` | Defaults to `openrouter/free` |
+| `OPENROUTER_MODEL` | Recommended `google/gemini-2.5-flash`; `openrouter/free` works but hits daily rate limits; code falls back to `openrouter/free` when unset |
 | `OPENROUTER_DATA_COLLECTION` | `deny` (default) or `allow` |
 | `BRAVE_SEARCH_API_KEY` | Enables manual search |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only; durable Brave quota in Supabase (without it, quota check is skipped) |

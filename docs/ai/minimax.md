@@ -42,7 +42,7 @@ Code: `src/ai/minimax.ts` (all MiniMax request/response handling), `src/ai/ident
 
 ## Account
 
-Ricardo: **MiniMax Token Plan, model MiniMax-M3** (non-secret account info; the key itself is never pasted into chat).
+Verification used a **MiniMax Token Plan** account with model **MiniMax-M3** (non-secret account info; API keys are never pasted into chat or commits).
 
 ## What is confirmed, and how
 
