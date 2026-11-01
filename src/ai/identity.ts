@@ -158,7 +158,7 @@ const MIN_CERTAIN_PREFIX = 3
 // listed: it says nothing about which appliance this is.
 const VISIBLE_PARTS: readonly { parts: readonly string[]; claims: readonly string[] }[] = [
   {
-    parts: ['dish rack', 'dish racks', 'dish basket', 'dish baskets', 'plate rack', 'plate racks', 'cutlery basket', 'cutlery baskets', 'cutlery tray', 'cutlery rack', 'spray arm', 'spray arms', 'rinse aid'],
+    parts: ['dish rack', 'dish racks', 'dish basket', 'dish baskets', 'plate rack', 'plate racks', 'cutlery basket', 'cutlery baskets', 'cutlery tray', 'cutlery rack', 'spray arm', 'spray arms'],
     claims: ['dishwasher'],
   },
   { parts: ['detergent drawer'], claims: ['washing machine'] },

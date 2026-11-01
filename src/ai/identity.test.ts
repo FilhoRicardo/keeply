@@ -135,6 +135,8 @@ describe('normaliseIdentity', () => {
     for (const part of ['wire racks', 'metal rack', 'drum', 'interior shelf', 'stainless steel door', 'grey panel']) {
       expect(normaliseIdentity({ ...plate, visibleParts: [part] })?.applianceType).toBe('unknown')
     }
+    expect(normaliseIdentity({ ...plate, visibleParts: ['rinse aid compartment label'] })?.applianceType).toBe('unknown')
+    expect(normaliseIdentity({ ...plate, visibleParts: ['rinse aid dispenser'] })?.applianceType).toBe('unknown')
     // A category word is not a part.
     expect(normaliseIdentity({ ...plate, visibleParts: ['dishwasher'] })?.applianceType).toBe('unknown')
     expect(normaliseIdentity({ ...plate, visibleParts: ['oven racks'] })?.applianceType).toBe('unknown')
