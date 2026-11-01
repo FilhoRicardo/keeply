@@ -3,9 +3,8 @@
 A new developer can use this page to see, in one place, which setting goes
 where: a developer-only `.env.local`, the Vercel project, the Supabase
 project, or the Google Cloud OAuth client. The list is **names**, never
-values — read `.env.example` for the values, the README "Go live" list
-for the production setup, and `docs/live-gates.md` for what has been
-verified live.
+values — read `.env.example` for the values, the README deploy list (or `docs/self-host.md`) for production
+setup, and `docs/live-gates.md` as an operator checklist template.
 
 If a setting is not in this table, it is either a constant in the code
 (for example, the OpenRouter model default) or an OAuth-screen configuration in Google
@@ -64,12 +63,12 @@ Two Vercel-specific behaviours to remember:
 
 - `NEXT_PUBLIC_KEEPLY_SCAN` is read at **build time**, so changing it
   on Production or Preview requires a redeploy for the new value to
-  take effect (see `docs/live-gates.md` G8 for the owner-only preview).
+  take effect after redeploy.
 - The scan flag is read at build time by the page and at runtime by
   the API; if they disagree, the API wins. The Preview / Production
   environment variables must therefore match on the same deployment.
 
-### Supabase (project `xmilbvzbptmozwjphvsx`)
+### Supabase (your project)
 
 Supabase holds no Keeply env-var settings. The settings that live there
 are configured through the Supabase dashboard (see README "Go live"):
@@ -86,9 +85,8 @@ Supabase but are code (`supabase/migrations/`), not settings.
 
 ### GitHub Actions (Supabase keep-alive)
 
-Supabase pauses a free-tier project after about a week without database
-activity. Production paused on 2026-10-31 and the app lost its database
-and sign-in until the owner resumed it. `.github/workflows/supabase-keepalive.yml`
+Supabase may pause a free-tier project after a period without database
+activity. `.github/workflows/supabase-keepalive.yml`
 runs every 3 days (and on demand from the Actions tab). It makes one
 anonymous read, `GET /rest/v1/appliances?select=id&limit=1`. Postgres runs
 the query, and RLS returns an empty list because anon can see no rows. It
