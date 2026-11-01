@@ -9,6 +9,8 @@ export type PlanRunLog = {
   aiTasks: number
   quotePass: number
   outcome: PlanSearchOutcome
+  timedOut: boolean
+  elapsedMs: number
 }
 
 export function logPlanRun(entry: PlanRunLog): void {

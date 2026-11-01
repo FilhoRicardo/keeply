@@ -205,5 +205,8 @@ export function fallbackReason(outcome: ProposalOutcome): string {
   if (outcome.searchReason === 'plan_search_disabled') return 'plan_search_disabled'
   if (outcome.searchReason === 'plan_search_refused') return 'plan_search_refused'
   if (outcome.searchReason === 'network_error') return 'network_error'
+  if (outcome.searchReason === 'http_504' || outcome.searchReason === 'http_408') return 'plan_time_budget'
+  if (typeof outcome.searchReason === 'string' && /^http_\d{3}$/.test(outcome.searchReason)) return 'service_error'
+  if (outcome.searchOutcome === 'unavailable') return 'service_error'
   return outcome.searchOutcome
 }

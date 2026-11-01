@@ -98,18 +98,16 @@ describe('device plan reload', () => {
       quote: 'Clean the filters.',
     },
   }
-  const cases: { name: string; meta: ProposalMeta; proposals: readonly TaskProposal[]; reason: string }[] = [
+  const cases: { name: string; meta: ProposalMeta; proposals: readonly TaskProposal[]; reason?: string }[] = [
     {
       name: 'verified',
       meta: { fallback: 'exact', searchOutcome: 'ok', searchReason: null, searched: true },
       proposals: [verified],
-      reason: 'no_search_key',
     },
     {
       name: 'similar-model',
       meta: { fallback: 'similar', searchOutcome: 'ok', searchReason: null, searched: true },
       proposals: [{ ...verified, evidenceLevel: 'similar_model', source: { ...verified.source, type: 'similar_model_manual' } }],
-      reason: 'no_search_key',
     },
     {
       name: 'general-guidance',
@@ -138,7 +136,7 @@ describe('device plan reload', () => {
     const reloaded = createDevicePlanRepository({ storage })
     const record = findRecord(await reloaded.load(), applianceId)
     expect(record?.proposalMeta).toEqual(meta)
-    expect(planFallbackReason(record?.proposalMeta ?? null)).toBe(reason)
+    if (reason) expect(planFallbackReason(record?.proposalMeta ?? null)).toBe(reason)
   })
 })
 

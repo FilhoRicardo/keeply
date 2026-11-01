@@ -128,6 +128,27 @@ const STOPS: ReadonlyArray<{
     wording: /Could not reach the search service\./,
   },
   {
+    stop: 'the plan API timed out (504)',
+    meta: meta('unavailable', 'http_504', false),
+    reason: 'plan_time_budget',
+    wording: /Keeply ran out of time looking for the manual/,
+    absent: /No search key is configured/,
+  },
+  {
+    stop: 'the plan API returned an unexpected HTTP error',
+    meta: meta('unavailable', 'http_500', false),
+    reason: 'service_error',
+    wording: /Keeply could not finish building this plan/,
+    absent: /No search key is configured/,
+  },
+  {
+    stop: 'proposal meta is incomplete',
+    meta: meta('unavailable', null, false),
+    reason: 'service_error',
+    wording: /Keeply could not finish building this plan/,
+    absent: /No search key is configured/,
+  },
+  {
     stop: 'an older plan has no proposal record',
     meta: null,
     reason: 'no_proposal_meta',
