@@ -193,7 +193,33 @@ function earliestPhrase(quote: string, sources: readonly string[]): string | nul
 // When several cadences appear, the one earliest in the quote is used.
 // A frequency the interval cannot express is "not stated", with that phrase quoted.
 // A usage phrase is preferred over a vague word when the quote has no cadence.
+function indicatorRefillSentence(quote: string): string | null {
+  if (!isRefillMaintenance(quote) || !earliestPhrase(quote, INDICATOR_PATTERNS)) return null
+  const sentences = quote
+    .split(/\.\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (sentences.length <= 1) return quote.trim()
+  return (
+    sentences.find(
+      (sentence) => isRefillMaintenance(sentence) && earliestPhrase(sentence, INDICATOR_PATTERNS),
+    ) ?? null
+  )
+}
+
 export function readCadence(quote: string): CadenceReading {
+  const indicatorSentence = indicatorRefillSentence(quote)
+  if (indicatorSentence) {
+    const indicatorWording = earliestPhrase(indicatorSentence, INDICATOR_PATTERNS)
+    const cadence = earliestCadence(indicatorSentence)
+    if (cadence?.stated) {
+      if (cadence.interval.count === 1 && cadence.interval.unit === 'day' && indicatorWording) {
+        return { stated: false, wording: indicatorWording }
+      }
+      return cadence
+    }
+    if (indicatorWording) return { stated: false, wording: indicatorWording }
+  }
   const indicatorWording = earliestPhrase(quote, INDICATOR_PATTERNS)
   const cadence = earliestCadence(quote)
   if (cadence?.stated && indicatorWording && isRefillMaintenance(quote)) {
@@ -343,6 +369,9 @@ export function fitSourceQuoteForStorage(widened: string, pageText: string, orig
 // When the model quote omits the schedule phrase, widen to a verified page span that includes it.
 export function quoteWithPageCadence(quote: string, pageText: string): string {
   const original = quote.trim()
+  if (isRefillMaintenance(original) && earliestPhrase(original, INDICATOR_PATTERNS)) {
+    return fitSourceQuoteForStorage(original, pageText, original)
+  }
   if (readCadence(original).stated) return fitSourceQuoteForStorage(original, pageText, original)
   const q = normalizeText(quote)
   const raw = pageText.replace(/\r\n/g, '\n')

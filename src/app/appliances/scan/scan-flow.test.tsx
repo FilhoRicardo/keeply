@@ -11,8 +11,17 @@ import { ScanFlow } from './scan-flow'
 
 // jsdom cannot decode images, so stand in for the browser's re-encode (which drops EXIF/GPS).
 let reencode = true
+let deferPrepare = false
+let resumePrepare: (() => void) | undefined
 vi.mock('../../lib/photo', () => ({
-  prepareLabelPhoto: async (file: Blob) => (reencode ? new Blob([file], { type: 'image/jpeg' }) : file),
+  prepareLabelPhoto: async (file: Blob) => {
+    if (deferPrepare) {
+      await new Promise<void>((resolve) => {
+        resumePrepare = resolve
+      })
+    }
+    return reencode ? new Blob([file], { type: 'image/jpeg' }) : file
+  },
 }))
 
 const push = vi.fn()
@@ -23,6 +32,8 @@ beforeEach(() => {
   repo = testRepository()
   push.mockReset()
   reencode = true
+  deferPrepare = false
+  resumePrepare = undefined
 })
 
 const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], 'label.jpg', { type: 'image/jpeg' })
@@ -43,6 +54,29 @@ async function takePhoto() {
 }
 
 describe('ScanFlow without recognition (v0.1)', () => {
+  it('shows the reading state before photo preparation finishes', async () => {
+    deferPrepare = true
+    renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo)
+    const input = screen.getByLabelText('Take or choose a photo') as HTMLInputElement
+    await act(async () => fireEvent.change(input, { target: { files: [photo] } }))
+    expect(screen.getByText('Reading the label…')).toBeInTheDocument()
+    await act(async () => {
+      resumePrepare?.()
+      await Promise.resolve()
+    })
+  })
+
+  it('accepts choosing the same photo file again after a failed read', async () => {
+    renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo)
+    await takePhoto()
+    expect(screen.getByText(/could not read an appliance label/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Rescan' }))
+    const input = screen.getByLabelText('Take or choose a photo') as HTMLInputElement
+    await act(async () => fireEvent.change(input, { target: { files: [photo] } }))
+    expect(await screen.findByText(/could not read an appliance label/)).toBeInTheDocument()
+    expect(input.value).toBe('')
+  })
+
   it('guides the photo, says nothing was read, and saves the typed identity', async () => {
     renderWithPlan(<ScanFlow recognizer={noRecognizer} />, repo)
     expect(screen.getByRole('region', { name: /photograph the label/i })).toBeInTheDocument()

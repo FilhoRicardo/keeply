@@ -134,6 +134,7 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
     if (!file) return
     setError(null)
     setRecovery(null)
+    setStep({ kind: 'reading', photo: file, preview: null })
     track({ name: 'scan_started' })
     const prepared = await prepareLabelPhoto(file)
     const preview = typeof URL.createObjectURL === 'function' ? URL.createObjectURL(prepared) : null
@@ -187,7 +188,12 @@ export function ScanFlow({ recognizer: injected }: { recognizer?: ApplianceRecog
             type="file"
             accept="image/*"
             capture="environment"
-            onChange={(e) => onPhoto(e.target.files?.[0])}
+            onChange={(e) => {
+              const input = e.target
+              const file = input.files?.[0]
+              void onPhoto(file)
+              input.value = ''
+            }}
           />
         </label>
       </section>

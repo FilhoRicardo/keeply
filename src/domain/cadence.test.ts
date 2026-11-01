@@ -238,6 +238,12 @@ describe('readCadence indicator-driven refills', () => {
       '• use a descaler or a cleaning product designed specifically for dishwashers every day. • refill salt when the indicator is on. keep the rinse aid dispenser topped up when the indicator is on.'
     expect(readCadenceFromContext('refill salt when the indicator is on.', page26)).toEqual(unstated('when the indicator'))
   })
+
+  it('does not treat a widened indicator salt quote as daily when another bullet mentions every day', () => {
+    const widened =
+      'use a descaler or a cleaning product designed specifically for dishwashers every day. refill salt when the indicator is on.'
+    expect(readCadence(widened)).toEqual(unstated('when the indicator'))
+  })
 })
 
 describe('readCadenceFromContext', () => {

@@ -28,6 +28,31 @@ describe('normaliseExtraction', () => {
     expect(normaliseExtraction({ candidates: [goodCandidate()] }, PAGES)).toEqual([goodCandidate()])
   })
 
+  it('drops a model interval that the quote does not state for indicator refills', () => {
+    const candidates = normaliseExtraction(
+      {
+        candidates: [
+          {
+            task: 'Check and refill salt container',
+            instructions: 'Refill when needed.',
+            interval: { count: 1, unit: 'day' },
+            page: 1,
+            quote: 'Refill salt when the indicator is on.',
+          },
+        ],
+      },
+      PAGES,
+    )
+    expect(candidates).toEqual([
+      goodCandidate({
+        task: 'Check and refill salt container',
+        instructions: 'Refill when needed.',
+        interval: { count: 1, unit: 'month' },
+        quote: 'Refill salt when the indicator is on.',
+      }),
+    ])
+  })
+
   it('trims and collapses whitespace in strings', () => {
     const result = normaliseExtraction(
       { candidates: [goodCandidate({ task: '  Clean the\n\tfilter  ', quote: '  Clean   the  filter once  a month.  ' })] },
@@ -323,6 +348,33 @@ describe('Electrolux KEQB7300L over-extraction consolidation', () => {
     goodCandidate({ task: 'Clean spray arm jets and filter', page: 23, quote: lowerArm, interval: { count: 1, unit: 'month' } }),
     goodCandidate({ task: 'Clean filters', page: 21, quote: filterIntro, interval: { count: 1, unit: 'month' } }),
   ]
+
+  it('does not keep a daily manual quote for the same salt task when an indicator quote exists', () => {
+    const page26 =
+      '• use a descaler or a cleaning product designed specifically for dishwashers every day. • refill salt when the indicator is on. keep the rinse aid dispenser topped up when the indicator is on.'
+    const merged = mergeExtractedTasks(
+      [
+        goodCandidate({
+          task: 'Check and refill salt container',
+          page: 26,
+          quote: 'use a descaler or a cleaning product designed specifically for dishwashers every day.',
+          interval: { count: 1, unit: 'day' },
+        }),
+        goodCandidate({
+          task: 'Check and refill salt container',
+          page: 26,
+          quote: saltQuote,
+          interval: { count: 1, unit: 'day' },
+        }),
+      ],
+      { pageTextByNumber: new Map([[26, page26]]), readCadence },
+    )
+    expect(merged).toHaveLength(1)
+    expect(merged[0]!.quote).toMatch(/indicator/i)
+    expect(presentInterval({ quote: merged[0]!.quote, stored: merged[0]!.interval, generalGuidance: false }).text).not.toMatch(
+      /from the manual/,
+    )
+  })
 
   it('consolidates nine post-PR75 prod duplicates to six maintenance components with correct cadence', () => {
     const merged = mergeExtractedTasks(prodNineExtracted, { pageTextByNumber, readCadence })
