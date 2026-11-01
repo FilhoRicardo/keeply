@@ -25,12 +25,12 @@ export const EXTRACTION_INSTRUCTIONS = `You read pages of a household appliance'
 Reply with only one JSON object, no other text:
 {"candidates": [{"task": string, "instructions": string, "interval": {"count": number, "unit": "day"|"week"|"month"|"year"}, "page": number, "quote": string}]}
 Rules:
-- List every recurring owner maintenance task the manual describes (e.g. filter cleaning, spray arms, door gasket or seal care, salt and rinse-aid refills, descaling, and built-in cleaning programmes or cycles such as Machine Care or a maintenance wash). When the manual tells the owner to run a named programme on a schedule, that is its own task. One candidate per distinct task.
+- List every recurring owner maintenance task the manual describes (e.g. filter cleaning, spray arms, door gasket or seal care, salt and rinse-aid refills, descaling, and built-in cleaning programmes or cycles such as Machine Care or a maintenance wash). When the manual tells the owner to run a named programme on a schedule, that is its own task. One candidate per distinct maintenance component (one filter task, one spray-arm task, one door/gasket task, one cleaning programme, separate salt and rinse-aid refills when both appear).
 - Cadence may be phrased as "at least once every N months/weeks" or with word numbers ("two months"); still extract the task and quote that phrase verbatim.
 - Copy the quote VERBATIM from the page text I send you. Never invent or paraphrase a quote. The quote is how a real claim is verified.
 - The "page" must be the page number I provided. The quote must appear in that page's text.
 - "instructions" is a short summary of what to do, in your own words.
-- "interval" is the cadence the manual states (e.g. monthly -> 1, "every 3 months" -> 3). Use unit "day", "week", "month" or "year". When the manual describes a recurring task but does not say how often, use a sensible default interval for the JSON field; the quote must still be verbatim text about the task.
+- "interval" is the cadence the manual states (e.g. monthly -> 1, "every 3 months" -> 3). Use unit "day", "week", "month" or "year". When the manual describes a recurring task but does not say how often, use a sensible default interval for the JSON field; the quote must still be verbatim text about the task. When refills depend on an indicator, quote the indicator wording; do not invent a daily schedule.
 - A candidate is one proposed task. Skip anything the manual does not state.
 - If the pages do not state any maintenance task, return {"candidates": []}.`
 
@@ -85,18 +85,100 @@ export function normalisedTaskName(task: string): string {
   return task.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
-function mergeScore(candidate: ExtractedTaskCandidate, cadenceStated: boolean): number {
-  return (cadenceStated ? 100 : 0) + Math.min(candidate.quote.length, 500) / 500
+/** Deterministic key for the appliance part a maintenance task acts on (for post-merge consolidation). */
+export function maintenanceComponentKey(candidate: ExtractedTaskCandidate): string {
+  const blob = `${candidate.task} ${candidate.instructions} ${candidate.quote}`.toLowerCase()
+  if (/\brinse[\s-]*aid\b/.test(blob)) return 'rinse-aid'
+  if (/\bsalt\b/.test(blob)) return 'salt'
+  if (
+    /\bmachine\s+care\b/.test(blob) ||
+    (/\bprogramme\b/.test(blob) && /\b(descaler|cleaning product|internal cleaning)\b/.test(blob))
+  ) {
+    return 'machine-care'
+  }
+  if (/\b(door|gasket|rubber)\b/.test(blob) && /\b(wipe|clean|gasket|door|seal)\b/.test(blob)) return 'door-gasket'
+  if (/\bspray\s*arm\b/.test(blob) || (/\bspray\b/.test(blob) && /\barm\b/.test(blob))) return 'spray-arms'
+  if (/\bfilter\b/.test(blob) || /\bforeign object\b/.test(blob) || /\bsump\b/.test(blob)) return 'filters'
+  return normalisedTaskName(candidate.task)
+}
+
+export type MergeExtractedTasksOptions = {
+  pageTextByNumber?: ReadonlyMap<number, string>
+  readCadence?: (quote: string, pageText?: string) => { stated: boolean }
+}
+
+function misalignedDailyForIndicator(candidate: ExtractedTaskCandidate, readCadenceFn: MergeExtractedTasksOptions['readCadence']): boolean {
+  const blob = `${candidate.task} ${candidate.quote}`.toLowerCase()
+  if (!/\b(refill|top up|fill|replenish|keep)\b/.test(blob)) return false
+  if (!/\b(salt|rinse[\s-]*aid)\b/.test(blob)) return false
+  if (!/\bindicator\b/.test(blob)) return false
+  const pageText = undefined
+  const stated = readCadenceFn?.(candidate.quote, pageText)?.stated
+  return stated === true && /\bevery\s+day\b/i.test(candidate.quote)
+}
+
+function componentPreferenceBonus(candidate: ExtractedTaskCandidate, componentKey: string): number {
+  const q = candidate.quote.toLowerCase()
+  if (componentKey === 'filters' && q.includes('filter') && q.includes('regularly')) return 25
+  if (componentKey === 'spray-arms' && q.includes('spray arm') && q.includes('regularly')) return 25
+  if (componentKey === 'machine-care') {
+    if (/\bat least once every two months\b/.test(q)) return 35
+    if (/\bevery\s+day\b/.test(q)) return -120
+  }
+  if (componentKey === 'door-gasket' && q.includes('once a week')) return 20
+  return 0
+}
+
+function mergeScore(
+  candidate: ExtractedTaskCandidate,
+  cadenceStated: boolean,
+  readCadenceFn: MergeExtractedTasksOptions['readCadence'],
+  componentKey?: string,
+): number {
+  let score = (cadenceStated ? 100 : 0) + Math.min(candidate.quote.length, 500) / 500
+  if (misalignedDailyForIndicator(candidate, readCadenceFn)) score -= 150
+  if (/\bregularly\b/i.test(candidate.quote) && !cadenceStated) score += 5
+  if (componentKey) score += componentPreferenceBonus(candidate, componentKey)
+  return score
+}
+
+function pickBetterCandidate(
+  a: ExtractedTaskCandidate,
+  b: ExtractedTaskCandidate,
+  opts: MergeExtractedTasksOptions,
+): ExtractedTaskCandidate {
+  const readCadenceFn = opts.readCadence ?? (() => ({ stated: false }))
+  const pageTextByNumber = opts.pageTextByNumber ?? new Map()
+  const pageA = pageTextByNumber.get(a.page)
+  const pageB = pageTextByNumber.get(b.page)
+  const statedA = readCadenceFn(a.quote, pageA).stated
+  const statedB = readCadenceFn(b.quote, pageB).stated
+  const key = maintenanceComponentKey(a)
+  const scoreA = mergeScore(a, statedA, readCadenceFn, key)
+  const scoreB = mergeScore(b, statedB, readCadenceFn, key)
+  if (scoreA > scoreB || (scoreA === scoreB && a.quote.length >= b.quote.length)) return a
+  return b
+}
+
+// Groups near-duplicate tasks that target the same appliance component.
+export function consolidateExtractedTasks(
+  candidates: readonly ExtractedTaskCandidate[],
+  opts: MergeExtractedTasksOptions = {},
+): ExtractedTaskCandidate[] {
+  const best = new Map<string, ExtractedTaskCandidate>()
+  for (const candidate of candidates) {
+    const key = maintenanceComponentKey(candidate)
+    const existing = best.get(key)
+    best.set(key, existing ? pickBetterCandidate(existing, candidate, opts) : candidate)
+  }
+  return [...best.values()]
 }
 
 // Combines parallel per-chunk extractions. One entry per normalised task name; prefers a manual
-// cadence in the quote and a longer verbatim quote.
+// cadence in the quote and a longer verbatim quote, then consolidates by maintenance component.
 export function mergeExtractedTasks(
   candidates: readonly ExtractedTaskCandidate[],
-  opts: {
-    pageTextByNumber?: ReadonlyMap<number, string>
-    readCadence?: (quote: string, pageText?: string) => { stated: boolean }
-  } = {},
+  opts: MergeExtractedTasksOptions = {},
 ): ExtractedTaskCandidate[] {
   const pageTextByNumber = opts.pageTextByNumber ?? new Map()
   const readCadenceFn = opts.readCadence ?? (() => ({ stated: false }))
@@ -112,11 +194,11 @@ export function mergeExtractedTasks(
     }
     const existingPage = pageTextByNumber.get(existing.page)
     const existingStated = readCadenceFn(existing.quote, existingPage).stated
-    const score = mergeScore(candidate, stated)
-    const existingScore = mergeScore(existing, existingStated)
+    const score = mergeScore(candidate, stated, readCadenceFn)
+    const existingScore = mergeScore(existing, existingStated, readCadenceFn)
     if (score > existingScore || (score === existingScore && candidate.quote.length > existing.quote.length)) {
       best.set(key, candidate)
     }
   }
-  return [...best.values()]
+  return consolidateExtractedTasks([...best.values()], opts)
 }

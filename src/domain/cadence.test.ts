@@ -221,6 +221,19 @@ describe('readCadence frequencies the interval cannot express', () => {
   })
 })
 
+describe('readCadence indicator-driven refills', () => {
+  it('does not treat indicator refills as daily when the quote mentions an indicator', () => {
+    expect(readCadence('refill salt every day when the indicator is on.')).toEqual(unstated('when the indicator'))
+    expect(readCadence('refill the rinse aid dispenser when the indicator is on.')).toEqual(unstated('when the indicator'))
+  })
+
+  it('does not borrow a weekly cadence from an earlier bullet on the same page', () => {
+    const page22 =
+      '• wipe clean the door, including the rubber gasket, once a week. • refill salt when the indicator is on. keep rinse aid topped up.'
+    expect(readCadenceFromContext('refill salt when the indicator is on.', page22)).toEqual(unstated('when the indicator'))
+  })
+})
+
 describe('readCadenceFromContext', () => {
   it('reads cadence from page text near the quote when the quote omits it', () => {
     const page22 =

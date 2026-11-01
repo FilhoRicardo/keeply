@@ -1,8 +1,13 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { presentInterval, readCadenceFromContext } from '@/domain/cadence'
 import {
+  maintenanceComponentKey,
   mergeExtractedTasks,
   normaliseExtraction,
   parseExtractionReply,
+  type ExtractedPage,
   type ExtractedTaskCandidate,
 } from './extraction'
 
@@ -161,6 +166,79 @@ describe('mergeExtractedTasks', () => {
       'Wipe the door gasket',
     ])
     expect(merged.find((c) => c.task === 'Wipe the door gasket')?.interval).toEqual({ count: 1, unit: 'week' })
+  })
+})
+
+describe('Electrolux KEQB7300L over-extraction consolidation', () => {
+  const fixturePath = fileURLToPath(new URL('../test-fixtures/electrolux-keqb7300l-care-pages.json', import.meta.url))
+  const carePages = JSON.parse(readFileSync(fixturePath, 'utf8')) as ExtractedPage[]
+  const pageTextByNumber = new Map<number, string>([
+    ...carePages.map((p) => [p.page, p.text] as const),
+    [26, 'refill salt when the indicator is on. keep the rinse aid dispenser topped up when the indicator is on.'] as const,
+  ])
+  const readCadence = (quote: string, pageText?: string) => readCadenceFromContext(quote, pageText)
+
+  const filterIntro =
+    'dirty filters and clogged spray arms negatively affect the washing results. check these elements regularly and, if necessary, clean them.'
+  const doorQuote = 'wipe clean the door, including the rubber gasket, once a week.'
+  const machineCareShort = 'for optimal cleaning results, start the programme machine care.'
+  const machineCareFull =
+    'to maintain the performance of your appliance, use a cleaning product designed specifically for dishwashers at least once every two months. carefully follow the instructions on the packaging of the product. for optimal cleaning results, start the programme machine care.'
+  const lowerArm = 'we recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.'
+  const foreignObjects = 'check the filters and the sump after each use of the dishwasher.'
+  const saltQuote = 'refill salt when the indicator is on.'
+  const rinseQuote = 'keep the rinse aid dispenser topped up when the indicator is on.'
+
+  const overExtracted: ExtractedTaskCandidate[] = [
+    goodCandidate({ task: 'Refill rinse aid dispenser', page: 26, quote: rinseQuote, interval: { count: 1, unit: 'day' } }),
+    goodCandidate({ task: 'Refill salt container', page: 26, quote: saltQuote, interval: { count: 1, unit: 'day' } }),
+    goodCandidate({ task: 'Run Machine Care programme', page: 22, quote: machineCareShort, interval: { count: 1, unit: 'month' } }),
+    goodCandidate({ task: 'Check and clean filters', page: 21, quote: filterIntro, interval: { count: 1, unit: 'month' } }),
+    goodCandidate({ task: 'Check and clean spray arms', page: 23, quote: lowerArm, interval: { count: 1, unit: 'month' } }),
+    goodCandidate({ task: 'Clean the door and rubber gasket', page: 22, quote: doorQuote, interval: { count: 1, unit: 'week' } }),
+    goodCandidate({ task: 'Check filters and sump for foreign objects', page: 22, quote: foreignObjects, interval: { count: 1, unit: 'week' } }),
+    goodCandidate({ task: 'Clean the filters', page: 22, quote: doorQuote, interval: { count: 1, unit: 'week' } }),
+    goodCandidate({ task: 'Clean the lower spray arm', page: 23, quote: lowerArm, interval: { count: 1, unit: 'month' } }),
+    goodCandidate({ task: 'Clean the upper spray arm', page: 24, quote: 'we recommend to clean the upper spray arm regularly to prevent soil from clogging the holes.', interval: { count: 1, unit: 'month' } }),
+    goodCandidate({
+      task: 'Clean the ceiling spray arm',
+      page: 24,
+      quote: 'we recommend to clean the ceiling spray arm regularly to prevent soil from clogging the holes.',
+      interval: { count: 1, unit: 'month' },
+    }),
+    goodCandidate({ task: 'Clean filters', page: 21, quote: filterIntro, interval: { count: 1, unit: 'month' } }),
+    goodCandidate({ task: 'Clean spray arm jets and filter', page: 23, quote: lowerArm, interval: { count: 1, unit: 'month' } }),
+    goodCandidate({ task: 'Run Machine Care programme with descaler or cleaning product', page: 22, quote: machineCareFull, interval: { count: 1, unit: 'month' } }),
+    goodCandidate({
+      task: 'Run Machine Care programme with descaler',
+      page: 22,
+      quote: 'use a descaler or a cleaning product designed specifically for dishwashers every day.',
+      interval: { count: 1, unit: 'day' },
+    }),
+  ]
+
+  it('consolidates fifteen chunk duplicates to six maintenance components with correct cadence', () => {
+    const merged = mergeExtractedTasks(overExtracted, { pageTextByNumber, readCadence })
+    expect(merged).toHaveLength(6)
+    expect(new Set(merged.map((c) => maintenanceComponentKey(c))).size).toBe(6)
+
+    const byKey = new Map(merged.map((c) => [maintenanceComponentKey(c), c]))
+    expect(presentInterval({ quote: byKey.get('door-gasket')!.quote, stored: { count: 1, unit: 'month' }, generalGuidance: false, pageText: pageTextByNumber.get(22) }).interval).toEqual({
+      count: 1,
+      unit: 'week',
+    })
+    expect(
+      presentInterval({
+        quote: byKey.get('machine-care')!.quote,
+        stored: { count: 1, unit: 'month' },
+        generalGuidance: false,
+        pageText: pageTextByNumber.get(22),
+      }).interval,
+    ).toEqual({ count: 2, unit: 'month' })
+    expect(presentInterval({ quote: byKey.get('filters')!.quote, stored: { count: 1, unit: 'week' }, generalGuidance: false }).text).toMatch(/Keeply's suggestion/)
+    expect(presentInterval({ quote: byKey.get('spray-arms')!.quote, stored: { count: 1, unit: 'week' }, generalGuidance: false }).text).toMatch(/Keeply's suggestion/)
+    expect(presentInterval({ quote: byKey.get('salt')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).toMatch(/indicator/i)
+    expect(presentInterval({ quote: byKey.get('rinse-aid')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).toMatch(/indicator/i)
   })
 })
 
