@@ -5,6 +5,13 @@ import { quoteIsAboutTask } from './quote-about-task'
 // Shortest quote (after normalising) that can verify anything; shorter text matches by accident.
 export const MIN_QUOTE_LENGTH = 20
 
+// Mirrors maintenance_tasks.source_quote check (length(source_quote) <= 1000).
+export const MAX_SOURCE_QUOTE_LENGTH = 1000
+
+export function sourceQuoteSatisfiesDbCheck(quote: string | null | undefined): boolean {
+  return quote == null || quote.length <= MAX_SOURCE_QUOTE_LENGTH
+}
+
 // True only when the quote appears verbatim in the document after normalising whitespace, case,
 // line-break hyphenation and ligatures. Tries both joined (`dish-\nwasher` -> `dishwasher`) and
 // kept (`dish-\nwasher` -> `dish-washer`) hyphenation so genuine hyphenated compounds match too.

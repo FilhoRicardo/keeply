@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { verifyQuote } from './evidence-check'
 import {
   presentInterval,
+  fitSourceQuoteForStorage,
   quoteWithPageCadence,
   readCadence,
   readCadenceFromContext,
@@ -242,6 +244,21 @@ describe('readCadenceFromContext', () => {
     expect(readCadenceFromContext('wipe clean the door, including the rubber gasket, once a week.', page22)).toEqual(
       stated({ count: 1, unit: 'week' }),
     )
+  })
+})
+
+describe('fitSourceQuoteForStorage', () => {
+  it('clamps an over-long verified quote on a word boundary at the DB limit', () => {
+    const tail = 'Clean the filter once a month under running water.'
+    const padding = 'word '.repeat(220).trim()
+    const page = `${padding} ${tail}`
+    const overLong = `${padding} ${tail}`
+    expect(overLong.length).toBeGreaterThan(1000)
+    const fitted = fitSourceQuoteForStorage(overLong, page, tail)
+    expect(fitted.length).toBeLessThanOrEqual(1000)
+    expect(fitted.trim().length).toBeGreaterThan(0)
+    expect(fitted.endsWith('water.')).toBe(true)
+    expect(verifyQuote(page, fitted)).toBe(true)
   })
 })
 

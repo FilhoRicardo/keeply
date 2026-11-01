@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { presentInterval, readCadence } from '@/domain/cadence'
-import { classifyEvidence, verifyQuote } from '@/domain/evidence-check'
+import { presentInterval, quoteWithPageCadence, readCadence } from '@/domain/cadence'
+import { classifyEvidence, sourceQuoteSatisfiesDbCheck, verifyQuote } from '@/domain/evidence-check'
 import { proposePlan } from '@/app/lib/plan-orchestration'
 import type { ExtractedPage } from './extraction'
 import { manualPagesPrompt } from './openai-chat'
@@ -76,6 +76,24 @@ describe('Electrolux KEQB7300L care section (live manual text)', () => {
     expect(prompt).toMatch(/at least once every two months/i)
   })
 
+  it('stores source quotes within the database length check after cadence widening', () => {
+    for (const { quote, page } of expectedTasks) {
+      const text = pageText(page)
+      const stored = quoteWithPageCadence(quote, text)
+      expect(sourceQuoteSatisfiesDbCheck(stored)).toBe(true)
+      expect(stored.trim().length).toBeGreaterThan(0)
+      expect(verifyQuote(text, stored)).toBe(true)
+    }
+    const shortMachineCare = 'for optimal cleaning results, start the programme machine care.'
+    for (const p of carePages) {
+      const stored = quoteWithPageCadence(shortMachineCare, p.text)
+      expect(sourceQuoteSatisfiesDbCheck(stored)).toBe(true)
+      if (verifyQuote(p.text, stored)) {
+        expect(stored.trim().length).toBeGreaterThan(0)
+      }
+    }
+  })
+
   it.each(expectedTasks)('verifies $task on page $page', ({ task, quote, page }) => {
       expect(verifyQuote(pageText(page), quote)).toBe(true)
       expect(
@@ -133,6 +151,10 @@ describe('Electrolux KEQB7300L care section (live manual text)', () => {
     expect(result.fallback).toBe('exact')
     expect(result.proposals).toHaveLength(4)
     expect(result.proposals.map((p) => p.name).sort()).toEqual(expectedTasks.map((t) => t.task).sort())
+    for (const proposal of result.proposals) {
+      expect(sourceQuoteSatisfiesDbCheck(proposal.source.quote)).toBe(true)
+      expect(proposal.source.quote?.trim().length).toBeGreaterThan(0)
+    }
     const machineCare = result.proposals.find((p) => p.name === 'Run Machine Care with dishwasher cleaner')!
     expect(machineCare.evidenceLevel).toBe('manufacturer_verified')
     expect(machineCare.interval).toEqual({ count: 2, unit: 'month' })
