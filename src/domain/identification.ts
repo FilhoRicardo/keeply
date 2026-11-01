@@ -36,7 +36,7 @@ export type RecognitionResult = {
 
 // 'not_a_dishwasher' was retired in KEE-60. `ai_unavailable` is the honest "the AI service
 // did not answer" notice, including a thrown or timed-out provider call (RF-348).
-export const ACCESS_DENIALS = ['no_invite', 'tester_limit', 'daily_limit', 'ai_unavailable'] as const
+export const ACCESS_DENIALS = ['no_invite', 'tester_limit', 'daily_limit', 'ai_limit', 'ai_unavailable'] as const
 export type AccessDenial = (typeof ACCESS_DENIALS)[number]
 export type RecognitionNotice = AccessDenial
 
@@ -56,10 +56,9 @@ export const noRecognizer: ApplianceRecognizer = {
   recognise: async () => NOTHING_RECOGNISED,
 }
 
-// KEE-60: free-text category now. The owner's default is "dishwasher" only because the
-// pre-KEE-60 flow taught it; any household appliance is supported.
+// KEE-60: free-text category now. When nothing was read, the confirm form starts blank.
 export function emptyIdentification(): ApplianceIdentification {
-  return { category: 'dishwasher', manufacturer: '', model: '', serialNumber: '', confidence: null, source: 'manual' }
+  return { category: '', manufacturer: '', model: '', serialNumber: '', confidence: null, source: 'manual' }
 }
 
 // Any edit by the owner makes the identification theirs: a recogniser's confidence no longer applies.

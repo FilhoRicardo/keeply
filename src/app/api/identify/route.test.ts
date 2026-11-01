@@ -115,12 +115,75 @@ describe('POST /api/identify', () => {
     vi.stubEnv('KEEPLY_SCAN_ACCESS', 'open')
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"invalid key sk-secret-fragment"}', { status: 500 })))
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {})
     const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
     const text = await response.text()
     expect(response.status).toBe(200)
     expect(text).not.toContain('sk-secret-fragment')
     expect(JSON.parse(text)).toEqual({ identification: null, notice: 'ai_unavailable' })
     expect(errors).not.toHaveBeenCalled()
+    expect(JSON.parse(String(logs.mock.calls[0]?.[0]))).toMatchObject({
+      event: 'identify',
+      httpStatus: 500,
+      retried: false,
+      parseableJson: false,
+      manufacturerFound: false,
+    })
+  })
+
+  it('logs one structured line per call and reports OpenRouter model id on success', async () => {
+    vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
+    vi.stubEnv('OPENROUTER_API_KEY', 'or-key')
+    vi.stubEnv('KEEPLY_SCAN_ACCESS', 'open')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          model: 'google/gemma-3-27b-it:free',
+          choices: [{ message: { content: '{"applianceType":"dishwasher","typeEvidence":"dishwasher","manufacturer":"Electrolux","model":"KEQB7300L","serialNumber":null,"confidence":0.9}' } }],
+        }),
+      ),
+    )
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await post(new Blob(['x'], { type: 'image/jpeg' }))
+    expect(JSON.parse(String(logs.mock.calls[0]?.[0]))).toMatchObject({
+      event: 'identify',
+      httpStatus: 200,
+      retried: false,
+      parseableJson: true,
+      manufacturerFound: true,
+      reportedModel: 'google/gemma-3-27b-it:free',
+      latencyMs: expect.any(Number),
+    })
+  })
+
+  it('returns ai_limit when OpenRouter is rate limited after one retry', async () => {
+    vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
+    vi.stubEnv('OPENROUTER_API_KEY', 'or-key')
+    vi.stubEnv('KEEPLY_SCAN_ACCESS', 'open')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{"error":"slow down","key":"or-key"}', { status: 429 })),
+    )
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
+    expect(await response.json()).toEqual({ identification: null, notice: 'ai_limit' })
+    expect(JSON.parse(String(logs.mock.calls[0]?.[0]))).toMatchObject({
+      event: 'identify',
+      httpStatus: 429,
+      retried: true,
+      parseableJson: false,
+      manufacturerFound: false,
+    })
+  })
+
+  it('returns ai_limit when OpenRouter reports payment required', async () => {
+    vi.stubEnv('NEXT_PUBLIC_KEEPLY_SCAN', '1')
+    vi.stubEnv('OPENROUTER_API_KEY', 'or-key')
+    vi.stubEnv('KEEPLY_SCAN_ACCESS', 'open')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"payment"}', { status: 402 })))
+    const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
+    expect(await response.json()).toEqual({ identification: null, notice: 'ai_limit' })
   })
 
   it('says label reading is unavailable when the provider times out, and hides the error text', async () => {
@@ -134,12 +197,14 @@ describe('POST /api/identify', () => {
       }),
     )
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {})
     const response = await post(new Blob(['x'], { type: 'image/jpeg' }))
     const text = await response.text()
     expect(response.status).toBe(200)
     expect(text).not.toContain('sk-secret-fragment')
     expect(JSON.parse(text)).toEqual({ identification: null, notice: 'ai_unavailable' })
     expect(errors).not.toHaveBeenCalled()
+    expect(JSON.parse(String(logs.mock.calls[0]?.[0]))).toMatchObject({ event: 'identify', httpStatus: 'timeout' })
   })
 
   it('still proposes nothing when the provider answers that it recognised nothing', async () => {
@@ -242,7 +307,7 @@ describe('POST /api/identify for invited testers (default access mode)', () => {
     const response = await post(photo(), session)
     const text = await response.text()
     expect(text).not.toContain('or-key')
-    expect(JSON.parse(text)).toEqual({ identification: null, notice: 'ai_unavailable' })
+    expect(JSON.parse(text)).toEqual({ identification: null, notice: 'ai_limit' })
     const reserveAt = calls.findIndex((url) => url.includes('reserve_scan'))
     const aiAt = calls.findIndex((url) => url.includes('openrouter.ai'))
     expect(reserveAt).toBeGreaterThanOrEqual(0)

@@ -32,6 +32,8 @@ export type ChatCompletion = {
   // Assistant text with reasoning tags removed. Null when the model returned no text content.
   // A separate reasoning channel is ignored: it is not an answer.
   content: string | null
+  // The model id the provider reports for this completion (OpenRouter `model` field).
+  reportedModel: string | null
 }
 
 export function labelPhotoAccepted(photo: LabelPhoto): boolean {
@@ -162,22 +164,25 @@ export async function completeChat(input: {
     } catch {
       // The error body is discarded either way.
     }
-    return { ok: false, status: response.status, content: null }
+    return { ok: false, status: response.status, content: null, reportedModel: null }
   }
   const body = (await response.json()) as {
+    model?: unknown
     choices?: { message?: { content?: unknown }; error?: { code?: unknown } }[]
     // OpenRouter reports a provider failure after the 200 status line was sent (a timeout, or an
     // error injected into the stream) as an `error` object, with no answer.
     error?: { code?: unknown }
   }
+  const reportedModel = typeof body.model === 'string' && body.model.trim().length > 0 ? body.model.trim() : null
   const failure = body.error ?? body.choices?.[0]?.error
   if (failure) {
     const code = typeof failure.code === 'number' && Number.isInteger(failure.code) ? failure.code : 502
-    return { ok: false, status: code, content: null }
+    return { ok: false, status: code, content: null, reportedModel }
   }
   return {
     ok: true,
     status: response.status,
     content: messageText(body.choices?.[0]?.message?.content),
+    reportedModel,
   }
 }

@@ -36,7 +36,7 @@ type Step =
     }
 
 // Why the owner is typing instead of confirming a proposal.
-type ManualReasonKey = 'unread' | 'no_invite' | 'tester_limit' | 'daily_limit' | 'ai_unavailable'
+type ManualReasonKey = 'unread' | 'no_invite' | 'tester_limit' | 'daily_limit' | 'ai_limit' | 'ai_unavailable'
 
 const UNREAD =
   'Keeply could not read an appliance label in this photo. Try a clearer photo of the label, or enter the details below.'
@@ -49,6 +49,7 @@ const MANUAL_REASON: Record<ManualReasonKey, string> = {
     'Sign in with Google on the Home screen to use AI label reading. The photo was not sent to the AI service. You can always type the details.',
   tester_limit: 'You have used today’s AI scans, so the photo was not sent to the AI service. Enter the details below, or scan again tomorrow.',
   daily_limit: 'Keeply has reached today’s AI scan limit, so the photo was not sent to the AI service. Enter the details below, or scan again tomorrow.',
+  ai_limit: 'Keeply has hit its AI limit for today. Enter the details below or try again later.',
   ai_unavailable: 'AI label reading is unavailable right now. Enter the details below.',
 }
 

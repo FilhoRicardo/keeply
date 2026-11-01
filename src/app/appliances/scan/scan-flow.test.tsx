@@ -49,8 +49,11 @@ describe('ScanFlow without recognition (v0.1)', () => {
     await takePhoto()
 
     expect(screen.getByText(/could not read an appliance label in this photo/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Appliance', { exact: false })).toHaveValue('')
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
-    expect(screen.getByRole('alert')).toHaveTextContent(/manufacturer/)
+    expect(screen.getByRole('alert')).toHaveTextContent(/appliance/i)
+
+    fireEvent.change(screen.getByLabelText('Appliance', { exact: false }), { target: { value: 'Dishwasher' } })
 
     fireEvent.change(screen.getByLabelText('Manufacturer'), { target: { value: 'Bosch' } })
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -206,7 +209,17 @@ describe('ScanFlow when AI label reading is unavailable', () => {
     expect(screen.getByText('AI label reading is unavailable right now. Enter the details below.')).toBeInTheDocument()
     expect(screen.queryByText(/clearer photo/i)).not.toBeInTheDocument()
     expect(screen.getByLabelText('Manufacturer')).toHaveValue('')
-    expect(screen.getByLabelText('Appliance', { exact: false })).toBeInTheDocument()
+    expect(screen.getByLabelText('Appliance', { exact: false })).toHaveValue('')
+  })
+
+  it('explains when Keeply hit its AI provider limit', async () => {
+    const limited: ApplianceRecognizer = {
+      recognise: async () => ({ identification: null, notice: 'ai_limit' }),
+    }
+    renderWithPlan(<ScanFlow recognizer={limited} />, repo)
+    await takePhoto()
+    expect(screen.getByText('Keeply has hit its AI limit for today. Enter the details below or try again later.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Appliance', { exact: false })).toHaveValue('')
   })
 })
 

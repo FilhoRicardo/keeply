@@ -17,9 +17,12 @@ describe('identification', () => {
   })
 
   it('requires a manufacturer and a sane confidence', () => {
-    expect(validateIdentification(emptyIdentification())).toMatch(/manufacturer/)
-    expect(validateIdentification({ ...emptyIdentification(), manufacturer: 'Bosch', confidence: 1.4 })).toMatch(/Confidence/)
-    expect(validateIdentification({ ...emptyIdentification(), manufacturer: 'Bosch' })).toBeNull()
+    expect(validateIdentification(emptyIdentification())).toMatch(/appliance/i)
+    expect(validateIdentification({ ...emptyIdentification(), category: 'dishwasher' })).toMatch(/manufacturer/)
+    expect(
+      validateIdentification({ ...emptyIdentification(), category: 'dishwasher', manufacturer: 'Bosch', confidence: 1.4 }),
+    ).toMatch(/Confidence/)
+    expect(validateIdentification({ ...emptyIdentification(), category: 'dishwasher', manufacturer: 'Bosch' })).toBeNull()
     expect(validateIdentification({ ...emptyIdentification(), category: 'unknown', manufacturer: 'Bosch' })).toMatch(/appliance/i)
     expect(validateIdentification({ ...emptyIdentification(), category: 'Unknown', manufacturer: 'Bosch' })).toMatch(/appliance/i)
     expect(
