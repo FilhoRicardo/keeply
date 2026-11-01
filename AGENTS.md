@@ -40,7 +40,7 @@ Route here for work on Keeply (`active/Keeply/`). Outcome: a mobile-first PWA wh
 ## Workflow
 
 1. Read this file, `MEMORY.md`, and `docs/HANDOFF.md` before touching code.
-2. Current state: the MVP (§24) and manual search (§23) are built and live at https://keeply.vercel.app. Ricardo chooses what is next. Where each setting lives: `docs/environments.md`.
+2. Current state: the MVP (§24) and manual search (§23) are built. A demo deployment may exist separately from this repo; self-hosters follow `docs/self-host.md`. Where each setting lives: `docs/environments.md`.
 3. Query `codebase-memory-mcp` (`search_graph`, `trace_path`, `get_architecture`) before broad code exploration, once code exists and is indexed.
 4. Follow `docs/agents/workflow.md`: mandatory `grill-with-docs`, confirmed scope, ticket, branch, PR, independent Codex review, then merge. Preserve the existing human approval requirement for production, schema, secrets, or a calendar/email send. Done requires a real-input browser run with evidence and a merged PR.
 5. Verify with the checks below.
