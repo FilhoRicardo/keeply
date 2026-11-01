@@ -1,14 +1,14 @@
 # Issue tracker
 
-- Workspace: RF-AI-Workspace
-- Team: Engineering (RF), 8377e958-3fea-4be9-b212-f782b0c637ca
-- Project: Keeply, e1dd0528-d3a0-493a-a878-fc02fc13915f
-- Project URL: https://linear.app/rf-ai-workspace/project/keeply-a66469c00bfb
+- Tracker: Notion, Software Development area, Tickets database: https://app.notion.com/p/1bf0645bd54e4630b476b0b5a360d820
+- Project: Keeply row in the Projects database: https://app.notion.com/p/40b4bb824eeb81ef92f3f3547bcf7d9a
 - GitHub: https://github.com/FilhoRicardo/keeply
-- Setup validation: https://linear.app/rf-ai-workspace/issue/RF-338/validate-subscription-based-codex-and-cursor-workflow
+- Legacy: Linear (Keeply project, Engineering/RF) until 2026-11-01. RF-338..RF-357 were migrated; each keeps its RF id in the Ticket ID property. The Linear snapshot page is history only. Do not create or update Linear issues.
 
-Use available Linear tools for scope, specs and tickets. Fetch full issue bodies and comments before implementation/review. Publish dependent tickets in dependency order using native blocking relationships. Do not duplicate the backlog in GitHub Issues. Do not use Paperclip.
+Use the Notion tools for scope, specs and tickets. Fetch the full ticket page (body and comments) before implementation/review. Every Keeply ticket links the Keeply project. Publish dependent tickets in dependency order using the Blocked by relation (Blocks is its reverse). Do not duplicate the backlog in GitHub Issues. Do not use Paperclip.
 
-Create work in Backlog. Only after the workflow planning gate passes may a ticket receive ready-for-agent and move to Todo. `to-spec` and `to-tickets` upstream readiness defaults are subordinate to this project gate. Native triage is not configured; do not invent or create additional labels automatically.
+Fields: Title, Project, Status, Type (Tracer bullet, Bug, Chore), Blocked by, Branch, PR URL, Ticket ID (legacy RF id; empty for new tickets).
 
-Use RF identifiers in branches and PRs. Link the spec and ticket directly in the PR body. Move to In Review when the PR exists, and Done only after merge and verification.
+Create work in Backlog. Only after the workflow planning gate passes may a ticket move to Ready. `to-spec` and `to-tickets` upstream readiness defaults are subordinate to this project gate. Do not invent or add Status or Type options automatically.
+
+New tickets have no RF id: refer to them by Notion page title and link. Migrated tickets keep their RF id in branches and PRs. Link the spec and the Notion ticket page directly in the PR body, and set Branch and PR URL on the ticket. Move to In review when the PR exists, and Done only after merge and verification.
