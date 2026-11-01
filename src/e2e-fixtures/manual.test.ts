@@ -18,6 +18,7 @@ function deps(model: string): PlanDeps {
     reserveBraveSearch: async () => 'allowed',
     searchManuals: async () => ({
       status: 'ok',
+      braveStatus: [200],
       candidates: [{ url: MANUAL_URL, title: MANUAL_TITLE, snippet: '', host: 'www.bosch-home.com' }],
     }),
     fetchDocument: async (url) => ({ ok: true, bytes: html, type: 'html', url }),

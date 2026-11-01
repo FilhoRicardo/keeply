@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { LocalDate } from '@/domain/dates'
 import type { ProposalMeta, TaskProposal } from '@/domain/model'
 import type { Decision } from '@/domain/plan'
+import { proposalMetaForStorage } from '@/app/lib/plan-search-outcomes'
 import { fromProposal, type ApplianceTree } from './rows'
 
 // Every Keeply read and write against Supabase. Each call runs as the signed-in user, so
@@ -40,7 +41,7 @@ export async function addAppliance(
       p_serial_number: input.serialNumber,
       p_identification_confidence: input.confidence,
       p_tasks: proposals.map(fromProposal),
-      p_proposal_meta: meta,
+      p_proposal_meta: meta ? proposalMetaForStorage(meta) : null,
     }),
   ) as string
 }

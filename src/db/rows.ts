@@ -1,5 +1,6 @@
 import type { Appliance, ApplianceRecord, MaintenanceTask, ProposalMeta, TaskProposal } from '@/domain/model'
 import { decodeSourceLocation, encodeSourceLocation } from '@/domain/model-family'
+import { proposalMetaFromStorage } from '@/app/lib/plan-search-outcomes'
 
 // Row shapes as stored in supabase/migrations. proposal_meta landed in
 // 20261011120000_proposal_meta.sql (RF-352).
@@ -81,6 +82,9 @@ const PROPOSAL_FALLBACKS = ['exact', 'similar', 'general'] as const
 const PROPOSAL_OUTCOMES = [
   'ok',
   'no_results',
+  'search_error',
+  'search_empty',
+  'manual_found_ai_no_tasks',
   'quota_exhausted',
   'fetch_failed',
   'extraction_unavailable',
@@ -104,12 +108,12 @@ function proposalMetaFromRow(value: unknown): ProposalMeta | null {
   if (!isOneOf(meta.searchOutcome, PROPOSAL_OUTCOMES)) return null
   if (typeof meta.searched !== 'boolean') return null
   if (meta.searchReason !== null && typeof meta.searchReason !== 'string') return null
-  return {
+  return proposalMetaFromStorage({
     fallback: meta.fallback,
     searchOutcome: meta.searchOutcome,
     searchReason: meta.searchReason,
     searched: meta.searched,
-  }
+  })
 }
 
 export function toApplianceRecord(tree: ApplianceTree): ApplianceRecord {

@@ -51,7 +51,9 @@ function httpCategory(token: string): NoPlanCategory | null {
 
 function categoryFor(token: string | null | undefined): NoPlanCategory | null {
   if (!token) return null
-  if (token === 'no_results') return 'nothing_suitable'
+  if (token === 'no_results' || token === 'search_empty') return 'nothing_suitable'
+  if (token === 'manual_found_ai_no_tasks') return 'manual_information'
+  if (token === 'search_error') return 'temporary'
   if (MANUAL_INFORMATION.has(token)) return 'manual_information'
   if (TEMPORARY.has(token)) return 'temporary'
   return httpCategory(token)

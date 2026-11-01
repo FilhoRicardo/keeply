@@ -45,15 +45,21 @@ const STOPS: ReadonlyArray<{
   },
   {
     stop: 'search returned no manuals',
-    meta: meta('no_results', 'no_results'),
-    reason: 'no_results',
+    meta: meta('search_empty', 'no_results'),
+    reason: 'search_empty',
     wording: /No manufacturer manual found for this model\./,
   },
   {
     stop: 'search was rate limited',
-    meta: meta('no_results', 'rate_limited'),
-    reason: 'no_results',
-    wording: /No manufacturer manual found for this model\./,
+    meta: meta('search_error', 'rate_limited'),
+    reason: 'search_error',
+    wording: /Keeply could not complete the manual search\./,
+  },
+  {
+    stop: 'manual matched but AI produced no tasks',
+    meta: { ...meta('manual_found_ai_no_tasks', null), manualUrl: 'https://example.com/manual.pdf' },
+    reason: 'manual_found_ai_no_tasks',
+    wording: /We found the manual but could not extract tasks from it yet\./,
   },
   {
     stop: 'no search key is configured',

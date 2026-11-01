@@ -62,6 +62,7 @@ function toMeta(result: LiveProposalResult): ProposalMeta {
     searchOutcome: result.outcome.searchOutcome,
     searchReason: result.outcome.searchReason,
     searched: result.searched,
+    ...(result.outcome.manualUrl ? { manualUrl: result.outcome.manualUrl } : {}),
   }
 }
 
