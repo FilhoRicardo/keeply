@@ -373,8 +373,30 @@ describe('identifyWithOpenRouter', () => {
   })
 })
 
+function longManualWithLateCareSection(): ExtractedPage[] {
+  const pages: ExtractedPage[] = [{ page: 1, text: 'Electrolux KEQB7300L user manual.' }]
+  for (let p = 2; p <= 28; p++) pages.push({ page: p, text: `Installation and safety text on page ${p}.` })
+  pages.push(
+    { page: 29, text: 'Care and cleaning. Wipe the door gasket weekly with a damp cloth.' },
+    { page: 30, text: 'Rinse the fine filter every month. Check spray arms every six months.' },
+    { page: 31, text: 'Run descaling every three months. Refill salt and rinse aid when indicators show.' },
+  )
+  for (let p = 32; p <= 40; p++) pages.push({ page: p, text: `Appendix page ${p}.` })
+  return pages
+}
+
 describe('extractTasksWithOpenRouter', () => {
   const pages: ExtractedPage[] = [{ page: 12, text: 'Clean the filter every month under running water.' }]
+
+  it('sends late care-and-cleaning pages on long manuals, not only the opening pages', async () => {
+    const fetchMock = reply('{"candidates":[]}')
+    await extractTasksWithOpenRouter(config, longManualWithLateCareSection(), fetchMock as unknown as typeof fetch)
+    const user = (requestOf(fetchMock).body.messages as { role: string; content: string }[]).find((m) => m.role === 'user')
+    expect(user?.content).toContain('[Page 29]')
+    expect(user?.content).toMatch(/door gasket/i)
+    expect(user?.content).toMatch(/spray arms/i)
+    expect(user?.content).not.toContain('[Page 15]')
+  })
 
   it('parses a JSON reply and strips a think block before reading candidates', async () => {
     const body = {

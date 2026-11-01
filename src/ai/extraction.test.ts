@@ -73,6 +73,43 @@ describe('normaliseExtraction', () => {
     expect(normaliseExtraction(raw, PAGES)).toEqual([])
   })
 
+  it('keeps every well-formed candidate from a realistic manual extraction reply', () => {
+    const pages = new Set([29, 30, 31])
+    const list = [
+      goodCandidate({
+        task: 'Wipe the door gasket',
+        page: 29,
+        quote: 'Wipe the door gasket weekly with a damp cloth.',
+        interval: { count: 1, unit: 'week' },
+      }),
+      goodCandidate({
+        task: 'Clean the fine filter',
+        page: 30,
+        quote: 'Rinse the fine filter every month.',
+        interval: { count: 1, unit: 'month' },
+      }),
+      goodCandidate({
+        task: 'Check spray arms',
+        page: 30,
+        quote: 'Check spray arms every six months.',
+        interval: { count: 6, unit: 'month' },
+      }),
+      goodCandidate({
+        task: 'Run descaling',
+        page: 31,
+        quote: 'Run descaling every three months.',
+        interval: { count: 3, unit: 'month' },
+      }),
+      goodCandidate({
+        task: 'Refill salt and rinse aid',
+        page: 31,
+        quote: 'Refill salt and rinse aid when indicators show.',
+        interval: { count: 1, unit: 'month' },
+      }),
+    ]
+    expect(normaliseExtraction({ candidates: list }, pages)).toEqual(list)
+  })
+
   it('keeps multiple good candidates from the same model reply', () => {
     const list = [
       goodCandidate({ task: 'Clean the filter', page: 1, quote: 'Clean the filter once a month under running water.', interval: { count: 1, unit: 'month' } }),
