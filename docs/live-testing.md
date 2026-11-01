@@ -7,11 +7,11 @@ How the owner tests photo → AI proposal → Confirm / Edit / Rescan with a rea
 | Part | State |
 |---|---|
 | Scan UI, `/api/identify`, OpenRouter adapter, Manual fallback | Real. Scanning is off unless `NEXT_PUBLIC_KEEPLY_SCAN=1` is set at build time; AI is off unless `OPENROUTER_API_KEY` is set on the server. |
-| Storage | Supabase on the Vercel deployments (MVP schema applied, anonymous sign-ins on); device `localStorage` locally unless `.env.local` sets the Supabase values. Live status: `docs/live-gates.md`. |
+| Storage | Supabase when configured (MVP schema, anonymous sign-ins); device `localStorage` locally unless `.env.local` sets the Supabase values. Record checks in `docs/live-gates.md`. |
 | Accounts | Anonymous Supabase sign-in when Supabase is configured; optional Google sign-in needs the provider enabled. With device storage there is no account. |
-| Google Calendar | Configured for Vercel Preview and verified live (`docs/live-gates.md` G2). Locally it needs `GOOGLE_*` in `.env.local`. |
-| Vercel | Project `keeply` builds every push; use a Deployment Protection–gated Preview for live AI checks. |
-| Plan proposer | `scripts/live-plan-check.mjs` drives the G10 plan-search gate (docs/live-gates.md G10) on a real Preview: manual add → `/api/plan` → plan page with source, page and quote → Accept / Reject → Approve → Google Calendar. |
+| Google Calendar | Needs `GOOGLE_*` in `.env.local` or your host env; verify calendar write on your deployment. |
+| Hosted preview | Use a protection-gated preview URL when testing AI against a remote build. |
+| Plan proposer | `scripts/live-plan-check.mjs` can drive plan search on a hosted URL: manual add → `/api/plan` → plan page with source, page and quote → Accept / Reject → Approve → Google Calendar. |
 
 Historical MiniMax live notes: `docs/ai/minimax.md`.
 

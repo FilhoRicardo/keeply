@@ -7,8 +7,8 @@ Route here for work on Keeply (`active/Keeply/`). Outcome: a mobile-first PWA wh
 ## Source of Truth
 
 - GitHub repo: https://github.com/FilhoRicardo/keeply
-- Issue tracker: [Keeply in Linear](https://linear.app/rf-ai-workspace/project/keeply-a66469c00bfb), Engineering team (RF). Linear owns specifications, tickets, dependencies and status; GitHub owns code and PRs.
-- Planning source: `docs/HANDOFF.md` preserves existing product decisions. New agreed scope is captured in Linear. Historical Paperclip records are context only. Paperclip is not in use and must not be started.
+- Issue tracker: [Software Development Tickets database in Notion](https://app.notion.com/p/1bf0645bd54e4630b476b0b5a360d820), filtered to the Keeply project. Notion owns specifications, tickets, dependencies and status; GitHub owns code and PRs. Linear was the tracker until 2026-11-01; its RF ids are kept as legacy Ticket IDs.
+- Planning source: `docs/HANDOFF.md` preserves existing product decisions. New agreed scope is captured in Notion. Historical Paperclip records are context only. Paperclip is not in use and must not be started.
 - Roles: Codex plans and reviews; Cursor implements approved tickets. Claude is reserved for professional/business work unless Ricardo explicitly assigns another role.
 
 ## Agent skills
@@ -40,7 +40,7 @@ Route here for work on Keeply (`active/Keeply/`). Outcome: a mobile-first PWA wh
 ## Workflow
 
 1. Read this file, `MEMORY.md`, and `docs/HANDOFF.md` before touching code.
-2. Current state: the MVP (§24) and manual search (§23) are built and live at https://keeply.vercel.app. Ricardo chooses what is next. Where each setting lives: `docs/environments.md`.
+2. Current state: the MVP (§24) and manual search (§23) are built. A demo deployment may exist separately from this repo; self-hosters follow `docs/self-host.md`. Where each setting lives: `docs/environments.md`.
 3. Query `codebase-memory-mcp` (`search_graph`, `trace_path`, `get_architecture`) before broad code exploration, once code exists and is indexed.
 4. Follow `docs/agents/workflow.md`: mandatory `grill-with-docs`, confirmed scope, ticket, branch, PR, independent Codex review, then merge. Preserve the existing human approval requirement for production, schema, secrets, or a calendar/email send. Done requires a real-input browser run with evidence and a merged PR.
 5. Verify with the checks below.
@@ -52,6 +52,6 @@ Run `pnpm verify` (= `pnpm typecheck && pnpm lint && pnpm test && pnpm build`) b
 
 ## Code Review Rules
 
-- Check the linked Linear acceptance criteria and agreed test seams as well as repository standards.
+- Check the linked Notion ticket's acceptance criteria and agreed test seams as well as repository standards.
 - Preserve explicit owner approval before calendar writes, evidence provenance, credential isolation, and usage limits.
 - Require passing relevant checks and real-input evidence for changed user flows. A lack of review comments is not merge approval.
