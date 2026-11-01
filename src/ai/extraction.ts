@@ -25,10 +25,11 @@ export const EXTRACTION_INSTRUCTIONS = `You read pages of a household appliance'
 Reply with only one JSON object, no other text:
 {"candidates": [{"task": string, "instructions": string, "interval": {"count": number, "unit": "day"|"week"|"month"|"year"}, "page": number, "quote": string}]}
 Rules:
+- List every recurring owner maintenance task the manual describes (e.g. filter cleaning, spray arms, descaling or cleaning cycles, salt and rinse-aid refills, door gasket or seal care). One candidate per distinct task.
 - Copy the quote VERBATIM from the page text I send you. Never invent or paraphrase a quote. The quote is how a real claim is verified.
 - The "page" must be the page number I provided. The quote must appear in that page's text.
 - "instructions" is a short summary of what to do, in your own words.
-- "interval" is the cadence the manual states (e.g. monthly -> 1, "every 3 months" -> 3). Use unit "day", "week", "month" or "year".
+- "interval" is the cadence the manual states (e.g. monthly -> 1, "every 3 months" -> 3). Use unit "day", "week", "month" or "year". When the manual describes a recurring task but does not say how often, use a sensible default interval for the JSON field; the quote must still be verbatim text about the task.
 - A candidate is one proposed task. Skip anything the manual does not state.
 - If the pages do not state any maintenance task, return {"candidates": []}.`
 

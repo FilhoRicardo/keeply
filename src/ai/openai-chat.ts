@@ -1,4 +1,5 @@
 import 'server-only'
+import { COVER_PAGE_COUNT } from '@/domain/model-family'
 import { withE2eFixtures } from '@/e2e-fixtures/edge-fetch'
 import { EXTRACTION_INSTRUCTIONS, type ExtractedPage } from './extraction'
 import { IDENTITY_INSTRUCTIONS, type LabelPhoto } from './identity'
@@ -11,12 +12,69 @@ const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as co
 const MAX_IMAGE_BYTES = 10_000_000
 export const CHAT_TEMPERATURE = 0.1
 export const IDENTIFY_MAX_TOKENS = 400
-export const EXTRACT_MAX_TOKENS = 2_000
+export const EXTRACT_MAX_TOKENS = 4_000
 export const IDENTIFY_TIMEOUT_MS = 25_000
 export const EXTRACT_TIMEOUT_MS = 60_000
 
 const MAX_PROMPT_CHARS = 60_000
 const MAX_PAGES = 30
+
+const MAINTENANCE_SECTION = /\b(care\s+(and|&)\s+clean|cleaning\s+and\s+care|maintenance|troubleshooting)\b/i
+const MAINTENANCE_TOPIC =
+  /\b(filter|spray\s*arm|gasket|door\s+seal|descal|cleaning\s+cycle|cleaning\s+program|rinse\s*aid|salt|detergent\s+dispenser|drain|interior\s+clean)\b/i
+
+function maintenanceScore(text: string): number {
+  let score = 0
+  if (MAINTENANCE_SECTION.test(text)) score += 12
+  const topics = text.match(new RegExp(MAINTENANCE_TOPIC.source, 'gi'))
+  if (topics) score += Math.min(topics.length, 6) * 2
+  if (/\b(every|weekly|monthly|each\s+month|once\s+a)\b/i.test(text)) score += 2
+  return score
+}
+
+/** Prefer cover pages and maintenance-heavy sections when a manual exceeds the page cap. */
+export function selectPagesForExtraction(pages: readonly ExtractedPage[]): ExtractedPage[] {
+  if (pages.length <= MAX_PAGES) return [...pages]
+  const byPage = new Map(pages.map((p) => [p.page, p]))
+  const chosen = new Set<number>()
+  for (const p of pages) {
+    if (p.page <= COVER_PAGE_COUNT) chosen.add(p.page)
+  }
+  const ranked = pages
+    .map((p) => ({ p, score: maintenanceScore(p.text) }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score || a.p.page - b.p.page)
+  for (const { p } of ranked) {
+    if (chosen.size >= MAX_PAGES) break
+    chosen.add(p.page)
+  }
+  if (chosen.size <= COVER_PAGE_COUNT) return pages.slice(0, MAX_PAGES)
+  return [...chosen]
+    .sort((a, b) => a - b)
+    .map((n) => byPage.get(n))
+    .filter((p): p is ExtractedPage => p != null)
+}
+
+function appendPageBlock(prompt: string, page: ExtractedPage): string {
+  return `${prompt}[Page ${page.page}]\n${page.text}\n\n`
+}
+
+export function manualPagesPrompt(pages: readonly ExtractedPage[]): { prompt: string; pageNumbers: Set<number> } {
+  const safePages = selectPagesForExtraction(pages)
+  const pageNumbers = new Set<number>()
+  let prompt = ''
+  for (const page of safePages) {
+    const next = appendPageBlock(prompt, page)
+    if (next.length > MAX_PROMPT_CHARS && prompt.length > 0) break
+    prompt = next
+    pageNumbers.add(page.page)
+    if (prompt.length >= MAX_PROMPT_CHARS) {
+      prompt = prompt.slice(0, MAX_PROMPT_CHARS)
+      break
+    }
+  }
+  return { prompt, pageNumbers }
+}
 
 type ImagePart = { type: 'image_url'; image_url: { url: string; detail: 'high' } }
 type TextPart = { type: 'text'; text: string }
@@ -57,16 +115,6 @@ export function identifyMessages(photo: LabelPhoto): ChatMessage[] {
       ],
     },
   ]
-}
-
-export function manualPagesPrompt(pages: readonly ExtractedPage[]): { prompt: string; pageNumbers: Set<number> } {
-  const safePages = pages.slice(0, MAX_PAGES)
-  const pageNumbers = new Set(safePages.map((page) => page.page))
-  const prompt = safePages
-    .map((page) => `[Page ${page.page}]\n${page.text}`)
-    .join('\n\n')
-    .slice(0, MAX_PROMPT_CHARS)
-  return { prompt, pageNumbers }
 }
 
 export function extractionMessages(prompt: string): ChatMessage[] {
