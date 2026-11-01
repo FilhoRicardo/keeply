@@ -21,7 +21,7 @@ const MAX_PAGES = 30
 
 const MAINTENANCE_SECTION = /\b(care\s+(and|&)\s+clean|cleaning\s+and\s+care|maintenance|troubleshooting)\b/i
 const MAINTENANCE_TOPIC =
-  /\b(filter|spray\s*arm|gasket|door\s+seal|descal|cleaning\s+cycle|cleaning\s+program|rinse\s*aid|salt|detergent\s+dispenser|drain|interior\s+clean)\b/i
+  /\b(filter|spray\s*arm|gasket|door\s+seal|descal|limescale|cleaning\s+cycle|cleaning\s+program(?:me)?|machine\s+care|internal\s+cleaning|cleaning\s+product|rinse\s*aid|salt|detergent\s+dispenser|drain|interior\s+clean)\b/i
 
 function maintenanceScore(text: string): number {
   let score = 0

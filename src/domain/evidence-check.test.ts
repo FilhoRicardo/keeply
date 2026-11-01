@@ -121,6 +121,11 @@ describe('Electrolux KEQB7300L extraction', () => {
     // Second run, same manual: other task names and quotes from the same pages.
     ['Check for foreign objects', 'check the filters and the sump after each use of the dishwasher. foreign objects (e.g. pieces of glass, plastic, bones or toothpicks, etc) decrease the cleaning performance and can cause damage to the drain pump.', 22],
     ['Clean the filters', 'dirty filters and clogged spray arms negatively affect the washing results. check these elements regularly and, if necessary, clean them.', 21],
+    [
+      'Run Machine Care with dishwasher cleaner',
+      'to maintain the performance of your appliance, use a cleaning product designed specifically for dishwashers at least once every two months. for optimal cleaning results, start the programme machine care.',
+      22,
+    ],
   ])('keeps "%s" Manufacturer verified', (task, quote, page) => {
     expect(classifyEvidence(electrolux(task, quote, page))).toEqual({ level: 'manufacturer_verified', reasons: [] })
   })

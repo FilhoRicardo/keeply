@@ -25,7 +25,8 @@ export const EXTRACTION_INSTRUCTIONS = `You read pages of a household appliance'
 Reply with only one JSON object, no other text:
 {"candidates": [{"task": string, "instructions": string, "interval": {"count": number, "unit": "day"|"week"|"month"|"year"}, "page": number, "quote": string}]}
 Rules:
-- List every recurring owner maintenance task the manual describes (e.g. filter cleaning, spray arms, descaling or cleaning cycles, salt and rinse-aid refills, door gasket or seal care). One candidate per distinct task.
+- List every recurring owner maintenance task the manual describes (e.g. filter cleaning, spray arms, door gasket or seal care, salt and rinse-aid refills, descaling, and built-in cleaning programmes or cycles such as Machine Care or a maintenance wash). When the manual tells the owner to run a named programme on a schedule, that is its own task. One candidate per distinct task.
+- Cadence may be phrased as "at least once every N months/weeks" or with word numbers ("two months"); still extract the task and quote that phrase verbatim.
 - Copy the quote VERBATIM from the page text I send you. Never invent or paraphrase a quote. The quote is how a real claim is verified.
 - The "page" must be the page number I provided. The quote must appear in that page's text.
 - "instructions" is a short summary of what to do, in your own words.

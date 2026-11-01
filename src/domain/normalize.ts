@@ -12,6 +12,8 @@ const DASHES = /[‐-―−]/g
 const QUOTES = /[‘’′]/g
 const DOUBLE_QUOTES = /[“”″]/g
 const WHITESPACE_RUN = /\s+/g
+// PDF and HTML manuals often prefix list lines with bullet glyphs that models omit from quotes.
+const LIST_MARKERS = /[\u2022\u2023\u25E6\u2043\u2219]/g
 
 // Word-internal line break: a letter, an optional soft hyphen or hyphen-minus, then a newline,
 // then a lowercase letter. Capture group 1 = the first letter; the joining character is
@@ -26,6 +28,7 @@ function unify(text: string): string {
   return text
     .normalize('NFKC')
     .replace(LONE_SOFT_HYPHEN, '')
+    .replace(LIST_MARKERS, ' ')
     .replace(QUOTES, "'")
     .replace(DOUBLE_QUOTES, '"')
     .replace(DASHES, '-')

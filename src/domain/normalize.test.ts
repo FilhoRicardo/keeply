@@ -23,6 +23,9 @@ describe('normalizeText', () => {
   it('strips a leading soft hyphen left over from a PDF line break', () => {
     expect(normalizeText('dish­washer filter')).toBe('dishwasher filter')
   })
+  it('treats PDF list bullet glyphs as whitespace', () => {
+    expect(normalizeText('• wipe the door • clean the filter')).toBe('wipe the door clean the filter')
+  })
 })
 
 describe('normalizeKeepLineBreaks', () => {

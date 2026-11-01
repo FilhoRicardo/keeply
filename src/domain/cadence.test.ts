@@ -22,6 +22,7 @@ const PHRASES: readonly [string, Interval][] = [
   ['twice a year', { count: 6, unit: 'month' }],
   ['every 14 days', { count: 14, unit: 'day' }],
   ['every 2 weeks', { count: 2, unit: 'week' }],
+  ['at least once every two months', { count: 2, unit: 'month' }],
   ['every 3 months', { count: 3, unit: 'month' }],
   ['every 4 years', { count: 4, unit: 'year' }],
   ['every 18 months', { count: 18, unit: 'month' }],
