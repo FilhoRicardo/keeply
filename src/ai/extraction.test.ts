@@ -130,7 +130,95 @@ describe('normaliseExtraction', () => {
   })
 })
 
+describe('maintenanceComponentKey', () => {
+  const filterIntro =
+    'dirty filters and clogged spray arms negatively affect the washing results. check these elements regularly and, if necessary, clean them.'
+
+  it('groups filter tasks by task title even when the shared intro quote mentions spray arms', () => {
+    expect(
+      maintenanceComponentKey(
+        goodCandidate({ task: 'Check and clean filters', quote: filterIntro, page: 21 }),
+      ),
+    ).toBe('filters')
+    expect(maintenanceComponentKey(goodCandidate({ task: 'Clean filters', quote: filterIntro, page: 21 }))).toBe('filters')
+  })
+
+  it('groups multi-component tasks by the primary component named in the task title', () => {
+    expect(
+      maintenanceComponentKey(
+        goodCandidate({
+          task: 'Clean spray arm jets and filter',
+          quote: 'we recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.',
+          page: 23,
+        }),
+      ),
+    ).toBe('spray-arms')
+  })
+
+  it('groups spray-arm tasks when the title uses the plural spray arms', () => {
+    expect(
+      maintenanceComponentKey(
+        goodCandidate({
+          task: 'Check and clean spray arms',
+          quote: 'check the spray arms regularly.',
+          page: 23,
+        }),
+      ),
+    ).toBe('spray-arms')
+  })
+})
+
 describe('mergeExtractedTasks', () => {
+  it('keys Clean the spray arms separately from filter maintenance', () => {
+    expect(
+      maintenanceComponentKey(
+        goodCandidate({
+          task: 'Clean the spray arms',
+          quote: 'we recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.',
+          instructions: 'Clear holes.',
+          page: 23,
+        }),
+      ),
+    ).toBe('spray-arms')
+  })
+
+  it('keeps distinct filter and spray-arm tasks from the openrouter merge fixture', () => {
+    const filterIntro =
+      'dirty filters and clogged spray arms negatively affect the washing results. check these elements regularly and, if necessary, clean them.'
+    const merged = mergeExtractedTasks(
+      [
+        goodCandidate({ task: 'Clean the filters', quote: filterIntro, page: 22, instructions: 'Rinse filters.' }),
+        goodCandidate({
+          task: 'Wipe the door gasket',
+          quote: 'wipe clean the door, including the rubber gasket, once a week.',
+          page: 22,
+          instructions: 'Wipe weekly.',
+          interval: { count: 1, unit: 'week' },
+        }),
+        goodCandidate({
+          task: 'Run Machine Care with dishwasher cleaner',
+          quote: 'for optimal cleaning results, start the programme machine care.',
+          page: 22,
+          instructions: 'Run Machine Care.',
+        }),
+        goodCandidate({
+          task: 'Clean the spray arms',
+          quote: 'we recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.',
+          page: 23,
+          instructions: 'Clear holes.',
+        }),
+      ],
+      { readCadence: (quote) => ({ stated: /once a week|every two months|every month/i.test(quote) }) },
+    )
+    expect(merged).toHaveLength(4)
+    expect(merged.map((c) => c.task).sort()).toEqual([
+      'Clean the filters',
+      'Clean the spray arms',
+      'Run Machine Care with dishwasher cleaner',
+      'Wipe the door gasket',
+    ])
+  })
+
   it('keeps one entry per normalised task name and prefers a stated manual cadence', () => {
     const chunkA: ExtractedTaskCandidate[] = [
       goodCandidate({
@@ -172,9 +260,11 @@ describe('mergeExtractedTasks', () => {
 describe('Electrolux KEQB7300L over-extraction consolidation', () => {
   const fixturePath = fileURLToPath(new URL('../test-fixtures/electrolux-keqb7300l-care-pages.json', import.meta.url))
   const carePages = JSON.parse(readFileSync(fixturePath, 'utf8')) as ExtractedPage[]
+  const page26SaltRinse =
+    '• use a descaler or a cleaning product designed specifically for dishwashers every day. • refill salt when the indicator is on. keep the rinse aid dispenser topped up when the indicator is on.'
   const pageTextByNumber = new Map<number, string>([
     ...carePages.map((p) => [p.page, p.text] as const),
-    [26, 'refill salt when the indicator is on. keep the rinse aid dispenser topped up when the indicator is on.'] as const,
+    [26, page26SaltRinse] as const,
   ])
   const readCadence = (quote: string, pageText?: string) => readCadenceFromContext(quote, pageText)
 
@@ -216,6 +306,49 @@ describe('Electrolux KEQB7300L over-extraction consolidation', () => {
       interval: { count: 1, unit: 'day' },
     }),
   ]
+
+  const prodNineExtracted: ExtractedTaskCandidate[] = [
+    goodCandidate({ task: 'Refill rinse aid dispenser', page: 26, quote: rinseQuote, interval: { count: 1, unit: 'month' } }),
+    goodCandidate({ task: 'Check and refill salt container', page: 26, quote: saltQuote, interval: { count: 1, unit: 'day' } }),
+    goodCandidate({
+      task: 'Run Machine Care programme with descaler or cleaning product',
+      page: 22,
+      quote: machineCareFull,
+      interval: { count: 2, unit: 'month' },
+    }),
+    goodCandidate({ task: 'Check and clean filters', page: 21, quote: filterIntro, interval: { count: 1, unit: 'month' } }),
+    goodCandidate({ task: 'Check and clean spray arms', page: 23, quote: lowerArm, interval: { count: 1, unit: 'month' } }),
+    goodCandidate({ task: 'Clean the door and rubber gasket', page: 22, quote: doorQuote, interval: { count: 1, unit: 'week' } }),
+    goodCandidate({ task: 'Check filters and sump for foreign objects', page: 22, quote: foreignObjects, interval: { count: 1, unit: 'week' } }),
+    goodCandidate({ task: 'Clean spray arm jets and filter', page: 23, quote: lowerArm, interval: { count: 1, unit: 'month' } }),
+    goodCandidate({ task: 'Clean filters', page: 21, quote: filterIntro, interval: { count: 1, unit: 'month' } }),
+  ]
+
+  it('consolidates nine post-PR75 prod duplicates to six maintenance components with correct cadence', () => {
+    const merged = mergeExtractedTasks(prodNineExtracted, { pageTextByNumber, readCadence })
+    expect(merged).toHaveLength(6)
+    expect(new Set(merged.map((c) => maintenanceComponentKey(c))).size).toBe(6)
+
+    const byKey = new Map(merged.map((c) => [maintenanceComponentKey(c), c]))
+    expect(byKey.get('salt')!.quote).toMatch(/indicator/i)
+    expect(presentInterval({ quote: byKey.get('salt')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).toMatch(/indicator/i)
+    expect(presentInterval({ quote: byKey.get('salt')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).not.toMatch(/from the manual/)
+    expect(presentInterval({ quote: byKey.get('rinse-aid')!.quote, stored: { count: 1, unit: 'day' }, generalGuidance: false }).text).toMatch(/indicator/i)
+    expect(
+      presentInterval({
+        quote: byKey.get('machine-care')!.quote,
+        stored: { count: 1, unit: 'month' },
+        generalGuidance: false,
+        pageText: pageTextByNumber.get(22),
+      }).interval,
+    ).toEqual({ count: 2, unit: 'month' })
+    expect(presentInterval({ quote: byKey.get('door-gasket')!.quote, stored: { count: 1, unit: 'month' }, generalGuidance: false, pageText: pageTextByNumber.get(22) }).interval).toEqual({
+      count: 1,
+      unit: 'week',
+    })
+    expect(presentInterval({ quote: byKey.get('filters')!.quote, stored: { count: 1, unit: 'week' }, generalGuidance: false }).text).toMatch(/Keeply's suggestion/)
+    expect(presentInterval({ quote: byKey.get('spray-arms')!.quote, stored: { count: 1, unit: 'week' }, generalGuidance: false }).text).toMatch(/Keeply's suggestion/)
+  })
 
   it('consolidates fifteen chunk duplicates to six maintenance components with correct cadence', () => {
     const merged = mergeExtractedTasks(overExtracted, { pageTextByNumber, readCadence })
