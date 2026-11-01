@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { presentInterval, readCadence, type CadenceReading } from './cadence'
+import {
+  presentInterval,
+  quoteWithPageCadence,
+  readCadence,
+  readCadenceFromContext,
+  type CadenceReading,
+} from './cadence'
 import type { Interval } from './format-interval'
 
 const stated = (interval: Interval): CadenceReading => ({ stated: true, interval })
@@ -213,6 +219,32 @@ describe('readCadence frequencies the interval cannot express', () => {
   })
 })
 
+describe('readCadenceFromContext', () => {
+  it('reads cadence from page text near the quote when the quote omits it', () => {
+    const page22 =
+      '• do not use abrasive products. • wipe clean the door, including the rubber gasket, once a week. • to maintain the performance of your appliance, use a cleaning product designed specifically for dishwashers at least once every two months. carefully follow the instructions on the packaging of the product. • for optimal cleaning results, start the programme machine care.'
+    expect(
+      readCadenceFromContext('for optimal cleaning results, start the programme machine care.', page22),
+    ).toEqual(stated({ count: 2, unit: 'month' }))
+  })
+
+  it('widens a short quote to a verified span that includes the schedule phrase', () => {
+    const page =
+      '• use a cleaning product designed specifically for dishwashers at least once every two months. • for optimal cleaning results, start the programme machine care.'
+    const widened = quoteWithPageCadence('for optimal cleaning results, start the programme machine care.', page)
+    expect(widened).toMatch(/at least once every two months/i)
+    expect(widened).toMatch(/machine care/i)
+  })
+
+  it('prefers cadence in the quote over nearby page text', () => {
+    const page22 =
+      '• do not use abrasive products. • wipe clean the door, including the rubber gasket, once a week. • to maintain the performance of your appliance, use a cleaning product designed specifically for dishwashers at least once every two months. • for optimal cleaning results, start the programme machine care.'
+    expect(readCadenceFromContext('wipe clean the door, including the rubber gasket, once a week.', page22)).toEqual(
+      stated({ count: 1, unit: 'week' }),
+    )
+  })
+})
+
 describe('presentInterval', () => {
   it('labels a stated cadence as from the manual and ignores a different stored interval', () => {
     expect(
@@ -235,6 +267,19 @@ describe('presentInterval', () => {
       interval: { count: 1, unit: 'month' },
       text: 'Every month · Keeply\'s suggestion. The manual says "regularly".',
     })
+  })
+
+  it('uses page text near the quote when presenting an interval', () => {
+    const page =
+      'use a cleaning product designed specifically for dishwashers at least once every two months. start the programme machine care.'
+    expect(
+      presentInterval({
+        quote: 'start the programme machine care.',
+        stored: { count: 1, unit: 'month' },
+        generalGuidance: false,
+        pageText: page,
+      }),
+    ).toEqual({ interval: { count: 2, unit: 'month' }, text: 'Every 2 months · from the manual' })
   })
 
   it('quotes a usage phrase as the manual’s wording', () => {

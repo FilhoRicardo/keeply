@@ -1,17 +1,21 @@
 import 'server-only'
-import { normaliseExtraction, type ExtractedPage, type ExtractedTaskCandidate } from './extraction'
+import { readCadenceFromContext } from '@/domain/cadence'
+import { mergeExtractedTasks, normaliseExtraction, type ExtractedPage, type ExtractedTaskCandidate } from './extraction'
 import { extractJsonValues, normaliseIdentity, type ApplianceIdentity, type LabelPhoto } from './identity'
 import {
+  buildManualPagesPrompt,
   CHAT_TEMPERATURE,
+  chunkPagesForExtraction,
   completeChat,
   EXTRACT_MAX_TOKENS,
+  EXTRACT_PARALLEL_TIMEOUT_MS,
+  EXTRACT_TEMPERATURE,
   EXTRACT_TIMEOUT_MS,
   extractionMessages,
   IDENTIFY_MAX_TOKENS,
   IDENTIFY_TIMEOUT_MS,
   identifyMessages,
   labelPhotoAccepted,
-  manualPagesPrompt,
   type ChatCompletion,
   type ChatMessage,
 } from './openai-chat'
@@ -85,9 +89,11 @@ async function callOpenRouterRaw(
   maxTokens: number,
   timeoutMs: number,
   fetchImpl: typeof fetch,
+  temperature: number = CHAT_TEMPERATURE,
+  deadline?: AbortSignal,
 ): Promise<OpenRouterCallResult> {
   // One deadline for the attempt and, when the first response is 429, the single retry.
-  const signal = AbortSignal.timeout(timeoutMs)
+  const signal = deadline ?? AbortSignal.timeout(timeoutMs)
   const once = async () => {
     try {
       return await completeChat({
@@ -95,7 +101,7 @@ async function callOpenRouterRaw(
         apiKey: config.apiKey,
         model: config.model,
         messages,
-        temperature: CHAT_TEMPERATURE,
+        temperature,
         maxTokens,
         timeoutMs,
         extraHeaders: { 'HTTP-Referer': config.referer, 'X-Title': config.title },
@@ -124,8 +130,10 @@ async function callOpenRouter(
   maxTokens: number,
   timeoutMs: number,
   fetchImpl: typeof fetch,
+  temperature: number = CHAT_TEMPERATURE,
+  deadline?: AbortSignal,
 ): Promise<string | null> {
-  const result = await callOpenRouterRaw(config, messages, maxTokens, timeoutMs, fetchImpl)
+  const result = await callOpenRouterRaw(config, messages, maxTokens, timeoutMs, fetchImpl, temperature, deadline)
   // 429 (after one retry), 402, 5xx, a 404 when data_collection: deny leaves no endpoint, and the
   // same codes reported inside a 200 reply (a provider that timed out after the stream began)
   // are all provider failures. The response body is not copied onto the error: it can echo the prompt.
@@ -295,14 +303,41 @@ export async function identifyWithOpenRouter(
   return identityFromReply(content)
 }
 
+async function extractTasksFromChunk(
+  config: OpenRouterConfig,
+  chunkPages: readonly ExtractedPage[],
+  fetchImpl: typeof fetch,
+  deadline: AbortSignal,
+): Promise<ExtractedTaskCandidate[]> {
+  const { prompt, pageNumbers } = buildManualPagesPrompt(chunkPages)
+  const content = await callOpenRouter(
+    config,
+    extractionMessages(prompt),
+    EXTRACT_MAX_TOKENS,
+    EXTRACT_TIMEOUT_MS,
+    fetchImpl,
+    EXTRACT_TEMPERATURE,
+    deadline,
+  )
+  if (content == null) return []
+  return tasksFromReply(content, pageNumbers)
+}
+
 export async function extractTasksWithOpenRouter(
   config: OpenRouterConfig,
   pages: readonly ExtractedPage[],
   fetchImpl: typeof fetch = fetch,
 ): Promise<ExtractedTaskCandidate[]> {
   if (pages.length === 0) return []
-  const { prompt, pageNumbers } = manualPagesPrompt(pages)
-  const content = await callOpenRouter(config, extractionMessages(prompt), EXTRACT_MAX_TOKENS, EXTRACT_TIMEOUT_MS, fetchImpl)
-  if (content == null) return []
-  return tasksFromReply(content, pageNumbers)
+  const chunks = chunkPagesForExtraction(pages)
+  const deadline = AbortSignal.timeout(EXTRACT_PARALLEL_TIMEOUT_MS)
+  const pageTextByNumber = new Map(pages.map((p) => [p.page, p.text]))
+  const readCadence = (quote: string, pageText?: string) => readCadenceFromContext(quote, pageText)
+  const batchResults = await Promise.all(
+    chunks.map((chunkPages) => extractTasksFromChunk(config, chunkPages, fetchImpl, deadline)),
+  )
+  return mergeExtractedTasks(batchResults.flat(), {
+    pageTextByNumber,
+    readCadence: (quote, pageText) => readCadence(quote, pageText),
+  })
 }

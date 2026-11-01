@@ -1,5 +1,5 @@
 import 'server-only'
-import { presentInterval } from '@/domain/cadence'
+import { presentInterval, quoteWithPageCadence } from '@/domain/cadence'
 import { classifyEvidence } from '@/domain/evidence-check'
 import { manualSourceTitle } from '@/domain/manual-title'
 import { COVER_PAGE_COUNT, coverWindowText, matchingCoverModel, modelFamily } from '@/domain/model-family'
@@ -373,6 +373,7 @@ async function findPlans(
       : verifiedTitle
     for (const c of candidates) {
       const documentText = safePageText(item.pages, c.page)
+      const quote = quoteWithPageCadence(c.quote, documentText)
       const verdict = classifyEvidence({
         source: {
           url: item.url,
@@ -383,10 +384,14 @@ async function findPlans(
         model: { name: args.model, family: ownerFamily },
         manufacturerDomains: [...domains],
         task: c.task,
-        quote: c.quote,
+        quote,
         documentText,
       })
-      const interval = presentInterval({ quote: c.quote, stored: c.interval, generalGuidance: false }).interval
+      const interval = presentInterval({
+        quote,
+        stored: c.interval,
+        generalGuidance: false,
+      }).interval
       if (verdict.level === 'manufacturer_verified') {
         quotePass++
         exact.push({
@@ -394,7 +399,7 @@ async function findPlans(
           instructions: c.instructions,
           interval,
           evidenceLevel: 'manufacturer_verified',
-          source: manufacturerSource({ url: item.url, title: verifiedTitle, page: c.page, quote: c.quote }),
+          source: manufacturerSource({ url: item.url, title: verifiedTitle, page: c.page, quote }),
         })
       } else if (verdict.level === 'similar_model' && coveredModel) {
         quotePass++
@@ -403,7 +408,7 @@ async function findPlans(
           instructions: c.instructions,
           interval,
           evidenceLevel: 'similar_model',
-          source: similarModelSource({ url: item.url, title: similarTitle, page: c.page, quote: c.quote, coveredModel }),
+          source: similarModelSource({ url: item.url, title: similarTitle, page: c.page, quote, coveredModel }),
         })
       }
       // General guidance items from a manual go to /dev/null — we already have `generalGuidance()`

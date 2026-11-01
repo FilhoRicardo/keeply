@@ -429,6 +429,88 @@ describe('extractTasksWithOpenRouter', () => {
     expect(sent.messages).toEqual(
       expect.arrayContaining([expect.objectContaining({ role: 'user', content: expect.stringContaining('[Page 12]') })]),
     )
+    expect(sent.temperature).toBe(0)
+  })
+
+  it('merges partial per-chunk replies into the full maintenance task set', async () => {
+    const pages: ExtractedPage[] = [{ page: 1, text: 'Electrolux KEQB7300L user manual.' }]
+    for (let p = 2; p <= 20; p++) pages.push({ page: p, text: `General use page ${p}.` })
+    pages.push(
+      {
+        page: 21,
+        text: 'dirty filters and clogged spray arms negatively affect the washing results. check these elements regularly and, if necessary, clean them.',
+      },
+      {
+        page: 22,
+        text:
+          'wipe clean the door, including the rubber gasket, once a week. use a cleaning product designed specifically for dishwashers at least once every two months. start the programme machine care.',
+      },
+      { page: 23, text: 'we recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.' },
+      { page: 24, text: 'we recommend to clean the upper spray arm regularly.' },
+      { page: 25, text: 'refill salt when the indicator is on. keep rinse aid topped up.' },
+    )
+    const filterBody = {
+      candidates: [
+        {
+          task: 'Clean the filters',
+          instructions: 'Rinse filters.',
+          interval: { count: 1, unit: 'month' },
+          page: 22,
+          quote:
+            'dirty filters and clogged spray arms negatively affect the washing results. check these elements regularly and, if necessary, clean them.',
+        },
+      ],
+    }
+    const careBody = {
+      candidates: [
+        {
+          task: 'Wipe the door gasket',
+          instructions: 'Wipe weekly.',
+          interval: { count: 1, unit: 'week' },
+          page: 22,
+          quote: 'wipe clean the door, including the rubber gasket, once a week.',
+        },
+        {
+          task: 'Run Machine Care with dishwasher cleaner',
+          instructions: 'Run Machine Care.',
+          interval: { count: 1, unit: 'month' },
+          page: 22,
+          quote: 'for optimal cleaning results, start the programme machine care.',
+        },
+      ],
+    }
+    const armsAndRefillBody = {
+      candidates: [
+        {
+          task: 'Clean the spray arms',
+          instructions: 'Clear holes.',
+          interval: { count: 1, unit: 'month' },
+          page: 23,
+          quote: 'we recommend to clean the lower spray arm regularly to prevent soil from clogging the holes.',
+        },
+      ],
+    }
+    const fetchMock = vi.fn(async () =>
+      Response.json({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                candidates: [...filterBody.candidates, ...careBody.candidates, ...armsAndRefillBody.candidates],
+              }),
+            },
+          },
+        ],
+      }),
+    )
+    const result = await extractTasksWithOpenRouter(config, pages, fetchMock as unknown as typeof fetch)
+    expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(1)
+    expect(result.map((c) => c.task).sort()).toEqual([
+      'Clean the filters',
+      'Clean the spray arms',
+      'Run Machine Care with dishwasher cleaner',
+      'Wipe the door gasket',
+    ])
   })
 
   it('asks the configured model, not the appliance model passed by the caller', async () => {

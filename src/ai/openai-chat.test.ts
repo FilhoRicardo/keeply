@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ExtractedPage } from './extraction'
-import { manualPagesPrompt } from './openai-chat'
+import { chunkPagesForExtraction, manualPagesPrompt } from './openai-chat'
 
 function fillerPage(page: number): ExtractedPage {
   return {
@@ -61,6 +61,16 @@ describe('manualPagesPrompt', () => {
   it('keeps cover pages for model context on a long manual', () => {
     const { pageNumbers } = manualPagesPrompt(electroluxStyleManual())
     expect(pageNumbers.has(1)).toBe(true)
+  })
+
+  it('splits long manuals into parallel extraction chunks of maintenance pages', () => {
+    const pages = electroluxStyleManual()
+    const chunks = chunkPagesForExtraction(pages, 2)
+    expect(chunks.length).toBeGreaterThan(1)
+    const pageNums = chunks.flatMap((c) => c.map((p) => p.page))
+    expect(pageNums).toContain(29)
+    expect(pageNums).toContain(31)
+    expect(chunks[0]?.some((p) => p.page === 1)).toBe(true)
   })
 
   it('passes through short manuals unchanged apart from ordering', () => {
