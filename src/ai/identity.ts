@@ -1,8 +1,9 @@
 // Keeply's provider-neutral appliance identity. Every AI adapter returns exactly this shape;
 // provider request/response formats never leave their adapter. KEE-60: any household appliance,
-// not only dishwashers. `applianceType` is a category quoted from the label, or "unknown".
-// RF-350: a category the model names without that quote is "unknown". A free model was
-// answering "oven" for dishwasher labels that never print the type. The owner still confirms.
+// not only dishwashers. `applianceType` is a category quoted from the label, one Keeply derives
+// from parts the model lists as visible, or "unknown". RF-350: a category the model names
+// without that support is "unknown". A free model was answering "oven" for dishwasher labels
+// that never print the type. The owner still confirms.
 export type ApplianceIdentity = {
   applianceType: string
   manufacturer: string | null
@@ -16,16 +17,19 @@ export type LabelPhoto = { bytes: Uint8Array; mimeType: string }
 
 // What adapters ask the model for. Kept here so every provider asks the same question.
 // KEE-60: the prompt no longer assumes a dishwasher. RF-350: the category has to be printed
-// on the label. A list of example categories was being copied back as a guess.
+// on the label. A list of example categories was being copied back as a guess, so the
+// visibleParts rule names no part either. Letting the model choose a category from the picture
+// produced "oven" for both dishwasher plates (2026-10-31): the model only lists what it sees.
 export const IDENTITY_INSTRUCTIONS = `You read the rating label of a household appliance from a photo.
 Reply with only one JSON object, no other text:
-{"applianceType": string, "typeEvidence": string | null, "manufacturer": string | null, "model": string | null, "serialNumber": string | null, "confidence": number}
+{"applianceType": string, "typeEvidence": string | null, "visibleParts": string[], "manufacturer": string | null, "model": string | null, "serialNumber": string | null, "confidence": number}
 Rules:
 - applianceType is a short English category, or "unknown".
 - Set a category only from printed type text or a product-category word printed on the label. Copy those exact printed words into typeEvidence.
 - A model-number prefix counts only when you are certain that prefix always means exactly one category. If you are not certain, do not use the prefix. When you use a prefix, copy the printed model number into typeEvidence.
 - If the label does not print the category, applianceType is "unknown" and typeEvidence is null.
 - Do not guess a category from the picture, the brand, or the shape of the appliance. An unrecognised appliance is "unknown".
+- visibleParts lists the parts of the appliance itself that you can plainly see outside the label, each in a few plain words. Do not name the appliance or its category there. Use [] when none are clearly visible.
 - Copy manufacturer, model and serialNumber exactly as printed. Use null when a field is not clearly legible. Never guess a model or serial number.
 - confidence is 0 to 1 for how sure you are of manufacturer and model together.`
 
@@ -149,6 +153,20 @@ const GENERIC_CATEGORIES = new Set(['appliance', 'product', 'machine', 'unit', '
 const CERTAIN_MODEL_PREFIXES: readonly { prefix: string; category: string }[] = []
 const MIN_CERTAIN_PREFIX = 3
 
+// Parts that belong to one kind of appliance, and the claims each one supports (the first is
+// Keeply's name for it). A part several kinds share ("rack", "drum", "shelf", "door") is not
+// listed: it says nothing about which appliance this is.
+const VISIBLE_PARTS: readonly { parts: readonly string[]; claims: readonly string[] }[] = [
+  {
+    parts: ['dish rack', 'dish racks', 'dish basket', 'dish baskets', 'plate rack', 'plate racks', 'cutlery basket', 'cutlery baskets', 'cutlery tray', 'cutlery rack', 'spray arm', 'spray arms'],
+    claims: ['dishwasher'],
+  },
+  { parts: ['detergent drawer'], claims: ['washing machine'] },
+  { parts: ['lint filter', 'fluff filter'], claims: ['dryer', 'tumble dryer'] },
+  { parts: ['crisper drawer', 'salad crisper'], claims: ['fridge', 'fridge freezer'] },
+  { parts: ['turntable'], claims: ['microwave'] },
+].map((entry) => ({ parts: entry.parts.map(fold), claims: entry.claims.map(fold) }))
+
 function fold(value: string): string {
   return value
     .normalize('NFKD')
@@ -221,20 +239,44 @@ function categoryFromModelPrefix(
   return null
 }
 
+function canonicalCategory(claimed: string): string {
+  const claim = fold(claimed)
+  return CATEGORY_PHRASES.find((entry) => entry.phrase === claim)?.canonical ?? claim
+}
+
+// Keeply's category for the listed parts, or null. Parts from two kinds of appliance contradict
+// each other. A claim the parts do not support (the model's "oven" beside dish racks) is a
+// conflict too; "unknown" or no claim is not.
+function categoryFromVisibleParts(claimed: string, visibleParts: readonly string[]): string | null {
+  const listed = visibleParts.map(fold)
+  const matched = VISIBLE_PARTS.filter((entry) => listed.some((item) => entry.parts.some((part) => findSpans(item, part).length > 0)))
+  if (matched.length !== 1) return null
+  const claim = canonicalCategory(claimed)
+  if (claim === '' || GENERIC_CATEGORIES.has(claim)) return matched[0].claims[0]
+  return matched[0].claims.includes(claim) ? claim : null
+}
+
 function groundedApplianceType(
   claimed: string,
   evidence: string,
+  visibleParts: readonly string[],
   model: string | null,
   prefixes: readonly { prefix: string; category: string }[],
 ): string {
   const printed = printedCategories(evidence, claimed)
   if (printed.length === 1) return printed[0]
   if (printed.length > 1) return 'unknown'
-  return categoryFromModelPrefix(model, evidence, prefixes) ?? 'unknown'
+  return categoryFromModelPrefix(model, evidence, prefixes) ?? categoryFromVisibleParts(claimed, visibleParts) ?? 'unknown'
+}
+
+function partsList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, 12).flatMap((item) => text(item) ?? [])
 }
 
 // KEE-60: every quoted category is a valid proposal. RF-350: the quote decides the category.
 // A model number is not a category unless its prefix is on the certain list, which is empty.
+// With no printed category, Keeply names it only from listed parts that belong to one kind.
 export function normaliseIdentity(
   raw: unknown,
   prefixes: readonly { prefix: string; category: string }[] = CERTAIN_MODEL_PREFIXES,
@@ -246,7 +288,7 @@ export function normaliseIdentity(
   const model = text(r.model, 40)
   const confidence = typeof r.confidence === 'number' && Number.isFinite(r.confidence) ? Math.min(1, Math.max(0, r.confidence)) : 0
   return {
-    applianceType: groundedApplianceType(claimed, evidence, model, prefixes),
+    applianceType: groundedApplianceType(claimed, evidence, partsList(r.visibleParts), model, prefixes),
     manufacturer: text(r.manufacturer),
     model,
     serialNumber: text(r.serialNumber, 40),
