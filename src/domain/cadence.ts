@@ -262,6 +262,7 @@ export function cadenceContextSegments(pageText: string, quote: string): string[
 export function readCadenceFromContext(quote: string, pageText?: string | null): CadenceReading {
   const inQuote = readCadence(quote)
   if (inQuote.stated || !pageText?.trim()) return inQuote
+  if (isRefillMaintenance(quote) && earliestPhrase(quote, INDICATOR_PATTERNS)) return inQuote
   const q = normalizeText(quote)
   if (pageText.includes('•')) {
     const bullets = pageText

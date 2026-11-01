@@ -232,6 +232,12 @@ describe('readCadence indicator-driven refills', () => {
       '• wipe clean the door, including the rubber gasket, once a week. • refill salt when the indicator is on. keep rinse aid topped up.'
     expect(readCadenceFromContext('refill salt when the indicator is on.', page22)).toEqual(unstated('when the indicator'))
   })
+
+  it('does not borrow a daily cadence from another bullet when the salt quote is indicator-driven', () => {
+    const page26 =
+      '• use a descaler or a cleaning product designed specifically for dishwashers every day. • refill salt when the indicator is on. keep the rinse aid dispenser topped up when the indicator is on.'
+    expect(readCadenceFromContext('refill salt when the indicator is on.', page26)).toEqual(unstated('when the indicator'))
+  })
 })
 
 describe('readCadenceFromContext', () => {

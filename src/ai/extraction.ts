@@ -85,9 +85,25 @@ export function normalisedTaskName(task: string): string {
   return task.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
-/** Deterministic key for the appliance part a maintenance task acts on (for post-merge consolidation). */
-export function maintenanceComponentKey(candidate: ExtractedTaskCandidate): string {
-  const blob = `${candidate.task} ${candidate.instructions} ${candidate.quote}`.toLowerCase()
+const SPRAY_ARM_PATTERN = /\bspray[\s-]*arms?\b/
+const FILTER_COMPONENT_PATTERN = /\bfilters?\b|\bforeign object\b|\bsump\b/
+
+function firstPatternIndex(text: string, pattern: RegExp): number {
+  const match = text.match(pattern)
+  return match?.index ?? -1
+}
+
+function resolveSprayArmVsFilter(text: string): 'spray-arms' | 'filters' | null {
+  const sprayIdx = firstPatternIndex(text, SPRAY_ARM_PATTERN)
+  const filterIdx = firstPatternIndex(text, FILTER_COMPONENT_PATTERN)
+  if (sprayIdx < 0 && filterIdx < 0) return null
+  if (sprayIdx >= 0 && filterIdx < 0) return 'spray-arms'
+  if (filterIdx >= 0 && sprayIdx < 0) return 'filters'
+  return sprayIdx < filterIdx ? 'spray-arms' : 'filters'
+}
+
+function maintenanceComponentFromText(text: string): string | null {
+  const blob = text.toLowerCase()
   if (/\brinse[\s-]*aid\b/.test(blob)) return 'rinse-aid'
   if (/\bsalt\b/.test(blob)) return 'salt'
   if (
@@ -97,14 +113,28 @@ export function maintenanceComponentKey(candidate: ExtractedTaskCandidate): stri
     return 'machine-care'
   }
   if (/\b(door|gasket|rubber)\b/.test(blob) && /\b(wipe|clean|gasket|door|seal)\b/.test(blob)) return 'door-gasket'
-  if (/\bspray\s*arm\b/.test(blob) || (/\bspray\b/.test(blob) && /\barm\b/.test(blob))) return 'spray-arms'
-  if (/\bfilter\b/.test(blob) || /\bforeign object\b/.test(blob) || /\bsump\b/.test(blob)) return 'filters'
+  const sprayOrFilter = resolveSprayArmVsFilter(blob)
+  if (sprayOrFilter) return sprayOrFilter
+  return null
+}
+
+/** Deterministic key for the appliance part a maintenance task acts on (for post-merge consolidation). */
+export function maintenanceComponentKey(candidate: ExtractedTaskCandidate): string {
+  const fromTask = maintenanceComponentFromText(candidate.task)
+  if (fromTask) return fromTask
+  const fromBody = maintenanceComponentFromText(`${candidate.instructions} ${candidate.quote}`)
+  if (fromBody) return fromBody
   return normalisedTaskName(candidate.task)
 }
 
 export type MergeExtractedTasksOptions = {
   pageTextByNumber?: ReadonlyMap<number, string>
   readCadence?: (quote: string, pageText?: string) => { stated: boolean }
+}
+
+function isIndicatorRefillQuote(quote: string): boolean {
+  const q = quote.toLowerCase()
+  return /\bindicator\b/.test(q) && /\b(refill|top up|fill|replenish|keep)\b/.test(q) && /\b(salt|rinse[\s-]*aid)\b/.test(q)
 }
 
 function misalignedDailyForIndicator(candidate: ExtractedTaskCandidate, readCadenceFn: MergeExtractedTasksOptions['readCadence']): boolean {
@@ -117,8 +147,20 @@ function misalignedDailyForIndicator(candidate: ExtractedTaskCandidate, readCade
   return stated === true && /\bevery\s+day\b/i.test(candidate.quote)
 }
 
+function refillComponentScoreAdjustments(
+  candidate: ExtractedTaskCandidate,
+  componentKey: string,
+  cadenceStated: boolean,
+): number {
+  if (componentKey !== 'salt' && componentKey !== 'rinse-aid') return 0
+  if (isIndicatorRefillQuote(candidate.quote)) return 45
+  if (cadenceStated && !isIndicatorRefillQuote(candidate.quote)) return -160
+  return 0
+}
+
 function componentPreferenceBonus(candidate: ExtractedTaskCandidate, componentKey: string): number {
   const q = candidate.quote.toLowerCase()
+  if (componentKey === 'filters' && q.includes('after each use') && q.includes('sump')) return 30
   if (componentKey === 'filters' && q.includes('filter') && q.includes('regularly')) return 25
   if (componentKey === 'spray-arms' && q.includes('spray arm') && q.includes('regularly')) return 25
   if (componentKey === 'machine-care') {
@@ -138,7 +180,10 @@ function mergeScore(
   let score = (cadenceStated ? 100 : 0) + Math.min(candidate.quote.length, 500) / 500
   if (misalignedDailyForIndicator(candidate, readCadenceFn)) score -= 150
   if (/\bregularly\b/i.test(candidate.quote) && !cadenceStated) score += 5
-  if (componentKey) score += componentPreferenceBonus(candidate, componentKey)
+  if (componentKey) {
+    score += componentPreferenceBonus(candidate, componentKey)
+    score += refillComponentScoreAdjustments(candidate, componentKey, cadenceStated)
+  }
   return score
 }
 
