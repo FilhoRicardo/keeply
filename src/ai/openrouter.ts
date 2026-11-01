@@ -12,6 +12,7 @@ import {
   identifyMessages,
   labelPhotoAccepted,
   manualPagesPrompt,
+  type ChatCompletion,
   type ChatMessage,
 } from './openai-chat'
 
@@ -69,17 +70,22 @@ export class OpenRouterError extends Error {
 function asProviderFailure(error: unknown): OpenRouterError {
   if (error instanceof OpenRouterError) return error
   const name = error instanceof Error ? error.name : ''
-  if (name === 'TimeoutError' || name === 'AbortError') return new OpenRouterError('OpenRouter timed out')
+  const message = error instanceof Error ? error.message : ''
+  if (name === 'TimeoutError' || name === 'AbortError' || /timed out/i.test(message)) {
+    return new OpenRouterError('OpenRouter timed out')
+  }
   return new OpenRouterError('OpenRouter request failed')
 }
 
-async function callOpenRouter(
+type OpenRouterCallResult = ChatCompletion & { retried: boolean }
+
+async function callOpenRouterRaw(
   config: OpenRouterConfig,
   messages: readonly ChatMessage[],
   maxTokens: number,
   timeoutMs: number,
   fetchImpl: typeof fetch,
-): Promise<string | null> {
+): Promise<OpenRouterCallResult> {
   // One deadline for the attempt and, when the first response is 429, the single retry.
   const signal = AbortSignal.timeout(timeoutMs)
   const once = async () => {
@@ -103,13 +109,119 @@ async function callOpenRouter(
       throw asProviderFailure(error)
     }
   }
+  let retried = false
   let result = await once()
-  if (!result.ok && result.status === 429 && !signal.aborted) result = await once()
+  if (!result.ok && result.status === 429 && !signal.aborted) {
+    retried = true
+    result = await once()
+  }
+  return { ...result, retried }
+}
+
+async function callOpenRouter(
+  config: OpenRouterConfig,
+  messages: readonly ChatMessage[],
+  maxTokens: number,
+  timeoutMs: number,
+  fetchImpl: typeof fetch,
+): Promise<string | null> {
+  const result = await callOpenRouterRaw(config, messages, maxTokens, timeoutMs, fetchImpl)
   // 429 (after one retry), 402, 5xx, a 404 when data_collection: deny leaves no endpoint, and the
   // same codes reported inside a 200 reply (a provider that timed out after the stream began)
   // are all provider failures. The response body is not copied onto the error: it can echo the prompt.
   if (!result.ok) throw new OpenRouterError(`OpenRouter rejected the request (${result.status})`, result.status)
   return result.content
+}
+
+export type IdentifyCallTelemetry = {
+  httpStatus: number | 'timeout'
+  retried: boolean
+  parseableJson: boolean
+  manufacturerFound: boolean
+  reportedModel: string | null
+  latencyMs: number
+}
+
+function httpStatusFromFailure(error: unknown): number | 'timeout' {
+  const name = error instanceof Error ? error.name : ''
+  const message = error instanceof Error ? error.message : ''
+  if (name === 'TimeoutError' || name === 'AbortError' || /timed out/i.test(message)) return 'timeout'
+  if (error instanceof OpenRouterError && error.status != null) return error.status
+  return 502
+}
+
+function noticeForHttpStatus(status: number | 'timeout'): 'ai_limit' | 'ai_unavailable' {
+  return status === 429 || status === 402 ? 'ai_limit' : 'ai_unavailable'
+}
+
+// Used by /api/identify for structured logging and honest rate-limit notices. Never throws.
+export async function identifyOpenRouterWithTelemetry(
+  config: OpenRouterConfig,
+  photo: LabelPhoto,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ identity: ApplianceIdentity | null; notice: 'ai_limit' | 'ai_unavailable' | null; telemetry: IdentifyCallTelemetry }> {
+  const started = Date.now()
+  const latencyMs = () => Date.now() - started
+  if (!labelPhotoAccepted(photo)) {
+    return {
+      identity: null,
+      notice: null,
+      telemetry: {
+        httpStatus: 200,
+        retried: false,
+        parseableJson: false,
+        manufacturerFound: false,
+        reportedModel: null,
+        latencyMs: latencyMs(),
+      },
+    }
+  }
+  try {
+    const result = await callOpenRouterRaw(config, identifyMessages(photo), IDENTIFY_MAX_TOKENS, IDENTIFY_TIMEOUT_MS, fetchImpl)
+    if (!result.ok) {
+      return {
+        identity: null,
+        notice: noticeForHttpStatus(result.status),
+        telemetry: {
+          httpStatus: result.status,
+          retried: result.retried,
+          parseableJson: false,
+          manufacturerFound: false,
+          reportedModel: result.reportedModel,
+          latencyMs: latencyMs(),
+        },
+      }
+    }
+    const content = result.content
+    const parseableJson = content != null && extractJsonValues(content).length > 0
+    const identity = content != null ? identityFromReply(content) : null
+    return {
+      identity,
+      notice: null,
+      telemetry: {
+        httpStatus: result.status,
+        retried: result.retried,
+        parseableJson,
+        manufacturerFound: identity?.manufacturer != null,
+        reportedModel: result.reportedModel,
+        latencyMs: latencyMs(),
+      },
+    }
+  } catch (error) {
+    const httpStatus = httpStatusFromFailure(error)
+    return {
+      identity: null,
+      notice: noticeForHttpStatus(httpStatus),
+      telemetry: {
+        httpStatus,
+        retried: false,
+        parseableJson: false,
+        manufacturerFound: false,
+        reportedModel: null,
+        latencyMs: latencyMs(),
+      },
+    }
+  }
 }
 
 function hasIdentityFields(value: unknown): value is Record<string, unknown> {

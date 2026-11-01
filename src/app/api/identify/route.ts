@@ -5,6 +5,7 @@ import {
   type ApplianceIdentification,
 } from '@/domain/identification'
 import type { ApplianceIdentity } from '@/ai/identity'
+import { identifyOpenRouterWithTelemetry, openrouterConfig, type IdentifyCallTelemetry } from '@/ai/openrouter'
 import { selectProvider } from '@/ai/provider'
 import { checkPhoto } from '../../lib/identify'
 import { scanEnabled } from '../../lib/features'
@@ -37,6 +38,20 @@ export function toProposal(identity: ApplianceIdentity | null): IdentifyResponse
   return { identification: wellFormed(proposal) ? proposal : null, notice: null }
 }
 
+export function logIdentifyCall(telemetry: IdentifyCallTelemetry): void {
+  console.log(
+    JSON.stringify({
+      event: 'identify',
+      httpStatus: telemetry.httpStatus,
+      retried: telemetry.retried,
+      parseableJson: telemetry.parseableJson,
+      manufacturerFound: telemetry.manufacturerFound,
+      reportedModel: telemetry.reportedModel,
+      latencyMs: telemetry.latencyMs,
+    }),
+  )
+}
+
 // Reads an appliance label photo with the server's AI provider (Manual unless one is configured).
 // The photo is never stored: it goes to the provider and is discarded.
 export async function POST(request: NextRequest) {
@@ -55,17 +70,54 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'scan_denied', reason: decision }, { status: 403, headers: { 'Cache-Control': 'no-store' } })
     }
   }
-  // A thrown or timed-out provider call is not "nothing recognised". The notice is the only
-  // thing the browser may see: provider bodies and key fragments stay on the server.
+  const labelPhoto = { bytes: new Uint8Array(await file!.arrayBuffer()), mimeType: file!.type }
+  if (provider.kind === 'openrouter') {
+    const config = openrouterConfig(process.env)
+    if (!config) {
+      logIdentifyCall({
+        httpStatus: 200,
+        retried: false,
+        parseableJson: false,
+        manufacturerFound: false,
+        reportedModel: null,
+        latencyMs: 0,
+      })
+      return NextResponse.json({ identification: null, notice: null }, { headers: { 'Cache-Control': 'no-store' } })
+    }
+    const { identity, notice, telemetry } = await identifyOpenRouterWithTelemetry(config, labelPhoto)
+    logIdentifyCall(telemetry)
+    if (notice) {
+      return NextResponse.json({ identification: null, notice }, { headers: { 'Cache-Control': 'no-store' } })
+    }
+    return NextResponse.json(toProposal(identity), { headers: { 'Cache-Control': 'no-store' } })
+  }
+
+  const manualStarted = Date.now()
   let identity: ApplianceIdentity | null
   try {
-    identity = await provider.identifyAppliance({ bytes: new Uint8Array(await file!.arrayBuffer()), mimeType: file!.type })
+    identity = await provider.identifyAppliance(labelPhoto)
   } catch {
+    logIdentifyCall({
+      httpStatus: 'timeout',
+      retried: false,
+      parseableJson: false,
+      manufacturerFound: false,
+      reportedModel: null,
+      latencyMs: Date.now() - manualStarted,
+    })
     return NextResponse.json(
       { identification: null, notice: 'ai_unavailable' },
       { headers: { 'Cache-Control': 'no-store' } },
     )
   }
+  logIdentifyCall({
+    httpStatus: 200,
+    retried: false,
+    parseableJson: false,
+    manufacturerFound: identity?.manufacturer != null,
+    reportedModel: null,
+    latencyMs: Date.now() - manualStarted,
+  })
   const body: IdentifyResponse = toProposal(identity)
   return NextResponse.json(body, { headers: { 'Cache-Control': 'no-store' } })
 }
