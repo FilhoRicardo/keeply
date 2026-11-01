@@ -75,13 +75,6 @@ Copy `.env.example` to `.env.local` for local dev, or set the same names on Verc
 | `GOOGLE_CLIENT_SECRET` | Calendar OAuth client secret |
 | `GOOGLE_REDIRECT_URI` | Must match a registered Calendar redirect URI, e.g. `https://<your-domain>/auth/google/callback` |
 
-### Required for hosted URL / OpenRouter attribution
-
-| Variable | Notes |
-|---|---|
-| `NEXT_PUBLIC_SITE_URL` | Public origin, no trailing slash (e.g. `https://keeply.example`). OpenRouter `HTTP-Referer` when override unset |
-| `OPENROUTER_HTTP_REFERER` | Optional server override for OpenRouter referer |
-
 ### Optional — scanning and search
 
 | Variable | Notes |

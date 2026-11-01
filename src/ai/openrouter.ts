@@ -25,8 +25,8 @@ import {
 
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1'
 export const DEFAULT_OPENROUTER_MODEL = 'openrouter/free'
-export const DEFAULT_SITE_URL = 'http://localhost:3000'
-export const DEFAULT_OPENROUTER_TITLE = 'Keeply'
+export const OPENROUTER_REFERER = 'https://keeply.vercel.app'
+export const OPENROUTER_TITLE = 'Keeply'
 
 export type OpenRouterDataCollection = 'deny' | 'allow'
 
@@ -35,14 +35,6 @@ export type OpenRouterConfig = {
   model: string
   baseUrl: string
   dataCollection: OpenRouterDataCollection
-  referer: string
-  title: string
-}
-
-function openRouterAttribution(env: Record<string, string | undefined>): { referer: string; title: string } {
-  const referer =
-    env.OPENROUTER_HTTP_REFERER?.trim() || env.NEXT_PUBLIC_SITE_URL?.trim() || DEFAULT_SITE_URL
-  return { referer, title: DEFAULT_OPENROUTER_TITLE }
 }
 
 // Server env only. Unset means OpenRouter is not available. Anything other than `allow` stays
@@ -52,8 +44,7 @@ export function openrouterConfig(env: Record<string, string | undefined>): OpenR
   if (!apiKey) return null
   const model = env.OPENROUTER_MODEL?.trim() || DEFAULT_OPENROUTER_MODEL
   const dataCollection = env.OPENROUTER_DATA_COLLECTION?.trim().toLowerCase() === 'allow' ? 'allow' : 'deny'
-  const { referer, title } = openRouterAttribution(env)
-  return { apiKey, model, baseUrl: OPENROUTER_BASE_URL, dataCollection, referer, title }
+  return { apiKey, model, baseUrl: OPENROUTER_BASE_URL, dataCollection }
 }
 
 export class OpenRouterError extends Error {
@@ -92,7 +83,7 @@ async function callOpenRouter(
         temperature: CHAT_TEMPERATURE,
         maxTokens,
         timeoutMs,
-        extraHeaders: { 'HTTP-Referer': config.referer, 'X-Title': config.title },
+        extraHeaders: { 'HTTP-Referer': OPENROUTER_REFERER, 'X-Title': OPENROUTER_TITLE },
         // Reasoning models routed by `openrouter/free` otherwise spend the whole token budget
         // thinking and return no content (live: dots-3-note, finish_reason "length").
         extraBody: { provider: { data_collection: config.dataCollection }, reasoning: { enabled: false } },
