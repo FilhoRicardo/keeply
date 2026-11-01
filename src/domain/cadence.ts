@@ -128,7 +128,29 @@ const CADENCE_PATTERNS: readonly CadencePattern[] = [
 const USAGE_PATTERNS = [
   '\\bafter\\s+(?:each|every)\\s+(?:use|wash)\\b',
   `\\bevery\\s+${NUMBER}\\s+(?:washes|cycles|wash|cycle)\\b`,
+  '\\bwhen (?:the )?indicator\\b',
+  '\\bindicator (?:is )?(?:on|lit)\\b',
+  '\\bindicators? show\\b',
 ]
+
+const INDICATOR_PATTERNS = [
+  '\\bwhen (?:the )?indicator\\b',
+  '\\bindicator (?:is )?(?:on|lit)\\b',
+  '\\bindicators? show\\b',
+]
+
+function isRefillMaintenance(text: string): boolean {
+  return /\b(refill|top up|top-up|fill|replenish|keep)\b/i.test(text) && /\b(salt|rinse[\s-]*aid)\b/i.test(text)
+}
+
+/** Previous bullet/sentence carries a schedule that applies to the current maintenance line (e.g. Machine Care). */
+export function adjacentScheduleApplies(previous: string, current: string): boolean {
+  if (!/\bmachine\s+care\b/.test(current)) return false
+  return (
+    /\b(cleaning product|descaler|dishwashers)\b/.test(previous) &&
+    (readCadence(previous).stated || /\bat least once every\b/.test(previous))
+  )
+}
 
 const VAGUE_PATTERNS = [
   '\\bregularly\\b',
@@ -137,21 +159,6 @@ const VAGUE_PATTERNS = [
   '\\bif\\s+necessary\\b',
   '\\bfrom\\s+time\\s+to\\s+time\\b',
 ]
-
-function readCadenceLastBefore(text: string, anchorIndex: number): CadenceReading | null {
-  let best: { index: number; reading: CadenceReading } | null = null
-  for (const pattern of CADENCE_PATTERNS) {
-    for (const match of text.matchAll(new RegExp(pattern.source, 'gi'))) {
-      const parsed = pattern.interval(match)
-      if (!parsed || parsed === 'unexpressed') continue
-      const index = match.index ?? 0
-      if (index > anchorIndex) continue
-      const reading: CadenceReading = { stated: true, interval: parsed }
-      if (!best || index > best.index) best = { index, reading }
-    }
-  }
-  return best?.reading ?? null
-}
 
 function earliestCadence(quote: string): CadenceReading | null {
   let best: { index: number; reading: CadenceReading } | null = null
@@ -187,10 +194,20 @@ function earliestPhrase(quote: string, sources: readonly string[]): string | nul
 // A frequency the interval cannot express is "not stated", with that phrase quoted.
 // A usage phrase is preferred over a vague word when the quote has no cadence.
 export function readCadence(quote: string): CadenceReading {
+  const indicatorWording = earliestPhrase(quote, INDICATOR_PATTERNS)
+  const cadence = earliestCadence(quote)
+  if (cadence?.stated && indicatorWording && isRefillMaintenance(quote)) {
+    if (cadence.interval.count === 1 && cadence.interval.unit === 'day') {
+      return { stated: false, wording: indicatorWording }
+    }
+  }
   return (
-    earliestCadence(quote) ?? {
+    cadence ?? {
       stated: false,
-      wording: earliestPhrase(quote, USAGE_PATTERNS) ?? earliestPhrase(quote, VAGUE_PATTERNS),
+      wording:
+        indicatorWording ??
+        earliestPhrase(quote, USAGE_PATTERNS) ??
+        earliestPhrase(quote, VAGUE_PATTERNS),
     }
   )
 }
@@ -209,7 +226,10 @@ export function cadenceContextSegments(pageText: string, quote: string): string[
     const segment = bullets[i] ?? ''
     if (!segment.includes(q)) continue
     const previous = i > 0 ? (bullets[i - 1] ?? '') : ''
-    return previous ? [segment, previous] : [segment]
+    if (previous && adjacentScheduleApplies(previous, segment)) {
+      return [segment, `${previous} ${segment}`.replace(/\s+/g, ' ').trim(), previous]
+    }
+    return [segment]
   }
 
   const raw = pageText.replace(/\r\n/g, '\n')
@@ -223,7 +243,10 @@ export function cadenceContextSegments(pageText: string, quote: string): string[
     const sentence = sentences[i] ?? ''
     if (!sentence.includes(q)) continue
     const previous = i > 0 ? (sentences[i - 1] ?? '') : ''
-    return previous ? [sentence, previous] : [sentence]
+    if (previous && adjacentScheduleApplies(previous, sentence)) {
+      return [sentence, `${previous} ${sentence}`.replace(/\s+/g, ' ').trim(), previous]
+    }
+    return [sentence]
   }
 
   const idx = doc.indexOf(q)
@@ -239,7 +262,6 @@ export function cadenceContextSegments(pageText: string, quote: string): string[
 export function readCadenceFromContext(quote: string, pageText?: string | null): CadenceReading {
   const inQuote = readCadence(quote)
   if (inQuote.stated || !pageText?.trim()) return inQuote
-  const doc = normalizeText(pageText)
   const q = normalizeText(quote)
   if (pageText.includes('•')) {
     const bullets = pageText
@@ -251,31 +273,23 @@ export function readCadenceFromContext(quote: string, pageText?: string | null):
       if (bullets[i]?.includes(q)) matchIndex = i
     }
     if (matchIndex >= 0) {
-      if (matchIndex > 0) {
-        const fromPrevious = readCadence(bullets[matchIndex - 1] ?? '')
-        if (fromPrevious.stated) return fromPrevious
-      }
-      const fromCurrent = readCadence(bullets[matchIndex] ?? '')
+      const current = bullets[matchIndex] ?? ''
+      const fromCurrent = readCadence(current)
       if (fromCurrent.stated) return fromCurrent
+      if (matchIndex > 0) {
+        const previous = bullets[matchIndex - 1] ?? ''
+        if (adjacentScheduleApplies(previous, current)) {
+          const merged = `${previous} ${current}`.replace(/\s+/g, ' ').trim()
+          const fromMerged = readCadence(merged)
+          if (fromMerged.stated) return fromMerged
+        }
+      }
     }
     return inQuote
   }
   for (const segment of cadenceContextSegments(pageText, quote)) {
     const reading = readCadence(segment)
     if (reading.stated) return reading
-  }
-  const raw = pageText.replace(/\r\n/g, '\n')
-  const quoteLine = raw.split('\n').find((line) => normalizeText(line).includes(q))
-  if (quoteLine && !quoteLine.includes('•')) return inQuote
-
-  if (q.length >= MIN_QUOTE_LENGTH) {
-    const idx = doc.indexOf(q)
-    if (idx >= 0) {
-      const start = Math.max(0, idx - 320)
-      const window = doc.slice(start, idx + q.length)
-      const near = readCadenceLastBefore(window, idx - start)
-      if (near) return near
-    }
   }
   return inQuote
 }
@@ -349,9 +363,12 @@ export function quoteWithPageCadence(quote: string, pageText: string): string {
       return fitSourceQuoteForStorage(cleaned, pageText, original)
     }
     if (i > 0) {
-      const merged = `${bullets[i - 1] ?? ''} ${cleaned}`.replace(/\s+/g, ' ').trim()
-      if (readCadence(merged).stated && verifyQuote(pageText, merged)) {
-        return fitSourceQuoteForStorage(merged, pageText, original)
+      const previous = bullets[i - 1] ?? ''
+      if (adjacentScheduleApplies(previous, cleaned)) {
+        const merged = `${previous} ${cleaned}`.replace(/\s+/g, ' ').trim()
+        if (readCadence(merged).stated && verifyQuote(pageText, merged)) {
+          return fitSourceQuoteForStorage(merged, pageText, original)
+        }
       }
     }
     break
