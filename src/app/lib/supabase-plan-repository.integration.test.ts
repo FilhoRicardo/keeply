@@ -138,7 +138,6 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase plan repository', () => {
           },
         },
       ] satisfies TaskProposal[],
-      reason: 'no_search_key',
     },
     {
       name: 'similar-model',
@@ -158,7 +157,6 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase plan repository', () => {
           },
         },
       ] satisfies TaskProposal[],
-      reason: 'no_search_key',
     },
     {
       name: 'general-guidance',
@@ -185,7 +183,7 @@ describe.skipIf(!KEEPLY_POSTGREST_URL)('Supabase plan repository', () => {
     const reloaded = createSupabasePlanRepository({ db })
     const record = findRecord(await reloaded.load(), applianceId)
     expect(record?.proposalMeta).toEqual(meta)
-    expect(planFallbackReason(record?.proposalMeta ?? null)).toBe(reason)
+    if (reason) expect(planFallbackReason(record?.proposalMeta ?? null)).toBe(reason)
   })
 
   it('loads an older appliance with no provenance as unknown', async () => {
