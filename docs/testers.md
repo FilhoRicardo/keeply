@@ -59,3 +59,25 @@ Only the owner can set this flag; visitors cannot read or change invites. Remove
 ## Before serving other people
 
 AI for other people needs a key whose terms allow serving other users, and spending controls on that key. OpenRouter is the sole AI provider (RF-357); Manual always works when it is unset.
+
+## Prove the hosted pooled-quota slice (one admitted user)
+
+Use this on a **Preview** deployment (or Production once you intend to serve testers). The open-source app already implements hosted mode as **operator credentials + invite admission + pooled `scan_limits`**; there is no separate `keeply_hosted` provider path.
+
+**Prerequisites (operator, not in git):**
+
+- Vercel Preview (or Production): `NEXT_PUBLIC_KEEPLY_SCAN=1`, `OPENROUTER_API_KEY`, `BRAVE_SEARCH_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, Supabase anon/url vars. Do **not** set `KEEPLY_SCAN_ACCESS=open` on a public URL (Production ignores it anyway).
+- Hosted Supabase: migrations through `20261012120000_google_scan_access.sql` applied; default limits 10 / 12 unless you changed them.
+- One anonymous tester: `select public.create_scan_invite('Slice proof');` → send `/invite?code=…`.
+
+**Proof script (one person, one UTC day):**
+
+1. Open the invite link in a fresh browser profile; accept invite. `GET /api/scan-access` should show `access: invited` with `testerLeft` / `globalLeft` > 0.
+2. Scan one real label on `/appliances/scan`. Expect a proposal or honest manual fallback — not `scan_denied`.
+3. In SQL Editor: `select scans from public.scan_usage where day = (now() at time zone 'utc')::date;` — the tester’s row increments by 1; `scan_daily_totals` increments unless the account is unlimited.
+4. Lower limits to force exhaustion, e.g. `update public.scan_limits set per_tester_daily = 1, global_daily = 1;` (restore after). Second scan same day: UI shows limit copy; network shows `403` `{ error: 'scan_denied', reason: 'tester_limit' | 'daily_limit' }` on `/api/identify` **with no OpenRouter request** (check function logs: no `event: identify` line for the refusal).
+5. Plan path: confirm appliance → `/api/plan` also returns `plan_denied` with the same reasons when limits are hit; Brave monthly cap is separate (`reserve_brave_search` / `brave_quota_usage` — see `supabase/tests/database/brave_quota.test.sql`).
+
+**Automated locks in repo (no live keys):** pgTAP `scan_invites.test.sql`, `scan_google_access.test.sql`, `brave_quota.test.sql`; Vitest `/api/identify` reservation order; concurrency test in `supabase-plan-repository.integration.test.ts` when `KEEPLY_POSTGREST_URL` is set.
+
+**Cost sanity (no paid spam):** `.env.example` documents paid `google/gemini-2.5-flash` at roughly **under 1¢ per label/plan AI call** — within the ≤2¢/scan target. One proof user at default limits is at most tens of cents if every slot hits OpenRouter.
