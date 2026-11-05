@@ -25,7 +25,7 @@ Do not mix redirect URIs between the two clients.
 ## 1. Supabase
 
 1. Create a project at [supabase.com](https://supabase.com) and note the **project ref** (`<your-project-ref>`).
-2. Apply schema: link the CLI (`supabase link --project-ref <your-project-ref>`) and run `supabase db push`, or paste each file under `supabase/migrations/` into the SQL Editor in order.
+2. Apply schema: install the [Supabase CLI](https://supabase.com/docs/guides/cli/getting-started), then link (`supabase link --project-ref <your-project-ref>`) and run `supabase db push`, or paste each file under `supabase/migrations/` into the SQL Editor in order (filename order).
 3. **Authentication → Sign In / Providers**
    - Enable **Anonymous sign-ins** (required for the MVP flow without forcing Google first).
    - Enable **Google** with the **Supabase** OAuth client (client id + secret from Google Cloud; redirect URI must be `https://<your-project-ref>.supabase.co/auth/v1/callback`).
@@ -69,7 +69,7 @@ Copy `.env.example` to `.env.local` for local dev, or set the same names on Verc
 
 | Variable | Notes |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (set **both** `NEXT_PUBLIC_SUPABASE_*`; if either is missing, plans stay in the browser) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anon public key |
 | `GOOGLE_CLIENT_ID` | Calendar OAuth client id |
 | `GOOGLE_CLIENT_SECRET` | Calendar OAuth client secret |
@@ -80,11 +80,13 @@ Copy `.env.example` to `.env.local` for local dev, or set the same names on Verc
 | Variable | Notes |
 |---|---|
 | `NEXT_PUBLIC_KEEPLY_SCAN` | Set to `1` at **build time** to enable the scan UI and `/api/identify` |
+| `NEXT_PUBLIC_SITE_URL` | Public origin (no trailing slash), e.g. `https://keeply.example`. OpenRouter `HTTP-Referer` when `OPENROUTER_HTTP_REFERER` is unset; defaults to `http://localhost:3000` |
+| `OPENROUTER_HTTP_REFERER` | Optional server-only override for OpenRouter `HTTP-Referer` (wins over `NEXT_PUBLIC_SITE_URL`) |
 | `OPENROUTER_API_KEY` | Enables AI; omit for Manual-only |
 | `OPENROUTER_MODEL` | Recommended `google/gemini-2.5-flash`; `openrouter/free` works but hits daily rate limits; code falls back to `openrouter/free` when unset |
 | `OPENROUTER_DATA_COLLECTION` | `deny` (default) or `allow` |
 | `BRAVE_SEARCH_API_KEY` | Enables manual search |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server only; durable Brave quota in Supabase (without it, quota check is skipped) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server only; durable monthly Brave quota in Postgres (without it, that check is skipped; the in-process cap in `src/search/brave.ts` still applies) |
 | `BRAVE_FREE_QUOTA_PER_MONTH` | Default 2000; override only for tests |
 | `KEEPLY_SCAN_ACCESS` | See below |
 

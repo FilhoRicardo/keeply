@@ -115,7 +115,7 @@ tab if that happens.
 | Calendar API enabled | Google Cloud → APIs & Services → Library | Required for the MVP write |
 | OAuth consent screen | Google Cloud → APIs & Services → OAuth consent screen | External, in Testing mode: only listed test users can connect |
 | OAuth client "Keeply" | Google Cloud → APIs & Services → Credentials | Web client; redirect URI `https://<your-domain>/auth/google/callback` |
-| Test users | Google Cloud → Auth Platform → Audience | Up to 100 users while the consent screen is in Testing mode |
+| Test users | Google Cloud → APIs & Services → OAuth consent screen → Test users | Up to 100 users while the consent screen is in Testing mode |
 
 The Supabase Google provider (above) uses a **second** OAuth client
 whose redirect URI is the Supabase `auth/v1/callback`; the two clients
