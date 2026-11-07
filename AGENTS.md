@@ -1,5 +1,7 @@
 # Agents — Keeply
 
+> Optional maintainer automation guidance. Contributors should use [CONTRIBUTING.md](CONTRIBUTING.md); this automation workflow is not required to contribute.
+
 ## Identity
 
 Route here for work on Keeply (`active/Keeply/`). Outcome: mobile-first PWA — photo an appliance, get an evidence-labelled maintenance plan in ~1 minute, accept or reject each task, write only accepted tasks to Google Calendar. Branding open.

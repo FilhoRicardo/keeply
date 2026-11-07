@@ -1,5 +1,7 @@
 # HANDOFF.md --- Home Appliance PPM / Circular Economy App
 
+> Historical decision log: later sections supersede earlier decisions. For current setup and architecture, use the [documentation index](README.md). Notion owns live planning.
+
 > 2026-10-06 (KEE-60): v0.1 scope widened from dishwashers only to any household appliance. Dishwashers keep the hand-curated general-guidance fallback; every other appliance needs a found manual or the plan is honestly empty.
 
 ## Index
