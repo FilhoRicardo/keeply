@@ -60,7 +60,7 @@ CI runs all four on every pull request. Browser tests also need Chromium install
 
 You're welcome to try Keeply, report a problem, improve the docs, or contribute code. Start with [Contributing](CONTRIBUTING.md) for setup and pull-request expectations. For security concerns, follow the [Security policy](SECURITY.md).
 
-For deeper context, see the [product decisions and MVP scope](docs/HANDOFF.md), [module architecture](docs/architecture.md), and [agent workflow](AGENTS.md).
+Start with the [documentation index](docs/README.md). For deeper context, see the [product decisions and MVP scope](docs/HANDOFF.md), [module architecture](docs/architecture.md), and [agent workflow](AGENTS.md).
 
 ## Rules that the code enforces
 
